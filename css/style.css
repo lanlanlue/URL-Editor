@@ -34,9 +34,13 @@ body {
   background-color: var(--bg-color);
   color: var(--text-color);
   font-family: sans-serif;
-  margin: 0;
-  padding: 1rem;
+  /* padding: 1rem; */
   transition: background-color 0.3s, color 0.3s;
+  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+  font-size: 16px;
+  /* background: #f3f4f6; */
+  margin: 0;
+  padding: 20px;
 }
 
 header {
@@ -101,17 +105,30 @@ section {
   font-weight: bold;
 }
 
+.url-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 16px;
+  padding: 16px;
+}
+
 .url-card {
-  display: flex;
   justify-content: space-between;
-  align-items: center;
-  padding: 0.75rem;
-  border-radius: 0.5rem;
+  /* align-items: center; */
+  /* padding: 0.75rem; */
+  /* border-radius: 0.5rem; */
   border: 1px solid var(--card-border);
   background-color: var(--card-bg);
   color: var(--card-text);
   box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
   transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s;
+  /* background: #f9fafb; */
+  /* border: 1px solid #d1d5db; */
+  border-radius: 8px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .url-label {
@@ -133,7 +150,7 @@ section {
   cursor: pointer;
   /* user-select: none; */
   margin: 0 0.5rem;
-  font-size: 0.95rem;
+  font-size: 14px;
 }
 
 .url-card .actions {
@@ -164,4 +181,40 @@ section {
 
 .url-card button.delete-btn:hover {
   background-color: var(--btn-delete-hover);
+}
+
+#url-list {
+  padding: 1rem;
+}
+
+#url-list button {
+  margin-right: 0.5rem;
+  padding: 0.4rem 0.8rem;
+  font-size: 0.9rem;
+  border-radius: 6px;
+  border: none;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+@media (prefers-color-scheme: dark) {
+  #url-list button {
+    background-color: #333;
+    color: #eee;
+  }
+
+  #url-list button:hover {
+    background-color: #444;
+  }
+}
+
+@media (prefers-color-scheme: light) {
+  #url-list button {
+    background-color: #f0f0f0;
+    color: #222;
+  }
+
+  #url-list button:hover {
+    background-color: #e0e0e0;
+  }
 }

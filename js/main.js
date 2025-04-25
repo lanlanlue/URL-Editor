@@ -15,10 +15,14 @@ const addParamBtn = document.getElementById("add-param-btn");
 const urlListSection = document.getElementById("url-list");
 const saveUrlBtn = document.getElementById("save-url-btn");
 
+const exportBtn = document.getElementById("export-json-btn");
+const importInput = document.getElementById("import-json-file");
+const importBtn = document.getElementById("import-json-btn");
+
 // 生成 URL 卡片
 function createUrlCard(entry) {
   const { url, label = "" } =
-    typeof entry === "string" ? { url: entry } : entry;
+    typeof entry === "string" ? { url: entry, label: "" } : entry;
 
   const card = document.createElement("div");
   card.classList.add("url-card");
@@ -45,15 +49,15 @@ function createUrlCard(entry) {
 
   const loadBtn = document.createElement("button");
   loadBtn.textContent = "載入";
-  loadBtn.classList.add("load-btn");
+  loadBtn.className = "load-btn";
   loadBtn.addEventListener("click", () => {
     urlInput.value = url;
-    parseBtn.click(); // 觸發解析
+    parseBtn.click();
   });
 
   const delBtn = document.createElement("button");
   delBtn.textContent = "刪除";
-  delBtn.classList.add("delete-btn");
+  delBtn.className = "delete-btn";
   delBtn.addEventListener("click", () => {
     let urls = JSON.parse(localStorage.getItem("urlHistory")) || [];
     urls = urls.filter((entry) =>
@@ -73,14 +77,19 @@ function createUrlCard(entry) {
 
 // 儲存 URL 到 localStorage（避免重複）
 function saveUrlToHistory(url) {
-  if (!url) return;
-  let urls = JSON.parse(localStorage.getItem("urlHistory")) || [];
-  if (!urls.includes(url)) {
-    urls.push(url);
+  const urls = JSON.parse(localStorage.getItem("urlHistory")) || [];
+
+  const existing = urls.find((entry) =>
+    typeof entry === "string" ? entry === url : entry.url === url
+  );
+
+  if (!existing) {
+    urls.push({ url, label: "" });
     localStorage.setItem("urlHistory", JSON.stringify(urls));
-    renderUrlList(); // 更新畫面
+    renderUrlList();
   }
 }
+
 function updateCardLabel(url, newLabel) {
   let urls = JSON.parse(localStorage.getItem("urlHistory")) || [];
   urls = urls.map((entry) => {
@@ -89,6 +98,7 @@ function updateCardLabel(url, newLabel) {
     return entry;
   });
   localStorage.setItem("urlHistory", JSON.stringify(urls));
+  renderUrlList();
 }
 
 // 渲染 URL 清單
@@ -99,8 +109,8 @@ function renderUrlList() {
   container.innerHTML = "";
 
   const urls = JSON.parse(localStorage.getItem("urlHistory")) || [];
-  urls.forEach((url) => {
-    const card = createUrlCard(url);
+  urls.forEach((entry) => {
+    const card = createUrlCard(entry);
     container.appendChild(card);
   });
 
@@ -202,6 +212,47 @@ function rebuildUrl({ updateOutput = true, updateInput = false } = {}) {
   }
 }
 
+function exportUrlJson() {
+  const urls = JSON.parse(localStorage.getItem("urlHistory")) || [];
+  const blob = new Blob([JSON.stringify(urls, null, 2)], {
+    type: "application/json",
+  });
+  const url = URL.createObjectURL(blob);
+
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "url-history.json";
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function importUrlJson(file) {
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try {
+      const importedUrls = JSON.parse(e.target.result);
+      if (Array.isArray(importedUrls)) {
+        const currentUrls =
+          JSON.parse(localStorage.getItem("urlHistory")) || [];
+        const merged = [...currentUrls];
+
+        importedUrls.forEach((newItem) => {
+          const exists = currentUrls.some(
+            (existing) => existing.url === newItem.url
+          );
+          if (!exists) merged.push(newItem);
+        });
+
+        localStorage.setItem("urlHistory", JSON.stringify(merged));
+        renderUrlList();
+      }
+    } catch (err) {
+      alert("匯入的 JSON 格式錯誤");
+    }
+  };
+  reader.readAsText(file);
+}
+
 document.addEventListener("DOMContentLoaded", () => {
   initDarkMode();
 
@@ -268,6 +319,15 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   renderUrlList();
+
+  // 匯入匯出按鈕初始化
+  exportBtn.addEventListener("click", exportUrlJson);
+
+  importInput.addEventListener("change", (e) =>
+    importUrlJson(e.target.files[0])
+  );
+
+  importBtn.addEventListener("click", () => importInput.click());
 
   console.log("🚀 頁面初始化完成");
 });
