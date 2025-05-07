@@ -31,9 +31,10 @@ function createUrlCard(entry) {
   labelInput.placeholder = "名稱";
   labelInput.value = label;
   labelInput.className = "url-label";
-  labelInput.addEventListener("change", () =>
-    updateCardLabel(url, labelInput.value)
-  );
+  labelInput.addEventListener("change", () => {
+    console.log(url, labelInput.value);
+    updateCardLabel(url, labelInput.value);
+  });
 
   const text = document.createElement("code");
   text.textContent = url;
@@ -200,6 +201,7 @@ function rebuildUrl({ updateOutput = true, updateInput = false } = {}) {
 
   if (updateInput) {
     urlInput.value = baseUrl.toString();
+    saveUrlToHistory(baseUrl.toString());
   }
 
   if (duplicateKeys.size > 0) {

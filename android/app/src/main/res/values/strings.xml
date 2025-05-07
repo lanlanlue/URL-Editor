@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">url-editor</string>
+    <string name="title_activity_main">url-editor</string>
+    <string name="package_name">zihheng.me</string>
+    <string name="custom_url_scheme">zihheng.me</string>
+</resources>

@@ -1,2 +1,2 @@
 # URL-Editor
-This is a small widgt for editing URL
+This is a small widget for editing URL

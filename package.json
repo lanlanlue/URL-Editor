@@ -1,0 +1,25 @@
+{
+  "name": "url-editor",
+  "description": "This is a small widget for editing URL",
+  "author": "Darren Lan",
+  "source": "src/index.html",
+  "scripts": {
+    "test1": "echo \"Error: no test specified\" && exit 1",
+    "test": "echo 'OK'",
+    "start": "parcel",
+    "build": "parcel build",
+    "prepare": "husky install"
+  },
+  "dependencies": {
+    "@capacitor/android": "^7.2.0",
+    "@capacitor/core": "^7.2.0",
+    "@capacitor/ios": "^7.2.0"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^7.2.0",
+    "@commitlint/cli": "^19.8.0",
+    "@commitlint/config-conventional": "^19.8.0",
+    "husky": "^9.1.7",
+    "parcel": "^2.14.4"
+  }
+}
