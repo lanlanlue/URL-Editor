@@ -201,7 +201,6 @@ function rebuildUrl({ updateOutput = true, updateInput = false } = {}) {
 
   if (updateInput) {
     urlInput.value = baseUrl.toString();
-    saveUrlToHistory(baseUrl.toString());
   }
 
   if (duplicateKeys.size > 0) {
@@ -283,7 +282,6 @@ document.addEventListener("DOMContentLoaded", () => {
     });
 
     rebuildUrl({ updateInput: false });
-    saveUrlToHistory(urlInput.value.trim());
   });
 
   domainInput.addEventListener("input", () =>
