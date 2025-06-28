@@ -30,17 +30,17 @@
   --btn-delete-hover: #c62828;
 }
 
+/* =================================
+   1. General & Base Styles
+   ================================= */
 body {
   background-color: var(--bg-color);
   color: var(--text-color);
-  font-family: sans-serif;
-  /* padding: 1rem; */
   transition: background-color 0.3s, color 0.3s;
   font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
   font-size: 16px;
-  /* background: #f3f4f6; */
   margin: 0;
-  padding: 20px;
+  padding: 1rem;
 }
 
 header {
@@ -67,6 +67,10 @@ section {
   margin-bottom: 2rem;
 }
 
+/* =================================
+   2. URL Editor Section
+   ================================= */
+
 .param-row {
   display: flex;
   gap: 0.5rem;
@@ -79,7 +83,7 @@ section {
 }
 
 .param-row button {
-  background-color: red;
+  background-color: var(--btn-delete);
   padding: 0.2rem 0.5rem;
 }
 
@@ -87,7 +91,7 @@ section {
   flex: 1;
   min-width: 200px;
   width: auto;
-  margin-right: 0.5rem;
+  margin-right: 0.5rem; /* Kept for layout with button */
   border: 1px solid var(--border-color);
   background: var(--bg-color);
   color: var(--text-color);
@@ -105,54 +109,71 @@ section {
   font-weight: bold;
 }
 
-.url-cards {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-  gap: 16px;
-  padding: 16px;
-}
+/* =================================
+   3. URL List Section & Cards
+   ================================= */
 
+/* Card Container */
 .url-card {
-  justify-content: space-between;
-  /* align-items: center; */
-  /* padding: 0.75rem; */
-  /* border-radius: 0.5rem; */
   border: 1px solid var(--card-border);
   background-color: var(--card-bg);
-  color: var(--card-text);
-  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
-  transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s;
-  /* background: #f9fafb; */
-  /* border: 1px solid #d1d5db; */
-  border-radius: 8px;
-  padding: 12px;
+  border-radius: 12px;
+  padding: 1rem;
+  width: 100%;
+  max-width: 380px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 0.5rem;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
 }
 
-.url-label {
-  flex: 0.2;
-  min-width: 100px;
-  margin-right: 0.5rem;
+.url-cards {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  justify-content: center;
+  margin-top: 1.5rem; /* 與上方的按鈕區塊增加間距 */
+}
+
+.url-card .url-label {
+  font-size: 1rem;
+  padding: 0.5rem;
   border: 1px solid var(--border-color);
+  border-radius: 6px;
   background: var(--bg-color);
   color: var(--text-color);
-  padding: 0.3rem 0.5rem;
-  border-radius: 0.3rem;
+  width: 100%;
+  box-sizing: border-box; /* 確保 padding 被計算在寬度之內 */
+}
+
+.url-card .url-value {
+  padding: 0.5rem;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  cursor: pointer;
+  word-break: break-all;
+  overflow-wrap: break-word; /* 修正拼字並讓長單字斷行更穩健 */
+  box-sizing: border-box;    /* 確保 padding 不會導致溢出 */
+}
+
+.url-card .url-tags {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.5rem;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background: var(--bg-color);
+  color: var(--text-color);
+  font-size: 0.9rem;
+  margin-top: 0.25rem;
 }
 
 .url-card code {
-  font-family: monospace;
-  word-break: break-all;
-  flex: 1;
-  margin-right: 1rem;
-  cursor: pointer;
-  /* user-select: none; */
-  margin: 0 0.5rem;
-  font-size: 14px;
+  overflow-wrap: break-word; /* 讓長單字斷行更穩健 */
+  box-sizing: border-box;    /* 確保 padding 不會導致溢出 */
 }
 
+/* Card Actions & Buttons */
 .url-card .actions {
   display: flex;
   gap: 0.5rem;
@@ -160,11 +181,11 @@ section {
 }
 
 .url-card button {
-  padding: 0.3rem 0.75rem;
-  border: none;
-  border-radius: 0.25rem;
-  cursor: pointer;
   font-size: 0.9rem;
+  padding: 0.5rem;
+  border-radius: 6px;
+  border: none;
+  cursor: pointer;
   background-color: var(--btn-bg);
   color: var(--btn-text);
   transition: background-color 0.2s, color 0.2s;
@@ -183,11 +204,14 @@ section {
   background-color: var(--btn-delete-hover);
 }
 
+/* Import / Export Buttons */
 #url-list {
   padding: 1rem;
 }
 
 #url-list button {
+  background-color: var(--btn-bg);
+  color: var(--btn-text);
   margin-right: 0.5rem;
   padding: 0.4rem 0.8rem;
   font-size: 0.9rem;
@@ -195,26 +219,39 @@ section {
   border: none;
   cursor: pointer;
   transition: background-color 0.2s ease;
+  opacity: 1; /* Override general button hover */
 }
 
-@media (prefers-color-scheme: dark) {
-  #url-list button {
-    background-color: #333;
-    color: #eee;
-  }
-
-  #url-list button:hover {
-    background-color: #444;
-  }
+#tag-filters button {
+  background-color: var(--btn-bg);
+  color: var(--btn-text);
+  padding: 0.3rem 0.7rem;
+  font-size: 0.9rem;
+  border-radius: 12px;
+  border: 1px solid var(--btn-hover);
+  cursor: pointer;
+  transition: all 0.2s ease;
 }
 
-@media (prefers-color-scheme: light) {
-  #url-list button {
-    background-color: #f0f0f0;
-    color: #222;
+#tag-filters button:hover {
+  background-color: var(--btn-hover);
+  border-color: var(--accent-color);
+}
+
+#url-list button:hover {
+  background-color: var(--btn-hover);
+}
+
+/* =================================
+   4. Media Queries (Mobile)
+   ================================= */
+@media (max-width: 480px) {
+  .url-card {
+    padding: 0.8rem;
+    max-width: 100%;
   }
 
-  #url-list button:hover {
-    background-color: #e0e0e0;
+  .url-card button {
+    width: 100%;
   }
 }
