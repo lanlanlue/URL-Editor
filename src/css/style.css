@@ -168,11 +168,6 @@ section {
   margin-top: 0.25rem;
 }
 
-.url-card code {
-  overflow-wrap: break-word; /* 讓長單字斷行更穩健 */
-  box-sizing: border-box;    /* 確保 padding 不會導致溢出 */
-}
-
 /* Card Actions & Buttons */
 .url-card .actions {
   display: flex;

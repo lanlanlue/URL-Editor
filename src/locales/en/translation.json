@@ -1,4 +1,5 @@
 {
+  "appTitle": "URL Editor Tool",
   "header": {
     "title": "URL Editor Tool",
     "toggleTheme": "Toggle Theme"
@@ -28,6 +29,7 @@
     "searchPlaceholder": "Enter keywords...",
     "exportBtn": "Export URL JSON",
     "importBtn": "Import URL JSON",
+    "allTags": "All",
     "card": {
       "namePlaceholder": "Enter a name",
       "copyTooltip": "Click to copy URL",

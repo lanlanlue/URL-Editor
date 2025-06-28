@@ -1,4 +1,5 @@
 {
+  "appTitle": "URL 編輯工具",
   "header": {
     "title": "URL 編輯工具",
     "toggleTheme": "切換主題"
@@ -28,6 +29,7 @@
     "searchPlaceholder": "輸入關鍵字...",
     "exportBtn": "匯出 URL JSON",
     "importBtn": "匯入 URL JSON",
+    "allTags": "全部",
     "card": {
       "namePlaceholder": "請輸入名稱",
       "copyTooltip": "點擊複製 URL",

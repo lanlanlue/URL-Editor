@@ -13,12 +13,21 @@ const paramsContainer = document.getElementById("params-container");
 const rebuiltUrlEl = document.getElementById("rebuilt-url");
 const warningEl = document.getElementById("param-warning");
 const addParamBtn = document.getElementById("add-param-btn");
+const rebuildUrlBtn = document.getElementById("rebuild-url-btn");
 const urlListSection = document.getElementById("url-list");
 const saveUrlBtn = document.getElementById("save-url-btn");
 
 const exportBtn = document.getElementById("export-json-btn");
 const importInput = document.getElementById("import-json-file");
 const importBtn = document.getElementById("import-json-btn");
+
+// --- 應用程式狀態管理 ---
+let appState = {
+  urls: [],
+  activeTagFilter: null,
+  searchTerm: '',
+};
+const URL_HISTORY_KEY = 'urlHistory';
 
 // 資料遷移：將舊格式的 localStorage 資料轉換為新的標籤格式
 function migrateDataToV2() {
@@ -39,9 +48,23 @@ function migrateDataToV2() {
         tags: [] // 新增空的標籤陣列
       };
     });
-    localStorage.setItem("urlHistory", JSON.stringify({ urls: newUrls }));
+    localStorage.setItem(URL_HISTORY_KEY, JSON.stringify({ urls: newUrls }));
     console.log("資料遷移完成！");
   }
+}
+
+// 從 localStorage 載入狀態
+function loadState() {
+  const data = JSON.parse(localStorage.getItem(URL_HISTORY_KEY)) || { urls: [] };
+  appState.urls = data.urls;
+}
+
+// 將狀態儲存到 localStorage
+function saveState() {
+  localStorage.setItem(
+    URL_HISTORY_KEY,
+    JSON.stringify({ urls: appState.urls })
+  );
 }
 
 // 生成 URL 卡片
@@ -61,6 +84,7 @@ function createUrlCard(entry) {
 
   const text = document.createElement("code");
   text.textContent = url;
+  text.className = "url-value"; // 加上 class 以套用正確的換行與樣式
   text.title = i18next.t('urlList.card.copyTooltip');
   text.addEventListener("click", () => {
     navigator.clipboard.writeText(url).then(() => {
@@ -93,10 +117,9 @@ function createUrlCard(entry) {
   delBtn.textContent = i18next.t('urlList.card.delete');
   delBtn.className = "delete-btn";
   delBtn.addEventListener("click", () => {
-    let data = JSON.parse(localStorage.getItem("urlHistory")) || { urls: [] };
-    data.urls = data.urls.filter((entry) => entry.id !== id);
-    localStorage.setItem("urlHistory", JSON.stringify(data));
-    renderUrlList();
+    appState.urls = appState.urls.filter((entry) => entry.id !== id);
+    saveState();
+    renderUrlList(); // 重新渲染
   });
 
   const actions = document.createElement('div');
@@ -114,8 +137,7 @@ function createUrlCard(entry) {
 
 // 儲存 URL 到 localStorage（避免重複）
 function saveUrlToHistory(url) {
-  const data = JSON.parse(localStorage.getItem("urlHistory")) || { urls: [] };
-  const existing = data.urls.find((entry) => entry.url === url);
+  const existing = appState.urls.find((entry) => entry.url === url);
 
   if (!existing) {
     const newEntry = {
@@ -124,52 +146,65 @@ function saveUrlToHistory(url) {
       label: "",
       tags: []
     };
-    data.urls.push(newEntry);
-    localStorage.setItem("urlHistory", JSON.stringify(data));
+    appState.urls.push(newEntry);
+    saveState();
     renderUrlList();
   }
 }
 
 // 更新卡片屬性 (通用函數)
 function updateCardProperty(id, property, value) {
-  let data = JSON.parse(localStorage.getItem("urlHistory")) || { urls: [] };
-  const urlIndex = data.urls.findIndex(u => u.id === id);
+  const urlIndex = appState.urls.findIndex(u => u.id === id);
   if (urlIndex > -1) {
-    data.urls[urlIndex][property] = value;
-    localStorage.setItem("urlHistory", JSON.stringify(data));
+    appState.urls[urlIndex][property] = value;
+    saveState();
     renderUrlList(); // 重新渲染以更新標籤過濾器
   }
 }
 
 // 渲染標籤過濾按鈕
 function renderTagFilters() {
-  const data = JSON.parse(localStorage.getItem("urlHistory")) || { urls: [] };
-  const allTags = new Set(data.urls.flatMap(url => url.tags));
+  const allTags = new Set(appState.urls.flatMap(url => url.tags));
   const filtersContainer = document.getElementById('tag-filters');
   filtersContainer.innerHTML = '';
 
   const createFilterButton = (tag, text) => {
     const btn = document.createElement('button');
     btn.textContent = text;
-    btn.onclick = () => renderUrlList(tag);
+    btn.onclick = () => {
+      appState.activeTagFilter = tag;
+      renderUrlList();
+    };
     filtersContainer.appendChild(btn);
   };
 
-  createFilterButton(null, '全部');
+  createFilterButton(null, i18next.t('urlList.allTags'));
   allTags.forEach(tag => createFilterButton(tag, tag));
 }
 
 // 渲染 URL 清單
-function renderUrlList(filterTag = null) {
+function renderUrlList() {
   const container =
     urlListSection.querySelector(".url-cards") || document.createElement("div");
   container.className = "url-cards";
   container.innerHTML = "";
 
-  const data = JSON.parse(localStorage.getItem("urlHistory")) || { urls: [] };
-  const filteredUrls = filterTag ? data.urls.filter(u => u.tags.includes(filterTag)) : data.urls;
+  let urlsToRender = [...appState.urls];
 
-  filteredUrls.forEach((entry) => {
+  // 1. 應用標籤過濾
+  if (appState.activeTagFilter) {
+    urlsToRender = urlsToRender.filter(u => u.tags.includes(appState.activeTagFilter));
+  }
+
+  // 2. 應用搜尋過濾
+  if (appState.searchTerm) {
+    const lowerCaseSearch = appState.searchTerm.toLowerCase();
+    urlsToRender = urlsToRender.filter(u =>
+      Object.values(u).join(' ').toLowerCase().includes(lowerCaseSearch)
+    );
+  }
+
+  urlsToRender.forEach((entry) => {
     const card = createUrlCard(entry);
     container.appendChild(card);
   });
@@ -256,12 +291,19 @@ function rebuildUrl({ updateOutput = true, updateInput = false } = {}) {
 
   baseUrl.search = searchParams.toString();
 
+  let finalUrl = baseUrl.toString();
+
+  // 如果沒有參數且原始 path 只有 "/"，則移除結尾多餘的斜線，讓行為更符合直覺
+  if (path === '/' && !searchParams.toString() && finalUrl.endsWith('/')) {
+    finalUrl = finalUrl.slice(0, -1);
+  }
+
   if (updateOutput) {
-    rebuiltUrlEl.textContent = baseUrl.toString();
+    rebuiltUrlEl.textContent = finalUrl;
   }
 
   if (updateInput) {
-    urlInput.value = baseUrl.toString();
+    urlInput.value = finalUrl;
   }
 
   if (duplicateKeys.size > 0) {
@@ -275,7 +317,7 @@ function rebuildUrl({ updateOutput = true, updateInput = false } = {}) {
 }
 
 function exportUrlJson() {
-  const data = JSON.parse(localStorage.getItem("urlHistory")) || { urls: [] };
+  const data = { urls: appState.urls };
   const blob = new Blob([JSON.stringify(data, null, 2)], {
     type: "application/json",
   });
@@ -293,12 +335,12 @@ function importUrlJson(file) {
   reader.onload = (e) => {
     try {
       const importedData = JSON.parse(e.target.result);
-      // 簡單的匯入：直接覆蓋
       if (importedData && Array.isArray(importedData.urls)) {
-        localStorage.setItem("urlHistory", JSON.stringify(importedData));
+        appState.urls = importedData.urls; // 直接更新記憶體狀態
+        saveState(); // 儲存到 localStorage
         renderUrlList();
         alert(i18next.t('urlList.importSuccess', { count: importedData.urls.length }));
-      } else { throw new Error("JSON 格式不符"); }
+      } else { throw new Error(i18next.t('urlList.importError')); }
     } catch (err) {
       alert(i18next.t('urlList.importError'));
     }
@@ -306,127 +348,115 @@ function importUrlJson(file) {
   reader.readAsText(file);
 }
 
-document.addEventListener("DOMContentLoaded", () => {
-  migrateDataToV2(); // 頁面載入時檢查並遷移資料
-  initDarkMode();
+loadState(); // 頁面載入時，先從 localStorage 載入資料到記憶體
+migrateDataToV2(); // 頁面載入時檢查並遷移資料
+initDarkMode();
 
-  parseBtn.addEventListener("click", () => {
-    const input = urlInput.value.trim();
-    const result = validateUrl(input);
+parseBtn.addEventListener("click", () => {
+  const input = urlInput.value.trim();
+  const result = validateUrl(input);
 
-    if (!result.valid) {
-      errorText.textContent = i18next.t('editor.urlError');
-      errorText.style.display = "block";
-      output.style.display = "none";
-      return;
-    }
+  if (!result.valid) {
+    errorText.textContent = i18next.t('editor.urlError');
+    errorText.style.display = "block";
+    output.style.display = "none";
+    return;
+  }
 
-    errorText.style.display = "none";
-    output.style.display = "block";
+  errorText.style.display = "none";
+  output.style.display = "block";
 
-    const parsed = parseUrl(result.url);
-    domainInput.value = parsed.domain;
-    pathInput.value = parsed.path;
+  const parsed = parseUrl(result.url);
+  domainInput.value = parsed.domain;
+  pathInput.value = parsed.path;
 
-    paramsContainer.innerHTML = "";
-    parsed.params.forEach(([key, value]) => {
-      const row = createParamRow(key, value);
-      paramsContainer.appendChild(row);
-    });
-
-    rebuildUrl({ updateInput: false });
-  });
-
-  domainInput.addEventListener("input", () =>
-    rebuildUrl({ updateInput: true })
-  );
-
-  pathInput.addEventListener("input", () => rebuildUrl({ updateInput: true }));
-
-  addParamBtn.addEventListener("click", () => {
-    const row = createParamRow();
+  paramsContainer.innerHTML = "";
+  parsed.params.forEach(([key, value]) => {
+    const row = createParamRow(key, value);
     paramsContainer.appendChild(row);
-    rebuildUrl({ updateInput: true });
   });
 
-  rebuiltUrlEl.addEventListener("click", () => {
-    const url = rebuiltUrlEl.textContent.trim();
-    if (!url) return;
-
-    navigator.clipboard.writeText(url).then(() => {
-      rebuiltUrlEl.classList.add("copied");
-      rebuiltUrlEl.textContent = i18next.t('editor.copySuccess');
-      setTimeout(() => {
-        rebuildUrl({ updateOutput: true, updateInput: false }); // 恢復原本 URL
-        rebuiltUrlEl.classList.remove("copied");
-      }, 1000);
-    });
-  });
-
-  saveUrlBtn.addEventListener("click", () => {
-    const url = rebuiltUrlEl.textContent.trim();
-    console.log(url);
-    if (!url) return;
-
-    saveUrlToHistory(url);
-  });
-
-  // 匯入匯出按鈕初始化
-  exportBtn.addEventListener("click", exportUrlJson);
-
-  importInput.addEventListener("change", (e) =>
-    importUrlJson(e.target.files[0])
-  );
-
-  importBtn.addEventListener("click", () => importInput.click());
-
-  // 初始化 i18n 並更新內容
-  // Use the promise-based approach for initialization
-  i18next.init().then(() => {
-    console.log('i18next initialized, rendering content...');
-    updateContent();
-    renderUrlList();
-
-    const langSwitcher = document.getElementById('language-switcher');
-    langSwitcher.value = i18next.language;
-
-    // 語言切換器事件
-    langSwitcher.addEventListener('change', (e) => {
-      i18next.changeLanguage(e.target.value).then(() => {
-        updateContent();
-        renderUrlList(); // Re-render list to update dynamic texts like buttons
-      });
-    });
-  });
-
-  console.log("🚀 頁面初始化完成");
+  rebuildUrl({ updateInput: false });
 });
+
+domainInput.addEventListener("input", () =>
+  rebuildUrl({ updateInput: true })
+);
+
+pathInput.addEventListener("input", () => rebuildUrl({ updateInput: true }));
+
+addParamBtn.addEventListener("click", () => {
+  const row = createParamRow();
+  paramsContainer.appendChild(row);
+  rebuildUrl({ updateInput: true });
+});
+
+rebuildUrlBtn.addEventListener("click", () => rebuildUrl({ updateInput: true }));
+
+rebuiltUrlEl.addEventListener("click", () => {
+  const url = rebuiltUrlEl.textContent.trim();
+  if (!url) return;
+
+  navigator.clipboard.writeText(url).then(() => {
+    rebuiltUrlEl.classList.add("copied");
+    rebuiltUrlEl.textContent = i18next.t('editor.copySuccess');
+    setTimeout(() => {
+      rebuildUrl({ updateOutput: true, updateInput: false }); // 恢復原本 URL
+      rebuiltUrlEl.classList.remove("copied");
+    }, 1000);
+  });
+});
+
+saveUrlBtn.addEventListener("click", () => {
+  const url = rebuiltUrlEl.textContent.trim();
+  if (!url) return;
+
+  saveUrlToHistory(url);
+});
+
+// 匯入匯出按鈕初始化
+exportBtn.addEventListener("click", exportUrlJson);
+
+importInput.addEventListener("change", (e) =>
+  importUrlJson(e.target.files[0])
+);
+
+importBtn.addEventListener("click", () => importInput.click());
 
 // --- 搜尋 URL 清單功能 ---
-
-// 1. 取得搜尋輸入框的 DOM 元素
 const searchInput = document.getElementById('search-url');
+if (searchInput) {
+  searchInput.addEventListener('input', (e) => {
+    appState.searchTerm = e.target.value;
+    renderUrlList();
+  });
+}
 
-// 2. 監聽輸入事件 (每次輸入都會觸發)
-searchInput.addEventListener('input', (e) => {
-    // 取得使用者輸入的搜尋關鍵字，並轉換為小寫以便不分大小寫比對
-    const searchTerm = e.target.value.toLowerCase();
+// 初始化 i18n 並更新內容
+// Use the promise-based approach for initialization
+i18next.init().then(() => {
+  // 更新靜態內容和頁面屬性
+  document.documentElement.lang = i18next.language;
+  document.title = i18next.t('appTitle');
+  updateContent();
 
-    // 取得所有 URL 卡片的 DOM 元素
-    // *** 請注意：這裡的 '.url-card' 是一個假設的 class 名稱。
-    // *** 您需要將它換成您用來代表「單一 URL 項目容器」的實際 CSS 選擇器。
-    const urlCards = document.querySelectorAll('#url-list .url-card'); 
+  // 首次渲染列表
+  renderUrlList();
 
-    // 3. 遍歷所有卡片，根據搜尋關鍵字決定顯示或隱藏
-    urlCards.forEach(card => {
-        // 取得卡片內的文字內容，也轉換為小寫
-        const cardText = card.textContent.toLowerCase();
+  console.log('i18next initialized, rendering content...');
 
-        // 如果卡片內容包含搜尋關鍵字，則顯示卡片，否則隱藏
-        if (cardText.includes(searchTerm)) {
-            card.style.display = ''; // 恢復預設顯示方式 (例如 'block', 'flex' 等)
-        } else {
-            card.style.display = 'none'; // 隱藏不符合的卡片
-        }
+  const langSwitcher = document.getElementById('language-switcher');
+  langSwitcher.value = i18next.language;
+
+  // 語言切換器事件
+  langSwitcher.addEventListener('change', (e) => {
+    i18next.changeLanguage(e.target.value).then(() => { // Re-render list to update dynamic texts like buttons
+      document.documentElement.lang = i18next.language;
+      document.title = i18next.t('appTitle');
+      updateContent();
+      renderUrlList();
     });
+  });
 });
+
+console.log("🚀 頁面初始化完成");
