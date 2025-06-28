@@ -10,41 +10,57 @@
 
 <body>
     <header>
-        <h1>URL 編輯工具</h1>
-        <button id="toggle-dark">🌙 切換主題</button>
+        <h1 data-i18n="header.title">URL 編輯工具</h1>
+        <div class="controls">
+            <select id="language-switcher" style="margin-right: 1rem;">
+                <option value="en">English</option>
+                <option value="zh-TW">繁體中文</option>
+            </select>
+            <button id="toggle-dark" data-i18n="header.toggleTheme">🌙 切換主題</button>
+        </div>
     </header>
 
     <main>
         <section id="url-editor">
-            <h2>URL 編輯器</h2>
+            <h2 data-i18n="editor.title">URL 編輯器</h2>
             <div class="url-input">
-                <label for="url">請輸入網址：</label><br />
-                <input type="text" id="url" placeholder="https://example.com/path?foo=bar" />
-                <button id="parse-btn">解析網址</button>
+                <label for="url" data-i18n="editor.label">請輸入網址：</label><br />
+                <input type="text" id="url" data-i18n="[placeholder]editor.placeholder" placeholder="https://example.com/path?foo=bar" />
+                <button id="parse-btn" data-i18n="editor.parseBtn">解析網址</button>
                 <p id="url-error" style="color: red; display: none;"></p>
             </div>
 
             <div id="parsed-output" style="display: none; margin-top: 1rem;">
-                <p><strong>Domain:</strong><input id="domain" placeholder="domain" /></p>
-                <p><strong>Path:</strong><input id="path" placeholder="/path" /></p>
-                <p><strong>參數：</strong></p>
+                <p><strong data-i18n="editor.domainLabel">Domain:</strong><input id="domain" placeholder="domain" /></p>
+                <p><strong data-i18n="editor.pathLabel">Path:</strong><input id="path" placeholder="/path" /></p>
+                <p><strong data-i18n="editor.paramsLabel">參數：</strong></p>
                 <div id="params-container"></div>
-                <button id="add-param-btn">➕ 新增參數</button>
-                <button id="rebuild-url-btn">重新組合 URL</button>
-                <button id="save-url-btn">💾 儲存到清單</button>
+                <button id="add-param-btn" data-i18n="editor.addParamBtn">➕ 新增參數</button>
+                <button id="rebuild-url-btn" data-i18n="editor.rebuildBtn">重新組合 URL</button>
+                <button id="save-url-btn" data-i18n="editor.saveBtn">💾 儲存到清單</button>
                 <p id="param-warning" style="color: orange; display: none; margin-top: 0.5rem;"></p>
-                <p><strong>新網址：</strong><br /><code id="rebuilt-url"></code></p>
+                <p>
+                    <strong data-i18n="editor.rebuiltUrlLabel">新網址：</strong><br />
+                    <code id="rebuilt-url"></code>
+                </p>
             </div>
 
         </section>
 
         <section id="url-list">
             <h2>URL 清單</h2>
+            <div id="tag-filters" style="margin-bottom: 1rem; display: flex; flex-wrap: wrap; gap: 0.5rem;">
+                <!-- 標籤過濾按鈕將由 JS 動態生成於此 -->
+            </div>
+            <div class="search-container" style="margin-bottom: 1rem;">
+                <label for="search-url" data-i18n="urlList.searchLabel">🔍 搜尋清單：</label>
+                <input type="search" id="search-url" data-i18n="[placeholder]urlList.searchPlaceholder" placeholder="輸入關鍵字..." style="width: 50%;">
+            </div>
             <!-- URL 卡片列表 -->
             <div>
-                <button id="export-json-btn">匯出 URL JSON</button>
+                <button id="export-json-btn" data-i18n="urlList.exportBtn">匯出 URL JSON</button>
                 <input id="import-json-file" type="file" accept=".json" style="display: none;">
-                <button id="import-json-btn">匯入 URL JSON</button>
+                <button id="import-json-btn" data-i18n="urlList.importBtn">匯入 URL JSON</button>
             </div>
         </section>
 
