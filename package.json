@@ -9,6 +9,7 @@
     "test:coverage": "jest --coverage",
     "start": "parcel",
     "build": "parcel build",
+    "postbuild": "copyfiles -u 1 static/**/* dist",
     "prepare": "husky install",
     "lint": "eslint . --ext .js --fix"
   },
@@ -28,6 +29,7 @@
     "@testing-library/dom": "^10.4.0",
     "@testing-library/jest-dom": "^6.6.3",
     "babel-jest": "^29.7.0",
+    "copyfiles": "^2.4.1",
     "eslint": "^8.57.0",
     "eslint-config-prettier": "^9.1.0",
     "eslint-plugin-prettier": "^5.1.3",

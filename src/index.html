@@ -5,6 +5,8 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>URL Editor</title>
+    <link rel="stylesheet" href="css/popup.css" />
+    <script src="js/popup-init.js"></script>
     <link rel="stylesheet" href="css/style.css" />
 </head>
 
@@ -12,7 +14,7 @@
     <header>
         <h1 data-i18n="header.title">URL 編輯工具</h1>
         <div class="controls">
-            <select id="language-switcher" style="margin-right: 1rem;">
+            <select id="language-switcher" class="language-switcher">
                 <option value="en">English</option>
                 <option value="zh-TW">繁體中文</option>
             </select>
@@ -24,8 +26,8 @@
         <section id="url-editor">
             <h2 data-i18n="editor.title">URL 編輯器</h2>
             <div class="url-input">
-                <label for="url" data-i18n="editor.label">請輸入網址：</label><br />
-                <input type="text" id="url" data-i18n="[placeholder]editor.placeholder" placeholder="https://example.com/path?foo=bar" />
+                <label for="url-main-input" data-i18n="editor.label">請輸入網址：</label><br />
+                <input type="text" id="url-main-input" data-i18n="[placeholder]editor.placeholder" placeholder="https://example.com/path?foo=bar" />
                 <button id="parse-btn" data-i18n="editor.parseBtn">解析網址</button>
                 <p id="url-error" style="color: red; display: none;"></p>
             </div>
@@ -48,13 +50,13 @@
         </section>
 
         <section id="url-list">
-            <h2 data-i18n="urlList.title">URL List</h2>
-            <div id="tag-filters" style="margin-bottom: 1rem; display: flex; flex-wrap: wrap; gap: 0.5rem;">
+            <h2 data-i18n="urlList.title">URL 清單</h2>
+            <div id="tag-filters">
                 <!-- 標籤過濾按鈕將由 JS 動態生成於此 -->
             </div>
-            <div class="search-container" style="margin-bottom: 1rem;">
+            <div class="search-container">
                 <label for="search-url" data-i18n="urlList.searchLabel">🔍 搜尋清單：</label>
-                <input type="search" id="search-url" data-i18n="[placeholder]urlList.searchPlaceholder" placeholder="輸入關鍵字..." style="width: 50%;">
+                <input type="search" id="search-url" data-i18n="[placeholder]urlList.searchPlaceholder" placeholder="輸入關鍵字...">
             </div>
             <!-- URL 卡片列表 -->
             <div>

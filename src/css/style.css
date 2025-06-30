@@ -71,6 +71,11 @@ section {
    2. URL Editor Section
    ================================= */
 
+.url-input {
+  /* 為主要輸入區塊增加一些底部間距 */
+  margin-bottom: 1rem;
+}
+
 .param-row {
   display: flex;
   gap: 0.5rem;
@@ -87,7 +92,8 @@ section {
   padding: 0.2rem 0.5rem;
 }
 
-#url {
+/* 修正 ID 選擇器以匹配 HTML 中的 "url-main-input" */
+#url-main-input {
   flex: 1;
   min-width: 200px;
   width: auto;
@@ -135,7 +141,7 @@ section {
   margin-top: 1.5rem; /* 與上方的按鈕區塊增加間距 */
 }
 
-.url-card .url-label {
+.url-card__label {
   font-size: 1rem;
   padding: 0.5rem;
   border: 1px solid var(--border-color);
@@ -146,7 +152,7 @@ section {
   box-sizing: border-box; /* 確保 padding 被計算在寬度之內 */
 }
 
-.url-card .url-value {
+.url-card__url-value {
   padding: 0.5rem;
   border-radius: 6px;
   font-size: 0.9rem;
@@ -156,7 +162,7 @@ section {
   box-sizing: border-box;    /* 確保 padding 不會導致溢出 */
 }
 
-.url-card .url-tags {
+.url-card__tags {
   width: 100%;
   box-sizing: border-box;
   padding: 0.5rem;
@@ -169,13 +175,13 @@ section {
 }
 
 /* Card Actions & Buttons */
-.url-card .actions {
+.url-card__actions {
   display: flex;
   gap: 0.5rem;
   flex-shrink: 0;
 }
 
-.url-card button {
+.url-card__button {
   font-size: 0.9rem;
   padding: 0.5rem;
   border-radius: 6px;
@@ -186,16 +192,16 @@ section {
   transition: background-color 0.2s, color 0.2s;
 }
 
-.url-card button:hover {
+.url-card__button:hover {
   background-color: var(--btn-hover);
 }
 
-.url-card button.delete-btn {
+.url-card__button--delete {
   background-color: var(--btn-delete);
   color: #fff;
 }
 
-.url-card button.delete-btn:hover {
+.url-card__button--delete:hover {
   background-color: var(--btn-delete-hover);
 }
 
@@ -217,6 +223,18 @@ section {
   opacity: 1; /* Override general button hover */
 }
 
+.language-switcher {
+  margin-right: 1rem;
+}
+
+.search-container {
+  margin-bottom: 1rem;
+}
+
+.search-container input {
+  width: 50%;
+}
+
 #tag-filters button {
   background-color: var(--btn-bg);
   color: var(--btn-text);
@@ -226,6 +244,13 @@ section {
   border: 1px solid var(--btn-hover);
   cursor: pointer;
   transition: all 0.2s ease;
+}
+
+#tag-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
 }
 
 #tag-filters button:hover {
@@ -247,6 +272,11 @@ section {
   }
 
   .url-card button {
+    width: 100%;
+  }
+
+  .search-container input {
+    /* 在小螢幕上讓搜尋框佔滿寬度，更易於使用 */
     width: 100%;
   }
 }

@@ -1,0 +1,44 @@
+{
+  "appTitle": "URL Editor Tool",
+  "header": {
+    "title": "URL Editor Tool",
+    "toggleTheme": "Toggle Theme"
+  },
+  "editor": {
+    "title": "URL Editor",
+    "label": "Enter URL:",
+    "placeholder": "https://example.com/path?foo=bar",
+    "parseBtn": "Parse URL",
+    "domainLabel": "Domain:",
+    "pathLabel": "Path:",
+    "paramsLabel": "Parameters:",
+    "addParamBtn": "➕ Add Parameter",
+    "rebuildBtn": "Rebuild URL",
+    "saveBtn": "💾 Save to List",
+    "rebuiltUrlLabel": "New URL:",
+    "paramKeyPlaceholder": "key",
+    "paramValuePlaceholder": "value",
+    "deleteParamTooltip": "Delete this parameter",
+    "duplicateWarning": "⚠️ Overwritten duplicate parameter keys: {{keys}}",
+    "copySuccess": "✅ URL Copied!",
+    "urlError": "Invalid URL format."
+  },
+  "urlList": {
+    "title": "URL List",
+    "searchLabel": "🔍 Search List:",
+    "searchPlaceholder": "Enter keywords...",
+    "exportBtn": "Export URL JSON",
+    "importBtn": "Import URL JSON",
+    "allTags": "All",
+    "card": {
+      "namePlaceholder": "Enter a name",
+      "copyTooltip": "Click to copy URL",
+      "copied": "✅ Copied!",
+      "tagsPlaceholder": "Tags (comma-separated)",
+      "load": "Load",
+      "delete": "Delete"
+    },
+    "importSuccess": "Successfully imported {{count}} items!",
+    "importError": "Error: Invalid JSON format for import."
+  }
+}

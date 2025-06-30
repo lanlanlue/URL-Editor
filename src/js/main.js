@@ -1,22 +1,10 @@
 import { initDarkMode } from "./darkMode.js";
 import i18next, { updateContent } from "./i18n.js";
-import { validateUrl, parseUrl } from "./urlParser.js";
+import { createUrlCard } from "./ui/urlCard.js";
+import { initUrlEditor, loadUrlInEditor } from "./editor.js";
 
 // DOM references
-const urlInput = document.getElementById("url");
-const parseBtn = document.getElementById("parse-btn");
-const errorText = document.getElementById("url-error");
-const output = document.getElementById("parsed-output");
-const domainInput = document.getElementById("domain");
-const pathInput = document.getElementById("path");
-const paramsContainer = document.getElementById("params-container");
-const rebuiltUrlEl = document.getElementById("rebuilt-url");
-const warningEl = document.getElementById("param-warning");
-const addParamBtn = document.getElementById("add-param-btn");
-const rebuildUrlBtn = document.getElementById("rebuild-url-btn");
 const urlListSection = document.getElementById("url-list");
-const saveUrlBtn = document.getElementById("save-url-btn");
-
 const exportBtn = document.getElementById("export-json-btn");
 const importInput = document.getElementById("import-json-file");
 const importBtn = document.getElementById("import-json-btn");
@@ -65,74 +53,6 @@ function saveState() {
     URL_HISTORY_KEY,
     JSON.stringify({ urls: appState.urls })
   );
-}
-
-// 生成 URL 卡片
-function createUrlCard(entry) {
-  const { id, url, label = "", tags = [] } = entry;
-
-  const card = document.createElement("div");
-  card.classList.add("url-card");
-
-  const labelInput = document.createElement("input");
-  labelInput.placeholder = i18next.t('urlList.card.namePlaceholder');
-  labelInput.value = label;
-  labelInput.className = "url-label";
-  labelInput.addEventListener("change", () => {
-    updateCardProperty(id, 'label', labelInput.value);
-  });
-
-  const text = document.createElement("code");
-  text.textContent = url;
-  text.className = "url-value"; // 加上 class 以套用正確的換行與樣式
-  text.title = i18next.t('urlList.card.copyTooltip');
-  text.addEventListener("click", () => {
-    navigator.clipboard.writeText(url).then(() => {
-      text.textContent = i18next.t('urlList.card.copied');
-      setTimeout(() => {
-        text.textContent = url;
-      }, 1000);
-    });
-  });
-
-  const tagsInput = document.createElement("input");
-  tagsInput.type = "text";
-  tagsInput.placeholder = i18next.t('urlList.card.tagsPlaceholder');
-  tagsInput.className = "url-tags";
-  tagsInput.value = tags.join(", ");
-  tagsInput.addEventListener("change", () => {
-    const newTags = tagsInput.value.split(',').map(t => t.trim()).filter(Boolean);
-    updateCardProperty(id, 'tags', newTags);
-  });
-
-  const loadBtn = document.createElement("button");
-  loadBtn.textContent = i18next.t('urlList.card.load');
-  loadBtn.className = "load-btn";
-  loadBtn.addEventListener("click", () => {
-    urlInput.value = url;
-    parseBtn.click();
-  });
-
-  const delBtn = document.createElement("button");
-  delBtn.textContent = i18next.t('urlList.card.delete');
-  delBtn.className = "delete-btn";
-  delBtn.addEventListener("click", () => {
-    appState.urls = appState.urls.filter((entry) => entry.id !== id);
-    saveState();
-    renderUrlList(); // 重新渲染
-  });
-
-  const actions = document.createElement('div');
-  actions.className = 'actions';
-  actions.appendChild(loadBtn);
-  actions.appendChild(delBtn);
-
-  card.appendChild(labelInput);
-  card.appendChild(text);
-  card.appendChild(tagsInput);
-  card.appendChild(actions);
-
-  return card;
 }
 
 // 儲存 URL 到 localStorage（避免重複）
@@ -205,7 +125,15 @@ function renderUrlList() {
   }
 
   urlsToRender.forEach((entry) => {
-    const card = createUrlCard(entry);
+    const card = createUrlCard(entry, { // Pass callbacks to the card factory
+      onUpdate: updateCardProperty,
+      onLoad: loadUrlInEditor,
+      onDelete: (id) => {
+        appState.urls = appState.urls.filter((urlEntry) => urlEntry.id !== id);
+        saveState();
+        renderUrlList();
+      },
+    });
     container.appendChild(card);
   });
 
@@ -214,106 +142,6 @@ function renderUrlList() {
   }
 
   renderTagFilters();
-}
-
-// 建立參數列
-function createParamRow(key = "", value = "") {
-  const row = document.createElement("div");
-  row.classList.add("param-row");
-
-  const keyInput = document.createElement("input");
-  keyInput.value = key;
-  keyInput.placeholder = i18next.t('editor.paramKeyPlaceholder');
-
-  const valInput = document.createElement("input");
-  valInput.value = value;
-  valInput.placeholder = i18next.t('editor.paramValuePlaceholder');
-
-  const deleteBtn = document.createElement("button");
-  deleteBtn.textContent = "❌";
-  deleteBtn.title = i18next.t('editor.deleteParamTooltip');
-  deleteBtn.addEventListener("click", () => {
-    row.remove();
-    rebuildUrl({ updateInput: true });
-  });
-
-  keyInput.addEventListener("input", () => rebuildUrl({ updateInput: true }));
-  valInput.addEventListener("input", () => rebuildUrl({ updateInput: true }));
-
-  row.appendChild(keyInput);
-  row.appendChild(valInput);
-  row.appendChild(deleteBtn);
-
-  return row;
-}
-
-// 重新組合 URL
-function rebuildUrl({ updateOutput = true, updateInput = false } = {}) {
-  let domain = domainInput.value.trim();
-  let path = pathInput.value.trim();
-
-  // 補上 path 開頭的 "/"
-  if (path && !path.startsWith("/")) path = "/" + path;
-
-  // 自動補上協議（避免 new URL() 出錯）
-  if (!/^https?:\/\//.test(domain)) {
-    domain = "https://" + domain;
-  }
-
-  let baseUrl;
-  try {
-    baseUrl = new URL(domain + path);
-  } catch (err) {
-    console.log(err);
-    return;
-  }
-
-  const rows = paramsContainer.querySelectorAll(".param-row");
-
-  const paramMap = new Map();
-  const seenKeys = new Set();
-  const duplicateKeys = new Set();
-
-  rows.forEach((row) => {
-    const key = row.children[0].value.trim();
-    const value = row.children[1].value.trim();
-    if (key !== "") {
-      if (seenKeys.has(key)) duplicateKeys.add(key);
-      seenKeys.add(key);
-      paramMap.set(key, value);
-    }
-  });
-
-  const searchParams = new URLSearchParams();
-  for (const [key, value] of paramMap.entries()) {
-    searchParams.append(key, value);
-  }
-
-  baseUrl.search = searchParams.toString();
-
-  let finalUrl = baseUrl.toString();
-
-  // 如果沒有參數且原始 path 只有 "/"，則移除結尾多餘的斜線，讓行為更符合直覺
-  if (path === '/' && !searchParams.toString() && finalUrl.endsWith('/')) {
-    finalUrl = finalUrl.slice(0, -1);
-  }
-
-  if (updateOutput) {
-    rebuiltUrlEl.textContent = finalUrl;
-  }
-
-  if (updateInput) {
-    urlInput.value = finalUrl;
-  }
-
-  if (duplicateKeys.size > 0) {
-    warningEl.textContent = i18next.t('editor.duplicateWarning', {
-      keys: [...duplicateKeys].join(", ")
-    });
-    warningEl.style.display = "block";
-  } else {
-    warningEl.style.display = "none";
-  }
 }
 
 function exportUrlJson() {
@@ -351,67 +179,8 @@ function importUrlJson(file) {
 loadState(); // 頁面載入時，先從 localStorage 載入資料到記憶體
 migrateDataToV2(); // 頁面載入時檢查並遷移資料
 initDarkMode();
-
-parseBtn.addEventListener("click", () => {
-  const input = urlInput.value.trim();
-  const result = validateUrl(input);
-
-  if (!result.valid) {
-    errorText.textContent = i18next.t('editor.urlError');
-    errorText.style.display = "block";
-    output.style.display = "none";
-    return;
-  }
-
-  errorText.style.display = "none";
-  output.style.display = "block";
-
-  const parsed = parseUrl(result.url);
-  domainInput.value = parsed.domain;
-  pathInput.value = parsed.path;
-
-  paramsContainer.innerHTML = "";
-  parsed.params.forEach(([key, value]) => {
-    const row = createParamRow(key, value);
-    paramsContainer.appendChild(row);
-  });
-
-  rebuildUrl({ updateInput: false });
-});
-
-domainInput.addEventListener("input", () =>
-  rebuildUrl({ updateInput: true })
-);
-
-pathInput.addEventListener("input", () => rebuildUrl({ updateInput: true }));
-
-addParamBtn.addEventListener("click", () => {
-  const row = createParamRow();
-  paramsContainer.appendChild(row);
-  rebuildUrl({ updateInput: true });
-});
-
-rebuildUrlBtn.addEventListener("click", () => rebuildUrl({ updateInput: true }));
-
-rebuiltUrlEl.addEventListener("click", () => {
-  const url = rebuiltUrlEl.textContent.trim();
-  if (!url) return;
-
-  navigator.clipboard.writeText(url).then(() => {
-    rebuiltUrlEl.classList.add("copied");
-    rebuiltUrlEl.textContent = i18next.t('editor.copySuccess');
-    setTimeout(() => {
-      rebuildUrl({ updateOutput: true, updateInput: false }); // 恢復原本 URL
-      rebuiltUrlEl.classList.remove("copied");
-    }, 1000);
-  });
-});
-
-saveUrlBtn.addEventListener("click", () => {
-  const url = rebuiltUrlEl.textContent.trim();
-  if (!url) return;
-
-  saveUrlToHistory(url);
+initUrlEditor({
+  onSave: saveUrlToHistory,
 });
 
 // 匯入匯出按鈕初始化
