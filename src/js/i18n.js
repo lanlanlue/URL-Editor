@@ -6,31 +6,29 @@ import LanguageDetector from 'i18next-browser-languagedetector';
 import enTranslation from '../locales/en/translation.json';
 import zhTWTranslation from '../locales/zh-TW/translation.json';
 
-i18next
-  .use(LanguageDetector)
-  .init({
-    fallbackLng: 'en', // 如果偵測不到語言，預設使用英文
-    debug: true, // 在開發模式下開啟 debug，方便查看載入情況
-    // Define resources directly
-    resources: {
-      en: {
-        translation: enTranslation,
-      },
-      'zh-TW': {
-        translation: zhTWTranslation,
-      },
+i18next.use(LanguageDetector).init({
+  fallbackLng: 'en', // 如果偵測不到語言，預設使用英文
+  debug: true, // 在開發模式下開啟 debug，方便查看載入情況
+  // Define resources directly
+  resources: {
+    en: {
+      translation: enTranslation,
     },
-    detection: {
-      // 偵測順序：localStorage -> navigator (瀏覽器語言)
-      order: ['localStorage', 'navigator'],
-      caches: ['localStorage']
-    }
-  });
+    'zh-TW': {
+      translation: zhTWTranslation,
+    },
+  },
+  detection: {
+    // 偵測順序：localStorage -> navigator (瀏覽器語言)
+    order: ['localStorage', 'navigator'],
+    caches: ['localStorage'],
+  },
+});
 
 // 函數：更新頁面上所有帶有 data-i18n 屬性的元素
 export function updateContent() {
   const elements = document.querySelectorAll('[data-i18n]');
-  elements.forEach(el => {
+  elements.forEach((el) => {
     const keyAttr = el.getAttribute('data-i18n');
     const attrRegex = /\[(.*?)\](.*)/;
     const match = keyAttr.match(attrRegex);

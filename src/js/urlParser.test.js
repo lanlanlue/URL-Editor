@@ -21,7 +21,10 @@ describe('urlParser', () => {
       const parsed = parseUrl(url);
       expect(parsed.domain).toBe('sub.example.com');
       expect(parsed.path).toBe('/test/path');
-      expect(parsed.params).toEqual([['a', '1'], ['b', '2']]);
+      expect(parsed.params).toEqual([
+        ['a', '1'],
+        ['b', '2'],
+      ]);
     });
   });
 });

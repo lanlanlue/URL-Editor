@@ -38,7 +38,9 @@ describe('main.js - User Interaction Tests', () => {
     const parseBtn = await screen.findByText('Parse URL');
 
     // 模擬使用者輸入並點擊
-    fireEvent.change(urlInput, { target: { value: 'https://www.google.com/search?q=gemini' } });
+    fireEvent.change(urlInput, {
+      target: { value: 'https://www.google.com/search?q=gemini' },
+    });
     fireEvent.click(parseBtn);
 
     // 驗證結果

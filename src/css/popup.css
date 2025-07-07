@@ -14,3 +14,24 @@ html.is-extension-popup {
 html.is-extension-popup body {
   margin: 0; /* 移除 body 的預設邊距，以避免雙重邊距 */
 }
+
+/* 輔助 Class */
+.hidden {
+  display: none !important; /* 使用 !important 確保覆蓋預設樣式 */
+}
+
+.text-error {
+  color: red;
+}
+
+.text-warning {
+  color: orange;
+}
+
+.mt-1 {
+  margin-top: 1rem;
+}
+
+.mt-0-5 {
+  margin-top: 0.5rem;
+}

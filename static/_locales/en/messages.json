@@ -1,0 +1,18 @@
+{
+  "extName": {
+    "message": "URL Editor",
+    "description": "The name of the extension."
+  },
+  "extDescription": {
+    "message": "A small widget for editing URLs.",
+    "description": "The description of the extension."
+  },
+  "appTitle": {
+    "message": "URL Editor",
+    "description": "The title of the application window/tab."
+  },
+  "urlList.emptyMessage": {
+    "message": "No matching URLs found.",
+    "description": "Message shown when the URL list is empty or no search results are found."
+  }
+}

@@ -80,7 +80,7 @@ Object.defineProperty(window, 'localStorage', { value: localStorageMock });
 // 模擬 matchMedia
 Object.defineProperty(window, 'matchMedia', {
   writable: true,
-  value: jest.fn().mockImplementation((query) => ({
+  value: jest.fn().mockImplementation(() => ({
     matches: false, // 預設為 light mode
   })),
 });

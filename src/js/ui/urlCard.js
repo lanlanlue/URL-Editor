@@ -42,7 +42,10 @@ export function createUrlCard(entry, callbacks) {
   tagsInput.className = 'url-card__tags';
   tagsInput.value = tags.join(', ');
   tagsInput.addEventListener('change', () => {
-    const newTags = tagsInput.value.split(',').map((t) => t.trim()).filter(Boolean);
+    const newTags = tagsInput.value
+      .split(',')
+      .map((t) => t.trim())
+      .filter(Boolean);
     callbacks.onUpdate(id, 'tags', newTags);
   });
 

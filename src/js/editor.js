@@ -106,9 +106,9 @@ export function initUrlEditor(callbacks) {
       warningEl.textContent = i18next.t('editor.duplicateWarning', {
         keys: [...duplicateKeys].join(', '),
       });
-      warningEl.style.display = 'block';
+      warningEl.classList.remove('hidden');
     } else {
-      warningEl.style.display = 'none';
+      warningEl.classList.add('hidden');
     }
   }
 
@@ -120,13 +120,13 @@ export function initUrlEditor(callbacks) {
 
     if (!result.valid) {
       errorText.textContent = i18next.t('editor.urlError');
-      errorText.style.display = 'block';
-      output.style.display = 'none';
+      errorText.classList.remove('hidden');
+      output.classList.add('hidden');
       return;
     }
 
-    errorText.style.display = 'none';
-    output.style.display = 'block';
+    errorText.classList.add('hidden');
+    output.classList.remove('hidden');
 
     const parsed = parseUrl(result.url);
     domainInput.value = parsed.domain;
@@ -141,16 +141,21 @@ export function initUrlEditor(callbacks) {
     rebuildUrl({ updateInput: false });
   });
 
-  domainInput.addEventListener('input', () => rebuildUrl({ updateInput: true }));
+  domainInput.addEventListener('input', () =>
+    rebuildUrl({ updateInput: true })
+  );
   pathInput.addEventListener('input', () => rebuildUrl({ updateInput: true }));
   addParamBtn.addEventListener('click', () => {
     const row = createParamRow();
     paramsContainer.appendChild(row);
+    row.querySelector('input').focus(); // Automatically focus the new key input
     rebuildUrl({ updateInput: true });
   });
-  rebuildUrlBtn.addEventListener('click', () => rebuildUrl({ updateInput: true }));
+  rebuildUrlBtn.addEventListener('click', () =>
+    rebuildUrl({ updateInput: true })
+  );
 
-  rebuiltUrlEl.addEventListener('click', () => {
+  function handleCopy() {
     const url = rebuiltUrlEl.textContent.trim();
     if (!url) return;
 
@@ -158,10 +163,23 @@ export function initUrlEditor(callbacks) {
       rebuiltUrlEl.classList.add('copied');
       rebuiltUrlEl.textContent = i18next.t('editor.copySuccess');
       setTimeout(() => {
+        // Re-render the URL without triggering an input update
         rebuildUrl({ updateOutput: true, updateInput: false });
         rebuiltUrlEl.classList.remove('copied');
       }, 1000);
+    }).catch(err => {
+      console.error('Failed to copy URL: ', err);
+      // Optionally, you could show an error message to the user here.
     });
+  }
+
+  rebuiltUrlEl.addEventListener('click', handleCopy);
+  rebuiltUrlEl.addEventListener('keydown', (e) => {
+    // Allow copying with Enter or Space key
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault(); // Prevent space from scrolling the page
+      handleCopy();
+    }
   });
 
   saveUrlBtn.addEventListener('click', () => {

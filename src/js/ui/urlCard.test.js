@@ -1,4 +1,4 @@
-import { fireEvent, getByText, getByPlaceholderText } from '@testing-library/dom';
+import { fireEvent, getByText } from '@testing-library/dom';
 import { createUrlCard } from './urlCard';
 
 // 模擬 i18next，因為 createUrlCard 依賴它來取得翻譯文字
@@ -47,7 +47,11 @@ describe('ui/urlCard', () => {
     fireEvent.change(labelInput, { target: { value: 'Google Gemini' } });
 
     expect(mockCallbacks.onUpdate).toHaveBeenCalledTimes(1);
-    expect(mockCallbacks.onUpdate).toHaveBeenCalledWith('test-uuid-123', 'label', 'Google Gemini');
+    expect(mockCallbacks.onUpdate).toHaveBeenCalledWith(
+      'test-uuid-123',
+      'label',
+      'Google Gemini'
+    );
   });
 
   test('should call onUpdate with correct payload when tags are changed', () => {
@@ -57,7 +61,11 @@ describe('ui/urlCard', () => {
     fireEvent.change(tagsInput, { target: { value: 'ai, google, tool' } });
 
     expect(mockCallbacks.onUpdate).toHaveBeenCalledTimes(1);
-    expect(mockCallbacks.onUpdate).toHaveBeenCalledWith('test-uuid-123', 'tags', ['ai', 'google', 'tool']);
+    expect(mockCallbacks.onUpdate).toHaveBeenCalledWith(
+      'test-uuid-123',
+      'tags',
+      ['ai', 'google', 'tool']
+    );
   });
 
   test('should call onLoad with correct url when load button is clicked', () => {
@@ -67,7 +75,9 @@ describe('ui/urlCard', () => {
     fireEvent.click(loadButton);
 
     expect(mockCallbacks.onLoad).toHaveBeenCalledTimes(1);
-    expect(mockCallbacks.onLoad).toHaveBeenCalledWith('https://gemini.google.com');
+    expect(mockCallbacks.onLoad).toHaveBeenCalledWith(
+      'https://gemini.google.com'
+    );
   });
 
   test('should call onDelete with correct id when delete button is clicked', () => {
