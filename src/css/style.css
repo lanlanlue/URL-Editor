@@ -36,8 +36,10 @@
 body {
   background-color: var(--bg-color);
   color: var(--text-color);
-  transition: background-color 0.3s, color 0.3s;
-  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+  transition:
+    background-color 0.3s,
+    color 0.3s;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
   font-size: 16px;
   margin: 0;
   padding: 1rem;
@@ -118,6 +120,12 @@ section {
 /* =================================
    3. URL List Section & Cards
    ================================= */
+#url-cards-container {
+  display: flex;
+  flex-wrap: wrap; /* 允許卡片在空間不足時換行 */
+  gap: 1.5rem; /* 在卡片之間創造間距，解決黏在一起的問題 */
+  margin-top: 1rem;
+}
 
 /* Card Container */
 .url-card {
@@ -127,6 +135,8 @@ section {
   padding: 1rem;
   width: 100%;
   max-width: 380px;
+  flex: 1 1 300px; /* flex-grow, flex-shrink, flex-basis */
+  min-width: 300px;
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
@@ -159,7 +169,7 @@ section {
   cursor: pointer;
   word-break: break-all;
   overflow-wrap: break-word; /* 修正拼字並讓長單字斷行更穩健 */
-  box-sizing: border-box;    /* 確保 padding 不會導致溢出 */
+  box-sizing: border-box; /* 確保 padding 不會導致溢出 */
 }
 
 .url-card__tags {
@@ -189,7 +199,9 @@ section {
   cursor: pointer;
   background-color: var(--btn-bg);
   color: var(--btn-text);
-  transition: background-color 0.2s, color 0.2s;
+  transition:
+    background-color 0.2s,
+    color 0.2s;
 }
 
 .url-card__button:hover {
@@ -221,6 +233,13 @@ section {
   cursor: pointer;
   transition: background-color 0.2s ease;
   opacity: 1; /* Override general button hover */
+}
+
+/* 讓匯入/匯出按鈕也稍微有點間距 */
+.url-list-actions {
+  margin-top: 1.5rem;
+  display: flex;
+  gap: 1rem;
 }
 
 .language-switcher {

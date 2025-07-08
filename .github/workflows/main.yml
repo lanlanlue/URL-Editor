@@ -41,7 +41,7 @@ jobs:
 
       # 4. Builds your project
       - name: Build project 🏗️
-        run: npm run build
+        run: npm run build:gh
 
       # 5. Deploys the build output to the gh-pages branch
       - name: Deploy to GitHub Pages 🚀

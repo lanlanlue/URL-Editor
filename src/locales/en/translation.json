@@ -24,6 +24,8 @@
     "urlError": "Invalid URL format."
   },
   "urlList": {
+    "emptyMessage": "No matching URLs found here.",
+    "emptyMessageSearch": "No URLs match your search criteria.",
     "title": "URL List",
     "searchLabel": "🔍 Search List:",
     "searchPlaceholder": "Enter keywords...",

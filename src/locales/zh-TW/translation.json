@@ -24,6 +24,8 @@
     "urlError": "無效的 URL 格式。"
   },
   "urlList": {
+    "emptyMessage": "目前沒有儲存的 URL。",
+    "emptyMessageSearch": "沒有符合搜尋條件的 URL。",
     "title": "URL 清單",
     "searchLabel": "🔍 搜尋清單：",
     "searchPlaceholder": "輸入關鍵字...",
