@@ -8,8 +8,8 @@
     "test": "jest",
     "test:coverage": "jest --coverage",
     "start": "parcel",
-    "build": "parcel build --public-url /URL-Editor/",
-    "postbuild": "copyfiles -u 1 static/**/* dist",
+    "build": "parcel build",
+    "build:gh": "parcel build --public-url /URL-Editor/",
     "prepare": "husky install",
     "lint": "eslint . --ext .js --fix",
     "audit": "npm audit --audit-level=high"
