@@ -8,7 +8,7 @@
     "test": "jest",
     "test:coverage": "jest --coverage",
     "start": "parcel",
-    "build": "parcel build",
+    "build": "parcel build --public-url /URL-Editor/",
     "postbuild": "copyfiles -u 1 static/**/* dist",
     "prepare": "husky install",
     "lint": "eslint . --ext .js --fix",
