@@ -1,4 +1,4 @@
-<!DOCTYPE html><html lang=en><meta charset=UTF-8><meta name=referrer content=no-referrer><meta http-equiv=Permissions-Policy content="accelerometer=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=()"><meta name=viewport content="width=device-width, initial-scale=1.0"><script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-9603285949500141" crossorigin=anonymous></script><title>URL Editor</title><link rel=stylesheet href=/URL-Editor/URL-Editor.6864acab.css><link rel=icon href=/URL-Editor/icon.b850ebbb.svg type=image/svg+xml><script src=/URL-Editor/URL-Editor.5cf9e66e.js></script><link rel=stylesheet href=/URL-Editor/URL-Editor.956ecee1.css><body>
+<!DOCTYPE html><html lang=en><meta charset=UTF-8><meta name=referrer content=no-referrer><meta http-equiv=Permissions-Policy content="accelerometer=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=()"><meta name=viewport content="width=device-width, initial-scale=1.0"><script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-9603285949500141" crossorigin=anonymous></script><title>URL Editor</title><link rel=stylesheet href=/URL-Editor/URL-Editor.6864acab.css><link rel=icon href=/URL-Editor/icon.b850ebbb.svg type=image/svg+xml><script src=/URL-Editor/URL-Editor.5cf9e66e.js></script><link rel=stylesheet href=/URL-Editor/URL-Editor.8c6c41b4.css><body>
     <header>
         <h1 data-i18n=header.title>URL 編輯工具</h1>
         <div class=controls>
@@ -14,15 +14,21 @@
         <section id=url-editor>
             <h2 data-i18n=editor.title>URL 編輯器</h2>
             <div class=url-input>
-                <label for=url-main-input data-i18n=editor.label>請輸入網址：</label><br>
+                <label for=url-main-input data-i18n=editor.label>請輸入網址：</label>
                 <input id=url-main-input data-i18n=[placeholder]editor.placeholder placeholder="https://example.com/path?foo=bar">
                 <button id=parse-btn data-i18n=editor.parseBtn>解析網址</button>
                 <p id=url-error class="hidden text-error"></p>
             </div>
 
             <div id=parsed-output class="hidden mt-1">
-                <p><strong data-i18n=editor.domainLabel>Domain:</strong><input id=domain placeholder=domain></p>
-                <p><strong data-i18n=editor.pathLabel>Path:</strong><input id=path placeholder=/path></p>
+                <div class=form-group>
+                    <label for=domain data-i18n=editor.domainLabel>Domain:</label>
+                    <input id=domain placeholder=domain>
+                </div>
+                <div class=form-group>
+                    <label for=path data-i18n=editor.pathLabel>Path:</label>
+                    <input id=path placeholder=/path>
+                </div>
                 <p><strong data-i18n=editor.paramsLabel>參數：</strong></p>
                 <div id=params-container></div>
                 <button id=add-param-btn data-i18n=editor.addParamBtn>➕ 新增參數</button>
@@ -30,7 +36,7 @@
                 <button id=save-url-btn data-i18n=editor.saveBtn>💾 儲存到清單</button>
                 <p id=param-warning class="hidden mt-0-5 text-warning"></p>
                 <p>
-                    <strong data-i18n=editor.rebuiltUrlLabel>新網址：</strong><br>
+                    <strong data-i18n=editor.rebuiltUrlLabel>新網址：</strong>
                     <code id=rebuilt-url role=button tabindex=0 title="Click or press Enter to copy"></code>
                 </p>
             </div>
@@ -49,7 +55,7 @@
             <div id=url-cards-container></div>
             <p id=empty-list-message class=hidden data-i18n=urlList.emptyMessage>這裡沒有符合條件的 URL。</p>
             
-            <div>
+            <div class=url-list-actions>
                 <button id=export-json-btn data-i18n=urlList.exportBtn>匯出 URL JSON</button>
                 <input id=import-json-file type=file accept=.json class=hidden>
                 <button id=import-json-btn data-i18n=urlList.importBtn>匯入 URL JSON</button>
@@ -58,6 +64,6 @@
 
     </main>
 
-    <script type=module src=/URL-Editor/URL-Editor.5b4b2119.js></script>
+    <script type=module src=/URL-Editor/URL-Editor.5285e281.js></script>
 
 
