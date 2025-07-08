@@ -3,7 +3,7 @@ export function validateUrl(input) {
     const url = new URL(input);
     return { valid: true, url };
   } catch (e) {
-    return { valid: false, error: "無效的 URL 格式" };
+    return { valid: false, error: '無效的 URL 格式' };
   }
 }
 

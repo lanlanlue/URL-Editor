@@ -1,0 +1,18 @@
+{
+  "extName": {
+    "message": "URL 編輯工具",
+    "description": "擴充套件的名稱。"
+  },
+  "extDescription": {
+    "message": "一個用於編輯網址的小工具。",
+    "description": "擴充套件的描述。"
+  },
+  "appTitle": {
+    "message": "URL 編輯工具",
+    "description": "應用程式視窗或分頁的標題。"
+  },
+  "urlList.emptyMessage": {
+    "message": "沒有符合條件的 URL。",
+    "description": "當 URL 列表為空或找不到搜尋結果時顯示的訊息。"
+  }
+}

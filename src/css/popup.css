@@ -1,0 +1,37 @@
+/*
+ *  Styles for the browser extension popup window.
+ *  This file sets a fixed size for the popup.
+ */
+
+/* 僅在作為擴充套件彈出視窗執行時應用固定尺寸 */
+html.is-extension-popup {
+  /* 您可以自由調整這些數值以符合您的設計需求 */
+  width: 780px;
+  min-height: 580px;
+  overflow-x: hidden; /* 防止意外的水平捲軸 */
+}
+
+html.is-extension-popup body {
+  margin: 0; /* 移除 body 的預設邊距，以避免雙重邊距 */
+}
+
+/* 輔助 Class */
+.hidden {
+  display: none !important; /* 使用 !important 確保覆蓋預設樣式 */
+}
+
+.text-error {
+  color: red;
+}
+
+.text-warning {
+  color: orange;
+}
+
+.mt-1 {
+  margin-top: 1rem;
+}
+
+.mt-0-5 {
+  margin-top: 0.5rem;
+}

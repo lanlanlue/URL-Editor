@@ -1,5 +1,8 @@
 {
-  "appId": "zihheng.me",
   "appName": "url-editor",
-  "webDir": "dist"
+  "webDir": "dist",
+  "appId": "me.ointw.url-editor",
+  "server": {
+    "allowNavigation": []
+  }
 }
