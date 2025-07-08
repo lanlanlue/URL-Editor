@@ -10,8 +10,13 @@
       - frame-ancestors 'none': 防止您的網頁被嵌入到 <iframe> 中 (防禦點擊劫持)。
     -->
     <meta name="referrer" content="no-referrer">
-    <meta http-equiv="Permissions-Policy" content="accelerometer=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=()">
+    <meta http-equiv="Permissions-Policy"
+        content="accelerometer=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=()">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- Google AdSense Code Start -->
+    <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-9603285949500141"
+        crossorigin="anonymous"></script>
+    <!-- Google AdSense Code End -->
     <title>URL Editor</title>
     <link rel="stylesheet" href="css/popup.css" />
     <script src="js/popup-init.js"></script>
@@ -35,7 +40,8 @@
             <h2 data-i18n="editor.title">URL 編輯器</h2>
             <div class="url-input">
                 <label for="url-main-input" data-i18n="editor.label">請輸入網址：</label><br />
-                <input type="text" id="url-main-input" data-i18n="[placeholder]editor.placeholder" placeholder="https://example.com/path?foo=bar" />
+                <input type="text" id="url-main-input" data-i18n="[placeholder]editor.placeholder"
+                    placeholder="https://example.com/path?foo=bar" />
                 <button id="parse-btn" data-i18n="editor.parseBtn">解析網址</button>
                 <p id="url-error" class="text-error hidden"></p>
             </div>
@@ -64,7 +70,8 @@
             </div>
             <div class="search-container">
                 <label for="search-url" data-i18n="urlList.searchLabel">🔍 搜尋清單：</label>
-                <input type="search" id="search-url" data-i18n="[placeholder]urlList.searchPlaceholder" placeholder="輸入關鍵字...">
+                <input type="search" id="search-url" data-i18n="[placeholder]urlList.searchPlaceholder"
+                    placeholder="輸入關鍵字...">
             </div>
             <div id="url-cards-container"></div>
             <p id="empty-list-message" class="hidden" data-i18n="urlList.emptyMessage">這裡沒有符合條件的 URL。</p>
