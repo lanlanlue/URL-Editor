@@ -4,7 +4,6 @@ import { createUrlCard } from './ui/urlCard.js';
 import { initUrlEditor, loadUrlInEditor } from './editor.js';
 
 // DOM references
-const urlListSection = document.getElementById('url-list');
 const exportBtn = document.getElementById('export-json-btn');
 const importInput = document.getElementById('import-json-file');
 const importBtn = document.getElementById('import-json-btn');
@@ -113,7 +112,7 @@ function renderUrlList() {
   const container = document.getElementById('url-cards-container');
   const emptyMessage = document.getElementById('empty-list-message');
   container.innerHTML = '';
-  
+
   let urlsToRender = [...appState.urls];
 
   // 1. 應用標籤過濾
@@ -138,7 +137,9 @@ function renderUrlList() {
         onUpdate: updateCardProperty,
         onLoad: loadUrlInEditor,
         onDelete: (id) => {
-          appState.urls = appState.urls.filter((urlEntry) => urlEntry.id !== id);
+          appState.urls = appState.urls.filter(
+            (urlEntry) => urlEntry.id !== id
+          );
           saveState();
           renderUrlList();
         },

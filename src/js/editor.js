@@ -159,18 +159,21 @@ export function initUrlEditor(callbacks) {
     const url = rebuiltUrlEl.textContent.trim();
     if (!url) return;
 
-    navigator.clipboard.writeText(url).then(() => {
-      rebuiltUrlEl.classList.add('copied');
-      rebuiltUrlEl.textContent = i18next.t('editor.copySuccess');
-      setTimeout(() => {
-        // Re-render the URL without triggering an input update
-        rebuildUrl({ updateOutput: true, updateInput: false });
-        rebuiltUrlEl.classList.remove('copied');
-      }, 1000);
-    }).catch(err => {
-      console.error('Failed to copy URL: ', err);
-      // Optionally, you could show an error message to the user here.
-    });
+    navigator.clipboard
+      .writeText(url)
+      .then(() => {
+        rebuiltUrlEl.classList.add('copied');
+        rebuiltUrlEl.textContent = i18next.t('editor.copySuccess');
+        setTimeout(() => {
+          // Re-render the URL without triggering an input update
+          rebuildUrl({ updateOutput: true, updateInput: false });
+          rebuiltUrlEl.classList.remove('copied');
+        }, 1000);
+      })
+      .catch((err) => {
+        console.error('Failed to copy URL: ', err);
+        // Optionally, you could show an error message to the user here.
+      });
   }
 
   rebuiltUrlEl.addEventListener('click', handleCopy);
