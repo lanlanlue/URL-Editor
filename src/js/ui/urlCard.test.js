@@ -16,6 +16,10 @@ describe('ui/urlCard', () => {
     url: 'https://gemini.google.com',
     label: 'Gemini',
     tags: ['ai', 'google'],
+    usageCount: 0,
+    isPinned: false,
+    lastUsed: Date.now(),
+    createdAt: Date.now(),
   };
 
   let mockCallbacks;
@@ -26,6 +30,10 @@ describe('ui/urlCard', () => {
       onUpdate: jest.fn(),
       onLoad: jest.fn(),
       onDelete: jest.fn(),
+      onCopy: jest.fn(),
+      onOpen: jest.fn(),
+      onPin: jest.fn(),
+      onToggleSelect: jest.fn(),
     };
   });
 
@@ -35,7 +43,6 @@ describe('ui/urlCard', () => {
     // 驗證初始值是否正確渲染
     expect(card.querySelector('.url-card__label').value).toBe('Gemini');
     // We check for truthiness because the card is a detached element.
-    // `getByText` will throw an error if the element is not found within the card.
     expect(getByText(card, 'https://gemini.google.com')).toBeTruthy();
     expect(card.querySelector('.url-card__tags').value).toBe('ai, google');
   });
@@ -68,18 +75,6 @@ describe('ui/urlCard', () => {
     );
   });
 
-  // test('should call onLoad with correct url when load button is clicked', () => {
-  //   const card = createUrlCard(sampleEntry, mockCallbacks);
-  //   const loadButton = getByText(card, 'urlList.card.load');
-
-  //   fireEvent.click(loadButton);
-
-  //   expect(mockCallbacks.onLoad).toHaveBeenCalledTimes(1);
-  //   expect(mockCallbacks.onLoad).toHaveBeenCalledWith(
-  //     'https://gemini.google.com'
-  //   );
-  // });
-
   test('should call onDelete with correct id when delete button is clicked', () => {
     const card = createUrlCard(sampleEntry, mockCallbacks);
     const deleteButton = getByText(card, 'urlList.card.delete');
@@ -91,7 +86,6 @@ describe('ui/urlCard', () => {
   });
 
   test('should toggle selection and call onToggleSelect', () => {
-    mockCallbacks.onToggleSelect = jest.fn();
     const card = createUrlCard(sampleEntry, mockCallbacks, false);
     document.body.appendChild(card);
     const checkbox = card.querySelector('.url-card__checkbox');
@@ -109,5 +103,61 @@ describe('ui/urlCard', () => {
     );
 
     document.body.removeChild(card);
+  });
+
+  test('should show usage badge when usageCount > 0', () => {
+    const entryWithUsage = { ...sampleEntry, usageCount: 5 };
+    const card = createUrlCard(entryWithUsage, mockCallbacks);
+    const badge = card.querySelector('.url-card__usage-badge');
+
+    expect(badge).toBeTruthy();
+    expect(badge.textContent).toContain('5');
+    expect(badge.style.display).not.toBe('none');
+  });
+
+  test('should hide usage badge when usageCount is 0', () => {
+    const card = createUrlCard(sampleEntry, mockCallbacks);
+    const badge = card.querySelector('.url-card__usage-badge');
+
+    expect(badge.style.display).toBe('none');
+  });
+
+  test('should toggle pin state and call onPin callback', () => {
+    const card = createUrlCard(sampleEntry, mockCallbacks);
+    document.body.appendChild(card);
+    const pinBtn = card.querySelector('.url-card__pin-btn');
+
+    expect(card.classList.contains('url-card--pinned')).toBe(false);
+    expect(pinBtn.classList.contains('is-pinned')).toBe(false);
+
+    fireEvent.click(pinBtn);
+
+    expect(card.classList.contains('url-card--pinned')).toBe(true);
+    expect(pinBtn.classList.contains('is-pinned')).toBe(true);
+    expect(mockCallbacks.onPin).toHaveBeenCalledWith('test-uuid-123', true);
+
+    document.body.removeChild(card);
+  });
+
+  test('should render pinned card with is-pinned class when isPinned=true', () => {
+    const pinnedEntry = { ...sampleEntry, isPinned: true };
+    const card = createUrlCard(pinnedEntry, mockCallbacks);
+
+    expect(card.classList.contains('url-card--pinned')).toBe(true);
+    const pinBtn = card.querySelector('.url-card__pin-btn');
+    expect(pinBtn.classList.contains('is-pinned')).toBe(true);
+  });
+
+  test('should call onOpen with url and id when open button is clicked', () => {
+    const card = createUrlCard(sampleEntry, mockCallbacks);
+    const openBtn = card.querySelector('.url-card__button--open');
+
+    fireEvent.click(openBtn);
+
+    expect(mockCallbacks.onOpen).toHaveBeenCalledTimes(1);
+    expect(mockCallbacks.onOpen).toHaveBeenCalledWith(
+      'https://gemini.google.com',
+      'test-uuid-123'
+    );
   });
 });

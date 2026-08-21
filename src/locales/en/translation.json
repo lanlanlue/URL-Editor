@@ -53,11 +53,23 @@
       "load": "Load",
       "open": "🔗 Open",
       "openTooltip": "Open URL in a new tab",
+      "checkHealth": "📡 Health Check",
       "delete": "Delete",
       "pin": "☆ Pin to top",
       "unpin": "⭐ Unpin"
     },
-    "importSuccess": "Successfully imported {{count}} items!",
+    "exportCsvBtn": "📄 Export CSV",
+    "importCsvBtn": "📥 Import CSV",
+    "batch": {
+      "selectAll": "Select All",
+      "deselectAll": "Deselect All",
+      "selectedCount": "Selected {{count}} items",
+      "replaceDomain": "Replace Domain",
+      "addTag": "➕ Add Tag",
+      "exportSelected": "💾 Export Selected",
+      "deleteSelected": "🗑️ Delete Selected",
+      "checkHealth": "📡 Check Selected Connection"
+    },
     "importError": "Error: Invalid JSON format for import.",
     "sort": {
       "label": "Sort by:",
@@ -143,5 +155,62 @@
     "closeBtn": "✕ Close",
     "successAlert": "🎉 Successfully imported {{count}} URL(s)!",
     "noSelectedAlert": "Please select at least one URL to import."
+  },
+  "presets": {
+    "title": "⚙️ Query Parameter Presets",
+    "label": "Parameter Presets:",
+    "manageBtn": "⚙️ Manage Presets",
+    "addTitle": "➕ Add Custom Preset:",
+    "namePlaceholder": "Preset Name (e.g., QA Test Suite)",
+    "paramsPlaceholder": "Parameters (e.g., env=qa&debug=true)",
+    "addSubmitBtn": "➕ Save as Preset",
+    "applyBtn": "Apply",
+    "editBtn": "✏️ Edit",
+    "deleteBtn": "❌ Delete",
+    "saveEditBtn": "💾 Save",
+    "cancelEditBtn": "✕ Cancel",
+    "inputRequiredAlert": "Please enter both preset name and parameters!",
+    "invalidParamsAlert": "Could not parse invalid parameter format."
+  },
+  "qrcode": {
+    "title": "📱 Mobile Testing QR Code",
+    "btn": "📱 QR Code",
+    "btnTooltip": "Generate QR code for mobile testing",
+    "copyBtn": "📋 Copy URL",
+    "closeBtn": "✕ Close"
+  },
+  "viewMode": {
+    "cards": "📋 Card View",
+    "grouped": "📁 Group by Domain",
+    "expandAll": "📂 Expand All",
+    "collapseAll": "📁 Collapse All"
+  },
+  "chips": {
+    "protocol": "Protocol:",
+    "ports": "Port Chips:",
+    "env": "Environment:"
+  },
+  "history": {
+    "label": "🕒 Rebuild History:",
+    "selectPlaceholder": "-- Select Recent URL to Load --",
+    "clearBtn": "🧹 Clear History"
+  },
+  "tagManager": {
+    "title": "🏷️ Tag Manager",
+    "manageBtn": "🏷️ Manage Tags",
+    "emptyTags": "No tags currently in use.",
+    "countText": "({{count}} URLs)",
+    "renameBtn": "✏️ Rename",
+    "deleteBtn": "🗑️ Delete Tag",
+    "renamePrompt": "Enter new name for tag '{{tag}}':",
+    "deleteConfirm": "Are you sure you want to remove tag '{{tag}}' from {{count}} URLs?"
+  },
+  "healthCheck": {
+    "btn": "📡 Health Check",
+    "btnTooltip": "Test URL connectivity status",
+    "checking": "⏳ Checking...",
+    "online": "🟢 Online",
+    "offline": "🔴 Offline",
+    "batchStarted": "🚀 Started health check for {{count}} URLs"
   }
 }

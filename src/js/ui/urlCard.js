@@ -10,6 +10,7 @@ import i18next from '../i18n';
  * @param {function} [callbacks.onCopy] - Called when URL is copied.
  * @param {function} [callbacks.onOpen] - Called when open-in-tab button is clicked.
  * @param {function} [callbacks.onPin] - Called when pin button is toggled.
+ * @param {function} [callbacks.onCheckHealth] - Called when health check button is clicked.
  * @param {function} [callbacks.onToggleSelect] - Called when checkbox selection changes.
  * @param {boolean} [isSelected=false] - Whether the card is currently selected.
  * @returns {HTMLElement} The created card element.
@@ -22,6 +23,7 @@ export function createUrlCard(entry, callbacks, isSelected = false) {
     tags = [],
     usageCount = 0,
     isPinned = false,
+    healthStatus = null,
   } = entry;
 
   const card = document.createElement('div');
@@ -30,7 +32,7 @@ export function createUrlCard(entry, callbacks, isSelected = false) {
   if (isSelected) card.classList.add('url-card--selected');
   if (isPinned) card.classList.add('url-card--pinned');
 
-  // --- Header row: checkbox | label input | usage badge | pin btn ---
+  // --- Header row: checkbox | label input | usage badge | health badge | pin btn ---
   const header = document.createElement('div');
   header.className = 'url-card__header';
 
@@ -61,6 +63,22 @@ export function createUrlCard(entry, callbacks, isSelected = false) {
     callbacks.onUpdate(id, 'label', labelInput.value);
   });
 
+  // Health status badge
+  const healthBadge = document.createElement('span');
+  healthBadge.className = 'url-card__health-badge';
+  if (healthStatus === 'checking') {
+    healthBadge.className += ' health--checking';
+    healthBadge.textContent = i18next.t('healthCheck.checking');
+  } else if (healthStatus === 'online') {
+    healthBadge.className += ' health--online';
+    healthBadge.textContent = i18next.t('healthCheck.online');
+  } else if (healthStatus === 'offline') {
+    healthBadge.className += ' health--offline';
+    healthBadge.textContent = i18next.t('healthCheck.offline');
+  } else {
+    healthBadge.style.display = 'none';
+  }
+
   // Usage count badge
   const usageBadge = document.createElement('span');
   usageBadge.className = 'url-card__usage-badge';
@@ -87,6 +105,7 @@ export function createUrlCard(entry, callbacks, isSelected = false) {
 
   header.appendChild(checkbox);
   header.appendChild(labelInput);
+  header.appendChild(healthBadge);
   header.appendChild(usageBadge);
   header.appendChild(pinBtn);
 
@@ -135,6 +154,22 @@ export function createUrlCard(entry, callbacks, isSelected = false) {
     if (callbacks.onOpen) callbacks.onOpen(url, id);
   });
 
+  const healthBtn = document.createElement('button');
+  healthBtn.textContent = i18next.t('healthCheck.btn');
+  healthBtn.className = 'url-card__button url-card__button--health';
+  healthBtn.title = i18next.t('healthCheck.btnTooltip');
+  healthBtn.addEventListener('click', () => {
+    if (callbacks.onCheckHealth) callbacks.onCheckHealth(url, id);
+  });
+
+  const qrBtn = document.createElement('button');
+  qrBtn.textContent = i18next.t('qrcode.btn');
+  qrBtn.className = 'url-card__button url-card__button--qr';
+  qrBtn.title = i18next.t('qrcode.btnTooltip');
+  qrBtn.addEventListener('click', () => {
+    if (callbacks.onQrCode) callbacks.onQrCode(url, label || url);
+  });
+
   const delBtn = document.createElement('button');
   delBtn.textContent = i18next.t('urlList.card.delete');
   delBtn.className = 'url-card__button url-card__button--delete';
@@ -144,6 +179,8 @@ export function createUrlCard(entry, callbacks, isSelected = false) {
   actions.className = 'url-card__actions';
   actions.appendChild(loadBtn);
   actions.appendChild(openBtn);
+  actions.appendChild(healthBtn);
+  actions.appendChild(qrBtn);
   actions.appendChild(delBtn);
 
   card.appendChild(header);

@@ -10,15 +10,34 @@ import {
   initBatchImportModal,
   openBatchImportModal,
 } from './ui/batchImportModal.js';
+import { initQrCodeModal, openQrCodeModal } from './ui/qrCodeModal.js';
+import { initPresetModal } from './ui/presetModal.js';
+import {
+  initTagManagerModal,
+  openTagManagerModal,
+} from './ui/tagManagerModal.js';
+import { exportToCsvString, parseCsvString } from './utils/csvParser.js';
+import { checkUrlHealth } from './utils/healthCheck.js';
 import { findDuplicateUrls } from './urlParser.js';
 
 // DOM references
 const exportBtn = document.getElementById('export-json-btn');
 const importInput = document.getElementById('import-json-file');
 const importBtn = document.getElementById('import-json-btn');
+const exportCsvBtn = document.getElementById('export-csv-btn');
+const importCsvInput = document.getElementById('import-csv-file');
+const importCsvBtn = document.getElementById('import-csv-btn');
 const openMaintenanceBtn = document.getElementById('open-maintenance-btn');
 const openBatchImportBtn = document.getElementById('open-batch-import-btn');
 const editorBatchImportBtn = document.getElementById('editor-batch-import-btn');
+const openTagManagerBtn = document.getElementById('open-tag-manager-btn');
+
+// View Mode DOM references
+const viewModeCardsBtn = document.getElementById('view-mode-cards-btn');
+const viewModeGroupedBtn = document.getElementById('view-mode-grouped-btn');
+const accordionControls = document.getElementById('accordion-controls');
+const accordionExpandAll = document.getElementById('accordion-expand-all');
+const accordionCollapseAll = document.getElementById('accordion-collapse-all');
 
 // Batch action bar DOM references
 const batchActionBar = document.getElementById('batch-action-bar');
@@ -35,6 +54,7 @@ const batchReplaceDomainBtn = document.getElementById(
 const batchAddTagBtn = document.getElementById('batch-add-tag-btn');
 const batchExportBtn = document.getElementById('batch-export-btn');
 const batchDeleteBtn = document.getElementById('batch-delete-btn');
+const batchCheckHealthBtn = document.getElementById('batch-check-health-btn');
 
 // --- 應用程式狀態管理 ---
 let appState = {
@@ -43,8 +63,18 @@ let appState = {
   searchTerm: '',
   selectedIds: new Set(),
   sortMode: 'created', // 'frequency' | 'recent' | 'created' | 'alpha'
+  viewMode: 'cards', // 'cards' | 'grouped'
 };
 const URL_HISTORY_KEY = 'urlHistory';
+
+function extractDomain(urlStr) {
+  try {
+    const urlObj = new URL(urlStr);
+    return urlObj.hostname || urlObj.host || 'Other';
+  } catch (e) {
+    return 'Other';
+  }
+}
 
 // 資料遷移：將舊格式的 localStorage 資料轉換為新的標籤格式
 function migrateDataToV2() {
@@ -52,7 +82,6 @@ function migrateDataToV2() {
   if (!rawData) return;
 
   let data = JSON.parse(rawData);
-  // 檢查是否為舊格式 (陣列且第一個元素是字串或沒有 id)
   if (
     Array.isArray(data) &&
     data.length > 0 &&
@@ -79,7 +108,6 @@ function migrateDataToV2() {
   }
 }
 
-// 為缺少新欄位的已儲存資料補齊 (v3 遷移)
 function migrateDataToV3() {
   const now = Date.now();
   let changed = false;
@@ -104,38 +132,35 @@ function migrateDataToV3() {
   if (changed) saveState();
 }
 
-// 從 localStorage 載入狀態
 function loadState() {
   const data = JSON.parse(localStorage.getItem(URL_HISTORY_KEY)) || {
     urls: [],
   };
   appState.urls = data.urls;
   appState.sortMode = data.sortMode || 'created';
+  appState.viewMode = data.viewMode || 'cards';
 }
 
-// 將狀態儲存到 localStorage
 function saveState() {
   localStorage.setItem(
     URL_HISTORY_KEY,
-    JSON.stringify({ urls: appState.urls, sortMode: appState.sortMode })
+    JSON.stringify({
+      urls: appState.urls,
+      sortMode: appState.sortMode,
+      viewMode: appState.viewMode,
+    })
   );
 }
 
-// 追蹤 URL 使用 (load / copy / open)
 function trackUrlUsage(id) {
   const urlEntry = appState.urls.find((u) => u.id === id);
   if (urlEntry) {
     urlEntry.usageCount = (urlEntry.usageCount || 0) + 1;
     urlEntry.lastUsed = Date.now();
     saveState();
-    // Re-render only if sort depends on usage
-    if (
-      appState.sortMode === 'frequency' ||
-      appState.sortMode === 'recent'
-    ) {
+    if (appState.sortMode === 'frequency' || appState.sortMode === 'recent') {
       renderUrlList();
     } else {
-      // Just update the badge in-place via data attribute
       const badge = document.querySelector(
         `[data-url-id="${id}"] .url-card__usage-badge`
       );
@@ -147,7 +172,6 @@ function trackUrlUsage(id) {
   }
 }
 
-// 排序 URLs
 function getSortedUrls(urls) {
   const pinned = urls.filter((u) => u.isPinned);
   const unpinned = urls.filter((u) => !u.isPinned);
@@ -159,9 +183,7 @@ function getSortedUrls(urls) {
           (a, b) => (b.usageCount || 0) - (a.usageCount || 0)
         );
       case 'recent':
-        return [...arr].sort(
-          (a, b) => (b.lastUsed || 0) - (a.lastUsed || 0)
-        );
+        return [...arr].sort((a, b) => (b.lastUsed || 0) - (a.lastUsed || 0));
       case 'alpha':
         return [...arr].sort((a, b) => {
           const la = (a.label || a.url).toLowerCase();
@@ -170,16 +192,13 @@ function getSortedUrls(urls) {
         });
       case 'created':
       default:
-        return [...arr].sort(
-          (a, b) => (b.createdAt || 0) - (a.createdAt || 0)
-        );
+        return [...arr].sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
     }
   };
 
   return [...sort(pinned), ...sort(unpinned)];
 }
 
-// 儲存 URL 到 localStorage（避免重複）
 function saveUrlToHistory(url) {
   const existing = appState.urls.find((entry) => entry.url === url);
 
@@ -201,17 +220,15 @@ function saveUrlToHistory(url) {
   }
 }
 
-// 更新卡片屬性 (通用函數)
 function updateCardProperty(id, property, value) {
   const urlIndex = appState.urls.findIndex((u) => u.id === id);
   if (urlIndex > -1) {
     appState.urls[urlIndex][property] = value;
     saveState();
-    renderUrlList(); // 重新渲染以更新標籤過濾器
+    renderUrlList();
   }
 }
 
-// 渲染標籤過濾按鈕
 function renderTagFilters() {
   const allTags = new Set(appState.urls.flatMap((url) => url.tags));
   const filtersContainer = document.getElementById('tag-filters');
@@ -235,7 +252,6 @@ function renderTagFilters() {
   allTags.forEach((tag) => createFilterButton(tag, tag));
 }
 
-// 更新批次操作列介面
 function updateBatchActionBar(urlsToRender = []) {
   if (!batchActionBar) return;
 
@@ -274,15 +290,14 @@ function updateBatchActionBar(urlsToRender = []) {
     }
   }
 
-  // Disable/enable batch action buttons based on selection count
   const hasSelection = count > 0;
   if (batchReplaceDomainBtn) batchReplaceDomainBtn.disabled = !hasSelection;
   if (batchAddTagBtn) batchAddTagBtn.disabled = !hasSelection;
   if (batchExportBtn) batchExportBtn.disabled = !hasSelection;
   if (batchDeleteBtn) batchDeleteBtn.disabled = !hasSelection;
+  if (batchCheckHealthBtn) batchCheckHealthBtn.disabled = !hasSelection;
 }
 
-// 取得目前過濾後的 URLs
 function getFilteredUrls() {
   let urlsToRender = [...appState.urls];
 
@@ -302,7 +317,65 @@ function getFilteredUrls() {
   return getSortedUrls(urlsToRender);
 }
 
-// 渲染 URL 清單
+// User-triggered single URL health check
+async function runSingleHealthCheck(targetUrl, targetId) {
+  const entry = appState.urls.find((u) => u.id === targetId);
+  if (entry) {
+    entry.healthStatus = 'checking';
+    renderUrlList();
+
+    const res = await checkUrlHealth(targetUrl);
+    entry.healthStatus = res.status;
+    renderUrlList();
+  }
+}
+
+function createCardElement(entry, urlsToRender) {
+  const isSelected = appState.selectedIds.has(entry.id);
+  return createUrlCard(
+    entry,
+    {
+      onUpdate: updateCardProperty,
+      onLoad: (url, id) => {
+        trackUrlUsage(id);
+        loadUrlInEditor(url);
+      },
+      onCopy: (id) => {
+        trackUrlUsage(id);
+      },
+      onOpen: (url, id) => {
+        trackUrlUsage(id);
+        window.open(url, '_blank', 'noopener,noreferrer');
+      },
+      onQrCode: (url, title) => {
+        openQrCodeModal(url, title);
+      },
+      onCheckHealth: (url, id) => {
+        runSingleHealthCheck(url, id);
+      },
+      onPin: (id, isPinned) => {
+        updateCardProperty(id, 'isPinned', isPinned);
+      },
+      onDelete: (id) => {
+        appState.urls = appState.urls.filter((urlEntry) => urlEntry.id !== id);
+        appState.selectedIds.delete(id);
+        saveState();
+        renderUrlList();
+      },
+      onToggleSelect: (id, checked) => {
+        if (checked) {
+          appState.selectedIds.add(id);
+        } else {
+          appState.selectedIds.delete(id);
+        }
+        updateBatchActionBar(urlsToRender);
+      },
+    },
+    isSelected
+  );
+}
+
+// 渲染 URL 清單 (支援 📋 卡片模式與 📁 Domain 分組 Accordion)
 function renderUrlList() {
   const container = document.getElementById('url-cards-container');
   const emptyMessage = document.getElementById('empty-list-message');
@@ -311,7 +384,6 @@ function renderUrlList() {
   container.innerHTML = '';
   const urlsToRender = getFilteredUrls();
 
-  // 清除已不存在於 urls 中的 selectedIds
   const existingIds = new Set(appState.urls.map((u) => u.id));
   appState.selectedIds.forEach((id) => {
     if (!existingIds.has(id)) {
@@ -321,53 +393,73 @@ function renderUrlList() {
 
   if (urlsToRender.length > 0) {
     emptyMessage.classList.add('hidden');
-    urlsToRender.forEach((entry) => {
-      const isSelected = appState.selectedIds.has(entry.id);
-      const card = createUrlCard(
-        entry,
-        {
-          onUpdate: updateCardProperty,
-          onLoad: (url, id) => {
-            trackUrlUsage(id);
-            loadUrlInEditor(url);
-          },
-          onCopy: (id) => {
-            trackUrlUsage(id);
-          },
-          onOpen: (url, id) => {
-            trackUrlUsage(id);
-            window.open(url, '_blank', 'noopener,noreferrer');
-          },
-          onPin: (id, isPinned) => {
-            updateCardProperty(id, 'isPinned', isPinned);
-          },
-          onDelete: (id) => {
-            appState.urls = appState.urls.filter(
-              (urlEntry) => urlEntry.id !== id
-            );
-            appState.selectedIds.delete(id);
-            saveState();
-            renderUrlList();
-          },
-          onToggleSelect: (id, checked) => {
-            if (checked) {
-              appState.selectedIds.add(id);
-            } else {
-              appState.selectedIds.delete(id);
-            }
-            updateBatchActionBar(urlsToRender);
-          },
-        },
-        isSelected
-      );
-      container.appendChild(card);
-    });
+
+    if (appState.viewMode === 'grouped') {
+      // Group by domain
+      const groups = new Map();
+      urlsToRender.forEach((entry) => {
+        const domain = extractDomain(entry.url);
+        if (!groups.has(domain)) groups.set(domain, []);
+        groups.get(domain).push(entry);
+      });
+
+      groups.forEach((groupUrls, domainName) => {
+        const accordion = document.createElement('details');
+        accordion.className = 'domain-accordion';
+        accordion.open = true;
+
+        const summary = document.createElement('summary');
+        summary.className = 'domain-accordion__summary';
+
+        const title = document.createElement('span');
+        title.className = 'domain-accordion__title';
+        title.textContent = `🌐 ${domainName}`;
+
+        const badge = document.createElement('span');
+        badge.className = 'badge badge--secondary';
+        badge.textContent = `${groupUrls.length}`;
+
+        summary.appendChild(title);
+        summary.appendChild(badge);
+        accordion.appendChild(summary);
+
+        const groupBody = document.createElement('div');
+        groupBody.className = 'domain-accordion__body';
+
+        groupUrls.forEach((entry) => {
+          groupBody.appendChild(createCardElement(entry, urlsToRender));
+        });
+
+        accordion.appendChild(groupBody);
+        container.appendChild(accordion);
+      });
+    } else {
+      // Regular Cards grid
+      urlsToRender.forEach((entry) => {
+        container.appendChild(createCardElement(entry, urlsToRender));
+      });
+    }
   } else {
     emptyMessage.classList.remove('hidden');
   }
 
   renderTagFilters();
   updateBatchActionBar(urlsToRender);
+  updateViewModeUI();
+}
+
+function updateViewModeUI() {
+  if (viewModeCardsBtn && viewModeGroupedBtn) {
+    if (appState.viewMode === 'grouped') {
+      viewModeGroupedBtn.classList.add('active');
+      viewModeCardsBtn.classList.remove('active');
+      if (accordionControls) accordionControls.classList.remove('hidden');
+    } else {
+      viewModeCardsBtn.classList.add('active');
+      viewModeGroupedBtn.classList.remove('active');
+      if (accordionControls) accordionControls.classList.add('hidden');
+    }
+  }
 }
 
 function exportUrlJson(
@@ -393,9 +485,9 @@ function importUrlJson(file) {
     try {
       const importedData = JSON.parse(e.target.result);
       if (importedData && Array.isArray(importedData.urls)) {
-        appState.urls = importedData.urls; // 直接更新記憶體狀態
+        appState.urls = importedData.urls;
         appState.selectedIds.clear();
-        saveState(); // 儲存到 localStorage
+        saveState();
         renderUrlList();
         alert(
           i18next.t('urlList.importSuccess', {
@@ -412,14 +504,66 @@ function importUrlJson(file) {
   reader.readAsText(file);
 }
 
-// 批次清理重複 URL
+function exportUrlCsv(
+  urlsToExport = appState.urls,
+  filename = 'url-editor-data.csv'
+) {
+  const csvText = exportToCsvString(urlsToExport);
+  const blob = new Blob([csvText], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function importUrlCsv(file) {
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try {
+      const parsedItems = parseCsvString(e.target.result);
+      if (parsedItems.length > 0) {
+        const existingSet = new Set(appState.urls.map((u) => u.url));
+        let count = 0;
+        parsedItems.forEach((item) => {
+          if (!existingSet.has(item.url)) {
+            appState.urls.push({
+              id: self.crypto?.randomUUID
+                ? self.crypto.randomUUID()
+                : `url-${Date.now()}-${Math.random()}`,
+              url: item.url,
+              label: item.label || '',
+              tags: item.tags || [],
+              usageCount: item.usageCount || 0,
+              lastUsed: Date.now(),
+              createdAt: Date.now(),
+              isPinned: item.isPinned || false,
+            });
+            existingSet.add(item.url);
+            count++;
+          }
+        });
+        saveState();
+        renderUrlList();
+        alert(i18next.t('urlList.importSuccess', { count }));
+      } else {
+        alert(i18next.t('urlList.importError'));
+      }
+    } catch (err) {
+      alert(i18next.t('urlList.importError'));
+    }
+  };
+  reader.readAsText(file);
+}
+
 function cleanupDuplicateUrls() {
   const { duplicates } = findDuplicateUrls(appState.urls);
   if (duplicates.length === 0) return 0;
 
   const idsToRemove = new Set();
   duplicates.forEach((item) => {
-    // 保留最後一筆，移除前面重複的 ID
     const removeList = item.ids.slice(0, item.ids.length - 1);
     removeList.forEach((id) => idsToRemove.add(id));
   });
@@ -433,15 +577,66 @@ function cleanupDuplicateUrls() {
 }
 
 // 初始化所有功能
-loadState(); // 頁面載入時，先從 localStorage 載入資料到記憶體
-migrateDataToV2(); // 頁面載入時檢查並遷移資料 (v2: id/tags)
-migrateDataToV3(); // 頁面載入時補齊 usage / pin 欄位 (v3)
+loadState();
+migrateDataToV2();
+migrateDataToV3();
 initDarkMode();
 initUrlEditor({
   onSave: saveUrlToHistory,
+  onQrCode: (url, title) => openQrCodeModal(url, title),
 });
 initMaintenanceModal();
 initBatchImportModal();
+initQrCodeModal();
+initPresetModal();
+initTagManagerModal();
+
+// 視圖切換按鈕事件
+if (viewModeCardsBtn) {
+  viewModeCardsBtn.addEventListener('click', () => {
+    appState.viewMode = 'cards';
+    saveState();
+    renderUrlList();
+  });
+}
+
+if (viewModeGroupedBtn) {
+  viewModeGroupedBtn.addEventListener('click', () => {
+    appState.viewMode = 'grouped';
+    saveState();
+    renderUrlList();
+  });
+}
+
+if (accordionExpandAll) {
+  accordionExpandAll.addEventListener('click', () => {
+    document.querySelectorAll('.domain-accordion').forEach((acc) => {
+      acc.open = true;
+    });
+  });
+}
+
+if (accordionCollapseAll) {
+  accordionCollapseAll.addEventListener('click', () => {
+    document.querySelectorAll('.domain-accordion').forEach((acc) => {
+      acc.open = false;
+    });
+  });
+}
+
+// 標籤管理按鈕
+if (openTagManagerBtn) {
+  openTagManagerBtn.addEventListener('click', () => {
+    openTagManagerModal({
+      urls: appState.urls,
+      onUpdateUrls: (updated) => {
+        appState.urls = updated;
+        saveState();
+        renderUrlList();
+      },
+    });
+  });
+}
 
 // 排序選單
 const sortSelect = document.getElementById('sort-select');
@@ -491,7 +686,6 @@ if (editorBatchImportBtn) {
   editorBatchImportBtn.addEventListener('click', handleBatchImportAction);
 }
 
-// 匯入匯出按鈕初始化
 if (exportBtn) exportBtn.addEventListener('click', () => exportUrlJson());
 
 if (importInput) {
@@ -506,7 +700,20 @@ if (importBtn && importInput) {
   importBtn.addEventListener('click', () => importInput.click());
 }
 
-// 維護工具彈窗按鈕
+if (exportCsvBtn) exportCsvBtn.addEventListener('click', () => exportUrlCsv());
+
+if (importCsvInput) {
+  importCsvInput.addEventListener('change', (e) => {
+    if (e.target.files && e.target.files[0]) {
+      importUrlCsv(e.target.files[0]);
+    }
+  });
+}
+
+if (importCsvBtn && importCsvInput) {
+  importCsvBtn.addEventListener('click', () => importCsvInput.click());
+}
+
 if (openMaintenanceBtn) {
   openMaintenanceBtn.addEventListener('click', () => {
     const filtered = getFilteredUrls();
@@ -527,7 +734,6 @@ if (openMaintenanceBtn) {
   });
 }
 
-// 批次全選 / 取消全選
 if (batchSelectAllCheckbox) {
   batchSelectAllCheckbox.addEventListener('change', (e) => {
     const rendered = getFilteredUrls();
@@ -540,7 +746,18 @@ if (batchSelectAllCheckbox) {
   });
 }
 
-// 批次替換 Domain 按鈕（由工具列開啟彈窗並鎖定 selected 範圍）
+if (batchCheckHealthBtn) {
+  batchCheckHealthBtn.addEventListener('click', () => {
+    if (appState.selectedIds.size === 0) return;
+    const selected = appState.urls.filter((u) =>
+      appState.selectedIds.has(u.id)
+    );
+    selected.forEach((entry) => {
+      runSingleHealthCheck(entry.url, entry.id);
+    });
+  });
+}
+
 if (batchReplaceDomainBtn) {
   batchReplaceDomainBtn.addEventListener('click', () => {
     if (appState.selectedIds.size === 0) return;
@@ -562,7 +779,6 @@ if (batchReplaceDomainBtn) {
   });
 }
 
-// 批次新增標籤
 if (batchAddTagBtn) {
   batchAddTagBtn.addEventListener('click', () => {
     if (appState.selectedIds.size === 0) return;
@@ -585,7 +801,6 @@ if (batchAddTagBtn) {
   });
 }
 
-// 批次匯出選取項目
 if (batchExportBtn) {
   batchExportBtn.addEventListener('click', () => {
     if (appState.selectedIds.size === 0) return;
@@ -596,7 +811,6 @@ if (batchExportBtn) {
   });
 }
 
-// 批次刪除選取項目
 if (batchDeleteBtn) {
   batchDeleteBtn.addEventListener('click', () => {
     const count = appState.selectedIds.size;
@@ -616,7 +830,6 @@ if (batchDeleteBtn) {
   });
 }
 
-// --- 搜尋 URL 清單功能 ---
 const searchInput = document.getElementById('search-url');
 if (searchInput) {
   searchInput.addEventListener('input', (e) => {
@@ -625,14 +838,11 @@ if (searchInput) {
   });
 }
 
-// 初始化 i18n 並更新內容
 i18next.init().then(() => {
-  // 更新靜態內容和頁面屬性
   document.documentElement.lang = i18next.language;
   document.title = i18next.t('appTitle');
   updateContent();
 
-  // 首次渲染列表
   renderUrlList();
 
   console.log('i18next initialized, rendering content...');
@@ -641,7 +851,6 @@ i18next.init().then(() => {
   if (langSwitcher) {
     langSwitcher.value = i18next.language;
 
-    // 語言切換器事件
     langSwitcher.addEventListener('change', (e) => {
       i18next.changeLanguage(e.target.value).then(() => {
         document.documentElement.lang = i18next.language;

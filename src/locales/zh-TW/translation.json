@@ -31,6 +31,13 @@
     "searchPlaceholder": "輸入關鍵字...",
     "exportBtn": "匯出 URL JSON",
     "importBtn": "匯入 URL JSON",
+    "exportCsvBtn": "📄 匯出 CSV",
+    "importCsvBtn": "📥 匯入 CSV",
+    "tagManager": {
+      "title": "🏷️ 標籤管理",
+      "rename": "重新命名標籤",
+      "delete": "刪除標籤"
+    },
     "maintenanceBtn": "🛠️ 批次維護工具",
     "allTags": "全部",
     "batch": {
@@ -41,6 +48,7 @@
       "addTag": "➕ 新增標籤",
       "deleteSelected": "🗑️ 刪除所選",
       "exportSelected": "💾 匯出所選",
+      "checkHealth": "📡 檢查連線狀態",
       "promptAddTag": "請輸入要批次新增的標籤名稱：",
       "confirmDelete": "確定要刪除選取的 {{count}} 筆 URL 嗎？此動作無法復原。"
     },
@@ -143,5 +151,62 @@
     "closeBtn": "✕ 關閉",
     "successAlert": "🎉 成功匯入 {{count}} 筆 URL！",
     "noSelectedAlert": "請至少勾選一筆要匯入的 URL。"
+  },
+  "presets": {
+    "title": "⚙️ 常用參數預設包管理",
+    "label": "常用參數預設包：",
+    "manageBtn": "⚙️ 管理參數包",
+    "addTitle": "➕ 新增自訂參數包：",
+    "namePlaceholder": "預設包名稱 (例如：QA 測試包)",
+    "paramsPlaceholder": "參數組合 (例如：env=qa&debug=true)",
+    "addSubmitBtn": "➕ 儲存為預設包",
+    "applyBtn": "帶入",
+    "editBtn": "✏️ 編輯",
+    "deleteBtn": "❌ 刪除",
+    "saveEditBtn": "💾 儲存",
+    "cancelEditBtn": "✕ 取消",
+    "inputRequiredAlert": "請輸入預設包名稱與參數內容！",
+    "invalidParamsAlert": "無法解析無效的參數格式。"
+  },
+  "qrcode": {
+    "title": "📱 行動裝置掃描測試 QR Code",
+    "btn": "📱 QR Code",
+    "btnTooltip": "產生行動裝置掃描 QR Code",
+    "copyBtn": "📋 複製 URL",
+    "closeBtn": "✕ 關閉"
+  },
+  "viewMode": {
+    "cards": "📋 卡片清單",
+    "grouped": "📁 Domain 分組",
+    "expandAll": "📂 全部展開",
+    "collapseAll": "📁 全部收合"
+  },
+  "chips": {
+    "protocol": "協定：",
+    "ports": "Port 快捷：",
+    "env": "環境切換："
+  },
+  "history": {
+    "label": "🕒 最近重組歷史：",
+    "selectPlaceholder": "-- 選擇歷史 URL 快速載入 --",
+    "clearBtn": "🧹 清除歷史"
+  },
+  "tagManager": {
+    "title": "🏷️ 標籤集中管理",
+    "manageBtn": "🏷️ 管理標籤",
+    "emptyTags": "尚無任何使用中的標籤。",
+    "countText": "({{count}} 筆 URL)",
+    "renameBtn": "✏️ 重命名",
+    "deleteBtn": "🗑️ 刪除標籤",
+    "renamePrompt": "請輸入標籤「{{tag}}」的新名稱：",
+    "deleteConfirm": "確定要將標籤「{{tag}}」從 {{count}} 筆 URL 中移除嗎？"
+  },
+  "healthCheck": {
+    "btn": "📡 連線檢查",
+    "btnTooltip": "測試目標網址連通狀態",
+    "checking": "⏳ 檢查中...",
+    "online": "🟢 線上",
+    "offline": "🔴 無法連線",
+    "batchStarted": "🚀 已開始檢測 {{count}} 筆 URL 連線狀態"
   }
 }

@@ -1,15 +1,65 @@
 import i18next from './i18n';
 import { validateUrl, parseUrl } from './urlParser';
+import { getSavedPresets, openPresetModal } from './ui/presetModal';
 
 let urlInputElement;
 let parseButtonElement;
+
+const REBUILD_HISTORY_KEY = 'rebuildHistory';
+const MAX_HISTORY = 10;
+
+function getRebuildHistory() {
+  const raw = localStorage.getItem(REBUILD_HISTORY_KEY);
+  if (!raw) return [];
+  try {
+    return JSON.parse(raw);
+  } catch (e) {
+    return [];
+  }
+}
+
+function pushRebuildHistory(url) {
+  if (!url || typeof url !== 'string') return;
+  let list = getRebuildHistory();
+  // Avoid duplicate adjacent entry
+  if (list.length > 0 && list[0].url === url) return;
+
+  // Filter out exact duplicate if present elsewhere
+  list = list.filter((item) => item.url !== url);
+  list.unshift({ url, timestamp: Date.now() });
+
+  if (list.length > MAX_HISTORY) list = list.slice(0, MAX_HISTORY);
+  localStorage.setItem(REBUILD_HISTORY_KEY, JSON.stringify(list));
+  updateHistoryDropdown();
+}
+
+function updateHistoryDropdown() {
+  const select = document.getElementById('rebuild-history-select');
+  if (!select) return;
+
+  const history = getRebuildHistory();
+  select.innerHTML = '';
+
+  const defaultOption = document.createElement('option');
+  defaultOption.value = '';
+  defaultOption.textContent = i18next.t('history.selectPlaceholder');
+  select.appendChild(defaultOption);
+
+  history.forEach((item) => {
+    const opt = document.createElement('option');
+    opt.value = item.url;
+    opt.textContent = `${new Date(item.timestamp).toLocaleTimeString()} - ${item.url}`;
+    select.appendChild(opt);
+  });
+}
 
 /**
  * Initializes the URL editor component and its event listeners.
  * @param {object} callbacks - Callbacks to communicate with the main application.
  * @param {function(string): void} callbacks.onSave - Called when the save button is clicked.
+ * @param {function(string): void} [callbacks.onQrCode] - Called when QR code button is clicked.
  */
-export function initUrlEditor(callbacks) {
+export function initUrlEditor(callbacks = {}) {
   // DOM references for the editor
   urlInputElement = document.getElementById('url-main-input');
   parseButtonElement = document.getElementById('parse-btn');
@@ -23,6 +73,13 @@ export function initUrlEditor(callbacks) {
   const addParamBtn = document.getElementById('add-param-btn');
   const rebuildUrlBtn = document.getElementById('rebuild-url-btn');
   const saveUrlBtn = document.getElementById('save-url-btn');
+  const qrCodeBtn = document.getElementById('editor-qrcode-btn');
+
+  // Chips DOM references
+  const protocolChip = document.getElementById('chip-protocol');
+  const openPresetManageBtn = document.getElementById('open-preset-manage-btn');
+  const presetChipsList = document.getElementById('editor-preset-chips');
+  const historySelect = document.getElementById('rebuild-history-select');
 
   // --- Internal Functions ---
 
@@ -110,6 +167,124 @@ export function initUrlEditor(callbacks) {
     } else {
       warningEl.classList.add('hidden');
     }
+
+    if (finalUrl) {
+      pushRebuildHistory(finalUrl);
+    }
+  }
+
+  function renderEditorPresetChips() {
+    if (!presetChipsList) return;
+    presetChipsList.innerHTML = '';
+
+    const presets = getSavedPresets();
+    presets.forEach((preset) => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'chip-btn';
+      btn.textContent = `➕ ${preset.name}`;
+      btn.addEventListener('click', () => {
+        applyParamsToEditor(preset.params);
+      });
+      presetChipsList.appendChild(btn);
+    });
+  }
+
+  function applyParamsToEditor(paramPairs) {
+    paramPairs.forEach(([key, val]) => {
+      // Check if key already exists in rows
+      const rows = paramsContainer.querySelectorAll('.param-row');
+      let found = false;
+      rows.forEach((row) => {
+        if (row.children[0].value.trim() === key) {
+          row.children[1].value = val;
+          found = true;
+        }
+      });
+      if (!found) {
+        const newRow = createParamRow(key, val);
+        paramsContainer.appendChild(newRow);
+      }
+    });
+    rebuildUrl({ updateInput: true });
+  }
+
+  // --- Switcher Chips Event Handlers ---
+  if (protocolChip) {
+    protocolChip.addEventListener('click', () => {
+      let val = domainInput.value.trim();
+      if (val.startsWith('https://')) {
+        domainInput.value = val.replace(/^https:\/\//, 'http://');
+      } else if (val.startsWith('http://')) {
+        domainInput.value = val.replace(/^http:\/\//, 'https://');
+      } else {
+        domainInput.value = 'http://' + val;
+      }
+      rebuildUrl({ updateInput: true });
+    });
+  }
+
+  // Port chips
+  document.querySelectorAll('[data-port]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const port = btn.dataset.port;
+      let val = domainInput.value.trim();
+      let hasProto = false;
+      let proto = 'https://';
+      if (/^https?:\/\//.test(val)) {
+        hasProto = true;
+        proto = val.match(/^https?:\/\//)[0];
+        val = val.replace(/^https?:\/\//, '');
+      }
+
+      // Remove any existing port
+      val = val.replace(/:\d+/, '');
+      // Append new port
+      val = `${val}:${port}`;
+      domainInput.value = hasProto ? `${proto}${val}` : val;
+      rebuildUrl({ updateInput: true });
+    });
+  });
+
+  // Env chips
+  document.querySelectorAll('[data-env]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const targetEnv = btn.dataset.env;
+      let val = domainInput.value.trim();
+
+      // Check if domain contains dev, qa, staging, prod
+      const envRegex = /\b(dev|qa|staging|uat|prod)\b/i;
+      if (envRegex.test(val)) {
+        domainInput.value = val.replace(envRegex, targetEnv);
+      } else {
+        // Prepend env subdomain if hostname starts with domain segment
+        const hasProto = /^https?:\/\//.test(val);
+        const protoStr = hasProto ? val.match(/^https?:\/\//)[0] : '';
+        const rawHost = val.replace(/^https?:\/\//, '');
+        domainInput.value = `${protoStr}${targetEnv}.${rawHost}`;
+      }
+      rebuildUrl({ updateInput: true });
+    });
+  });
+
+  if (openPresetManageBtn) {
+    openPresetManageBtn.addEventListener('click', () => {
+      openPresetModal({
+        onApplyPreset: (params) => {
+          applyParamsToEditor(params);
+          renderEditorPresetChips();
+        },
+      });
+    });
+  }
+
+  if (historySelect) {
+    updateHistoryDropdown();
+    historySelect.addEventListener('change', (e) => {
+      if (e.target.value) {
+        loadUrlInEditor(e.target.value);
+      }
+    });
   }
 
   // --- Event Listeners ---
@@ -138,6 +313,7 @@ export function initUrlEditor(callbacks) {
       paramsContainer.appendChild(row);
     });
 
+    renderEditorPresetChips();
     rebuildUrl({ updateInput: false });
   });
 
@@ -148,12 +324,21 @@ export function initUrlEditor(callbacks) {
   addParamBtn.addEventListener('click', () => {
     const row = createParamRow();
     paramsContainer.appendChild(row);
-    row.querySelector('input').focus(); // Automatically focus the new key input
+    row.querySelector('input').focus();
     rebuildUrl({ updateInput: true });
   });
   rebuildUrlBtn.addEventListener('click', () =>
     rebuildUrl({ updateInput: true })
   );
+
+  if (qrCodeBtn) {
+    qrCodeBtn.addEventListener('click', () => {
+      const currentUrl = rebuiltUrlEl.textContent.trim();
+      if (currentUrl && callbacks.onQrCode) {
+        callbacks.onQrCode(currentUrl, i18next.t('editor.title'));
+      }
+    });
+  }
 
   function handleCopy() {
     const url = rebuiltUrlEl.textContent.trim();
@@ -165,22 +350,19 @@ export function initUrlEditor(callbacks) {
         rebuiltUrlEl.classList.add('copied');
         rebuiltUrlEl.textContent = i18next.t('editor.copySuccess');
         setTimeout(() => {
-          // Re-render the URL without triggering an input update
           rebuildUrl({ updateOutput: true, updateInput: false });
           rebuiltUrlEl.classList.remove('copied');
         }, 1000);
       })
       .catch((err) => {
         console.error('Failed to copy URL: ', err);
-        // Optionally, you could show an error message to the user here.
       });
   }
 
   rebuiltUrlEl.addEventListener('click', handleCopy);
   rebuiltUrlEl.addEventListener('keydown', (e) => {
-    // Allow copying with Enter or Space key
     if (e.key === 'Enter' || e.key === ' ') {
-      e.preventDefault(); // Prevent space from scrolling the page
+      e.preventDefault();
       handleCopy();
     }
   });

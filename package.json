@@ -5,7 +5,7 @@
   "license": "MIT",
   "source": "src/index.html",
   "scripts": {
-    "test": "jest",
+    "test": "jest --forceExit",
     "test:coverage": "jest --coverage",
     "start": "parcel",
     "build": "parcel build",

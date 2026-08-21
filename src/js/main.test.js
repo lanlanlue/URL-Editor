@@ -208,4 +208,99 @@ describe('main.js - User Interaction Tests', () => {
     expect(stored.urls[0].tags).toContain('dev');
     expect(stored.urls[1].label).toBe('Order Center');
   });
+
+  test('should sort URLs by usage frequency and prioritize pinned items', async () => {
+    const initialUrls = [
+      {
+        id: 'u1',
+        url: 'https://site1.com',
+        label: 'Site 1',
+        tags: [],
+        usageCount: 2,
+        isPinned: false,
+        lastUsed: 100,
+        createdAt: 100,
+      },
+      {
+        id: 'u2',
+        url: 'https://site2.com',
+        label: 'Site 2',
+        tags: [],
+        usageCount: 10,
+        isPinned: false,
+        lastUsed: 200,
+        createdAt: 200,
+      },
+      {
+        id: 'u3',
+        url: 'https://site3.com',
+        label: 'Site 3',
+        tags: [],
+        usageCount: 1,
+        isPinned: true,
+        lastUsed: 300,
+        createdAt: 300,
+      },
+    ];
+    localStorage.setItem('urlHistory', JSON.stringify({ urls: initialUrls }));
+
+    jest.resetModules();
+    const html = fs.readFileSync(
+      path.resolve(__dirname, '../../src/index.html'),
+      'utf8'
+    );
+    document.body.innerHTML = html;
+    await import('./main.js');
+
+    const sortSelect = document.getElementById('sort-select');
+    expect(sortSelect).toBeTruthy();
+
+    // Switch to frequency sorting
+    fireEvent.change(sortSelect, { target: { value: 'frequency' } });
+
+    const cards = document.querySelectorAll('.url-card');
+    // u3 is pinned, so it comes first despite lower usage count
+    expect(cards[0].querySelector('.url-card__url-value').textContent).toBe(
+      'https://site3.com'
+    );
+    // u2 has usageCount 10, so it comes second
+    expect(cards[1].querySelector('.url-card__url-value').textContent).toBe(
+      'https://site2.com'
+    );
+    // u1 has usageCount 2, so it comes third
+    expect(cards[2].querySelector('.url-card__url-value').textContent).toBe(
+      'https://site1.com'
+    );
+  });
+
+  test('should track usage count on load button click', async () => {
+    const initialUrls = [
+      {
+        id: 'u1',
+        url: 'https://site1.com',
+        label: 'Site 1',
+        tags: [],
+        usageCount: 0,
+        isPinned: false,
+        lastUsed: 100,
+        createdAt: 100,
+      },
+    ];
+    localStorage.setItem('urlHistory', JSON.stringify({ urls: initialUrls }));
+
+    jest.resetModules();
+    const html = fs.readFileSync(
+      path.resolve(__dirname, '../../src/index.html'),
+      'utf8'
+    );
+    document.body.innerHTML = html;
+    await import('./main.js');
+
+    const card = document.querySelector('.url-card');
+    const loadBtn = card.querySelector('.url-card__button');
+    fireEvent.click(loadBtn);
+
+    const stored = JSON.parse(localStorage.getItem('urlHistory'));
+    expect(stored.urls[0].usageCount).toBe(1);
+  });
 });
