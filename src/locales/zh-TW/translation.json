@@ -31,16 +31,117 @@
     "searchPlaceholder": "輸入關鍵字...",
     "exportBtn": "匯出 URL JSON",
     "importBtn": "匯入 URL JSON",
+    "maintenanceBtn": "🛠️ 批次維護工具",
     "allTags": "全部",
+    "batch": {
+      "selectedCount": "已選取 {{count}} 項",
+      "selectAll": "全選",
+      "deselectAll": "取消全選",
+      "replaceDomain": "替換網域",
+      "addTag": "➕ 新增標籤",
+      "deleteSelected": "🗑️ 刪除所選",
+      "exportSelected": "💾 匯出所選",
+      "promptAddTag": "請輸入要批次新增的標籤名稱：",
+      "confirmDelete": "確定要刪除選取的 {{count}} 筆 URL 嗎？此動作無法復原。"
+    },
     "card": {
+      "selectCard": "勾選此 URL",
       "namePlaceholder": "請輸入名稱",
       "copyTooltip": "點擊複製 URL",
       "copied": "✅ 已複製！",
       "tagsPlaceholder": "標籤 (以逗號 , 分隔)",
       "load": "載入",
-      "delete": "刪除"
+      "open": "🔗 開啟",
+      "openTooltip": "在新分頁開啟此 URL",
+      "delete": "刪除",
+      "pin": "☆ 釘選置頂",
+      "unpin": "⭐ 取消釘選"
     },
     "importSuccess": "成功匯入 {{count}} 筆資料！",
-    "importError": "匯入的 JSON 格式錯誤"
+    "importError": "匯入的 JSON 格式錯誤",
+    "sort": {
+      "label": "排序方式：",
+      "frequency": "🔥 使用頻率（高→低）",
+      "recent": "🕒 最近使用",
+      "created": "🆕 建立時間（新→舊）",
+      "alpha": "🔤 名稱 A-Z"
+    }
+  },
+  "maintenance": {
+    "title": "🛠️ URL 批次維護工具",
+    "closeBtn": "✕ 關閉",
+    "tabs": {
+      "domain": "🌐 批次替換 Domain",
+      "findReplace": "🔍 搜尋與取代",
+      "cleanup": "🧹 資料整理與清理"
+    },
+    "scope": {
+      "label": "作用範圍：",
+      "all": "全部已儲存 URL (共 {{count}} 筆)",
+      "filtered": "目前篩選出的 URL (共 {{count}} 筆)",
+      "selected": "已勾選的 URL (共 {{count}} 筆)"
+    },
+    "domain": {
+      "desc": "快速將儲存清單中舊的測試或生產 Domain / Host 一鍵替換為新 Domain。",
+      "selectOldDomain": "選擇現存的 Domain：",
+      "oldDomainPlaceholder": "例如：api.dev.example.com",
+      "newDomainLabel": "新 Domain / Host：",
+      "newDomainPlaceholder": "例如：api.qa.example.com 或 https://new.domain.com:8080",
+      "customDomainOption": "✏️ 手動輸入 Domain...",
+      "noDomains": "目前清單中尚無有效的 Domain"
+    },
+    "findReplace": {
+      "desc": "在所有 URL 或名稱標籤中搜尋指定字串並進行批次替換。",
+      "findLabel": "搜尋目標字串：",
+      "findPlaceholder": "例如：/v1/ 或 env=dev",
+      "replaceLabel": "替換為：",
+      "replacePlaceholder": "例如：/v2/ 或 env=qa",
+      "targetField": "替換欄位：",
+      "fieldAll": "全部（URL 與名稱）",
+      "fieldUrl": "僅限 URL 網址",
+      "fieldLabel": "僅限名稱標籤",
+      "matchCase": "區分大小寫 (Match Case)"
+    },
+    "cleanup": {
+      "desc": "檢查重複的 URL 並進行清理與優化。",
+      "duplicateTitle": "重複 URL 檢測",
+      "noDuplicates": "🎉 太棒了！沒有發現重複儲存的 URL。",
+      "duplicatesFound": "發現 {{count}} 筆重複的 URL 項目：",
+      "removeDuplicatesBtn": "🧹 一鍵清理重複項目 (保留最新一筆)",
+      "removeSuccess": "已成功清理 {{count}} 筆重複項目！"
+    },
+    "preview": {
+      "title": "即時預覽 (將影響 {{count}} 筆項目)",
+      "noChanges": "尚無符合條件的變更項目",
+      "original": "原內容：",
+      "modified": "變更為："
+    },
+    "applyBtn": "🚀 確認套用更新",
+    "successAlert": "✅ 成功更新 {{count}} 筆 URL！",
+    "noTargetAlert": "未有任何 URL 受到影響。"
+  },
+  "batchImport": {
+    "btn": "📥 批次貼上匯入",
+    "title": "📥 快速批次貼上匯入 URL",
+    "desc": "支援一次貼上多組 URL、Markdown 連結 [名稱](網址)、CSV 或包含網址的文字內容。系統將自動分析並帶上建議名稱與標籤。",
+    "textareaPlaceholder": "在此貼上 URL 清單...\n\n範例：\nhttps://api.dev.example.com/v1/users?id=10\n- [使用者 API](https://api.example.com/users)\n訂單系統, https://stage-orders.company.com/admin, orders",
+    "optionsTitle": "匯入選項：",
+    "autoName": "✨ 自動產生建議名稱",
+    "autoTag": "🏷️ 自動產生建議分類與環境標籤",
+    "skipExisting": "🚫 跳過已存在的重複 URL",
+    "commonTagLabel": "➕ 附加通用標籤 (可選)：",
+    "commonTagPlaceholder": "例如：2026-q3-test",
+    "previewTitle": "已辨識項目 (共 {{count}} 筆)",
+    "previewSubtitle": "您可以在匯入前直接修改名稱與標籤，或取消勾選不需匯入的項目：",
+    "colSelect": "選擇",
+    "colUrl": "URL 網址",
+    "colLabel": "名稱",
+    "colTags": "標籤",
+    "badgeExisting": "已存在於清單中",
+    "noUrlsFound": "尚未辨識到有效 URL，請在上方貼入文字內容。",
+    "importBtn": "📥 確認匯入 {{count}} 筆 URL",
+    "closeBtn": "✕ 關閉",
+    "successAlert": "🎉 成功匯入 {{count}} 筆 URL！",
+    "noSelectedAlert": "請至少勾選一筆要匯入的 URL。"
   }
 }

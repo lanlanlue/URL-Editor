@@ -44,6 +44,7 @@
                 <input type="text" id="url-main-input" data-i18n="[placeholder]editor.placeholder"
                     placeholder="https://example.com/path?foo=bar" />
                 <button id="parse-btn" data-i18n="editor.parseBtn">解析網址</button>
+                <button id="editor-batch-import-btn" class="btn-secondary" data-i18n="batchImport.btn">📥 批次貼上匯入</button>
                 <p id="url-error" class="text-error hidden"></p>
             </div>
 
@@ -75,15 +76,47 @@
             <div id="tag-filters">
                 <!-- 標籤過濾按鈕將由 JS 動態生成於此 -->
             </div>
-            <div class="search-container">
-                <label for="search-url" data-i18n="urlList.searchLabel">🔍 搜尋清單：</label>
-                <input type="search" id="search-url" data-i18n="[placeholder]urlList.searchPlaceholder"
-                    placeholder="輸入關鍵字...">
+
+            <div class="sort-search-bar">
+                <div class="sort-container">
+                    <label for="sort-select" data-i18n="urlList.sort.label">排序方式：</label>
+                    <select id="sort-select" class="sort-select">
+                        <option value="created" data-i18n="urlList.sort.created">🆕 建立時間（新→舊）</option>
+                        <option value="frequency" data-i18n="urlList.sort.frequency">🔥 使用頻率（高→低）</option>
+                        <option value="recent" data-i18n="urlList.sort.recent">🕒 最近使用</option>
+                        <option value="alpha" data-i18n="urlList.sort.alpha">🔤 名稱 A-Z</option>
+                    </select>
+                </div>
+                <div class="search-container">
+                    <label for="search-url" data-i18n="urlList.searchLabel">🔍 搜尋清單：</label>
+                    <input type="search" id="search-url" data-i18n="[placeholder]urlList.searchPlaceholder"
+                        placeholder="輸入關鍵字...">
+                </div>
             </div>
+
+            <!-- 批次勾選操作列 -->
+            <div id="batch-action-bar" class="batch-action-bar hidden">
+                <div class="batch-action-info">
+                    <label class="batch-select-all-label">
+                        <input type="checkbox" id="batch-select-all-checkbox">
+                        <span id="batch-select-all-text" data-i18n="urlList.batch.selectAll">全選</span>
+                    </label>
+                    <span id="batch-selected-count-badge" class="batch-count-badge">已選取 0 項</span>
+                </div>
+                <div class="batch-action-buttons">
+                    <button id="batch-replace-domain-btn" class="batch-btn" data-i18n="urlList.batch.replaceDomain">替換網域</button>
+                    <button id="batch-add-tag-btn" class="batch-btn" data-i18n="urlList.batch.addTag">➕ 新增標籤</button>
+                    <button id="batch-export-btn" class="batch-btn" data-i18n="urlList.batch.exportSelected">💾 匯出所選</button>
+                    <button id="batch-delete-btn" class="batch-btn batch-btn--delete" data-i18n="urlList.batch.deleteSelected">🗑️ 刪除所選</button>
+                </div>
+            </div>
+
             <div id="url-cards-container"></div>
             <p id="empty-list-message" class="hidden" data-i18n="urlList.emptyMessage">這裡沒有符合條件的 URL。</p>
-            <!-- URL 卡片列表 -->
+            <!-- URL 卡片列表底部操作按鈕 -->
             <div class="url-list-actions">
+                <button id="open-batch-import-btn" class="btn-highlight" data-i18n="batchImport.btn">📥 批次貼上匯入</button>
+                <button id="open-maintenance-btn" class="btn-highlight" data-i18n="urlList.maintenanceBtn">🛠️ 批次維護工具</button>
                 <button id="export-json-btn" data-i18n="urlList.exportBtn">匯出 URL JSON</button>
                 <input id="import-json-file" type="file" accept=".json" class="hidden">
                 <button id="import-json-btn" data-i18n="urlList.importBtn">匯入 URL JSON</button>
@@ -91,6 +124,162 @@
         </section>
 
     </main>
+
+    <!-- 批次維護工具 Dialog Modal -->
+    <dialog id="maintenance-modal" class="maintenance-modal">
+        <div class="modal-header">
+            <h3 data-i18n="maintenance.title">🛠️ URL 批次維護工具</h3>
+            <button id="modal-close-btn" class="modal-close-btn" aria-label="Close" data-i18n="maintenance.closeBtn">✕</button>
+        </div>
+
+        <div class="modal-tabs">
+            <button id="tab-btn-domain" class="tab-btn active" data-i18n="maintenance.tabs.domain">🌐 批次替換 Domain</button>
+            <button id="tab-btn-find" class="tab-btn" data-i18n="maintenance.tabs.findReplace">🔍 搜尋與取代</button>
+            <button id="tab-btn-cleanup" class="tab-btn" data-i18n="maintenance.tabs.cleanup">🧹 資料整理與清理</button>
+        </div>
+
+        <div class="modal-body">
+            <!-- 作用範圍選擇 -->
+            <div class="modal-scope-section">
+                <label class="modal-scope-title" data-i18n="maintenance.scope.label">作用範圍：</label>
+                <div class="scope-options">
+                    <label class="radio-label">
+                        <input type="radio" name="modal-scope" id="modal-scope-all" value="all" checked>
+                        <span id="modal-scope-all-label">全部已儲存 URL</span>
+                    </label>
+                    <label class="radio-label">
+                        <input type="radio" name="modal-scope" id="modal-scope-filtered" value="filtered">
+                        <span id="modal-scope-filtered-label">目前篩選出的 URL</span>
+                    </label>
+                    <label class="radio-label">
+                        <input type="radio" name="modal-scope" id="modal-scope-selected" value="selected">
+                        <span id="modal-scope-selected-label">已勾選的 URL</span>
+                    </label>
+                </div>
+            </div>
+
+            <!-- 分頁 1: 批次替換 Domain -->
+            <div id="tab-panel-domain" class="tab-panel">
+                <p class="panel-desc" data-i18n="maintenance.domain.desc">快速將儲存清單中舊的測試或生產 Domain / Host 一鍵替換為新 Domain。</p>
+                <div class="form-group">
+                    <label for="modal-existing-domains" data-i18n="maintenance.domain.selectOldDomain">選擇現存的 Domain：</label>
+                    <select id="modal-existing-domains" class="modal-select"></select>
+                </div>
+                <div class="form-group">
+                    <label for="modal-old-domain" data-i18n="editor.domainLabel">舊 Domain / Host：</label>
+                    <input type="text" id="modal-old-domain" data-i18n="[placeholder]maintenance.domain.oldDomainPlaceholder" placeholder="例如：api.dev.example.com">
+                </div>
+                <div class="form-group">
+                    <label for="modal-new-domain" data-i18n="maintenance.domain.newDomainLabel">新 Domain / Host：</label>
+                    <input type="text" id="modal-new-domain" data-i18n="[placeholder]maintenance.domain.newDomainPlaceholder" placeholder="例如：api.qa.example.com 或 https://new.domain.com:8080">
+                </div>
+            </div>
+
+            <!-- 分頁 2: 搜尋與取代 -->
+            <div id="tab-panel-find" class="tab-panel hidden">
+                <p class="panel-desc" data-i18n="maintenance.findReplace.desc">在所有 URL 或名稱標籤中搜尋指定字串並進行批次替換。</p>
+                <div class="form-group">
+                    <label for="modal-find-text" data-i18n="maintenance.findReplace.findLabel">搜尋目標字串：</label>
+                    <input type="text" id="modal-find-text" data-i18n="[placeholder]maintenance.findReplace.findPlaceholder" placeholder="例如：/v1/ 或 env=dev">
+                </div>
+                <div class="form-group">
+                    <label for="modal-replace-text" data-i18n="maintenance.findReplace.replaceLabel">替換為：</label>
+                    <input type="text" id="modal-replace-text" data-i18n="[placeholder]maintenance.findReplace.replacePlaceholder" placeholder="例如：/v2/ 或 env=qa">
+                </div>
+                <div class="form-group">
+                    <label for="modal-target-field-select" data-i18n="maintenance.findReplace.targetField">替換欄位：</label>
+                    <select id="modal-target-field-select" class="modal-select">
+                        <option value="all" data-i18n="maintenance.findReplace.fieldAll">全部（URL 與名稱）</option>
+                        <option value="url" data-i18n="maintenance.findReplace.fieldUrl">僅限 URL 網址</option>
+                        <option value="label" data-i18n="maintenance.findReplace.fieldLabel">僅限名稱標籤</option>
+                    </select>
+                </div>
+                <div class="form-group-checkbox">
+                    <label>
+                        <input type="checkbox" id="modal-match-case">
+                        <span data-i18n="maintenance.findReplace.matchCase">區分大小寫 (Match Case)</span>
+                    </label>
+                </div>
+            </div>
+
+            <!-- 分頁 3: 資料整理與清理 -->
+            <div id="tab-panel-cleanup" class="tab-panel hidden">
+                <p class="panel-desc" data-i18n="maintenance.cleanup.desc">檢查重複的 URL 並進行清理與優化。</p>
+                <div class="cleanup-card">
+                    <h4 data-i18n="maintenance.cleanup.duplicateTitle">重複 URL 檢測</h4>
+                    <p id="modal-duplicates-msg"></p>
+                    <ul id="modal-duplicates-list" class="duplicates-list"></ul>
+                    <button id="modal-cleanup-btn" class="btn-warning" data-i18n="maintenance.cleanup.removeDuplicatesBtn">🧹 一鍵清理重複項目 (保留最新一筆)</button>
+                </div>
+            </div>
+
+            <!-- 即時預覽區塊 -->
+            <div id="modal-preview-section" class="modal-preview-section">
+                <h4 id="modal-preview-count" data-i18n="maintenance.preview.title">即時預覽</h4>
+                <div id="modal-preview-list" class="modal-preview-list">
+                    <!-- 動態生成 Diff 預覽 -->
+                </div>
+            </div>
+        </div>
+
+        <div class="modal-footer">
+            <button id="modal-cancel-btn" class="btn-secondary" data-i18n="maintenance.closeBtn">關閉</button>
+            <button id="modal-apply-btn" class="btn-primary" data-i18n="maintenance.applyBtn">🚀 確認套用更新</button>
+        </div>
+    </dialog>
+
+    <!-- 批次貼上匯入 Dialog Modal -->
+    <dialog id="batch-import-modal" class="maintenance-modal batch-import-modal">
+        <div class="modal-header">
+            <h3 data-i18n="batchImport.title">📥 快速批次貼上匯入 URL</h3>
+            <button id="batch-import-close-btn" class="modal-close-btn" aria-label="Close" data-i18n="batchImport.closeBtn">✕</button>
+        </div>
+
+        <div class="modal-body">
+            <p class="panel-desc" data-i18n="batchImport.desc">支援一次貼上多組 URL、Markdown 連結 [名稱](網址)、CSV 或包含網址的文字內容。系統將自動分析並帶上建議名稱與標籤。</p>
+
+            <div class="form-group">
+                <textarea id="batch-import-textarea" class="batch-import-textarea" rows="6" data-i18n="[placeholder]batchImport.textareaPlaceholder" placeholder="在此貼上 URL 清單..."></textarea>
+            </div>
+
+            <div class="modal-scope-section">
+                <label class="modal-scope-title" data-i18n="batchImport.optionsTitle">匯入選項：</label>
+                <div class="batch-options-grid">
+                    <label class="form-group-checkbox">
+                        <input type="checkbox" id="batch-import-autoname" checked>
+                        <span data-i18n="batchImport.autoName">✨ 自動產生建議名稱</span>
+                    </label>
+                    <label class="form-group-checkbox">
+                        <input type="checkbox" id="batch-import-autotag" checked>
+                        <span data-i18n="batchImport.autoTag">🏷️ 自動產生建議分類與環境標籤</span>
+                    </label>
+                    <label class="form-group-checkbox">
+                        <input type="checkbox" id="batch-import-skip-existing" checked>
+                        <span data-i18n="batchImport.skipExisting">🚫 跳過已存在的重複 URL</span>
+                    </label>
+                </div>
+                <div class="form-group mt-0-5">
+                    <label for="batch-import-commontag" data-i18n="batchImport.commonTagLabel">➕ 附加通用標籤 (可選)：</label>
+                    <input type="text" id="batch-import-commontag" data-i18n="[placeholder]batchImport.commonTagPlaceholder" placeholder="例如：2026-q3-test">
+                </div>
+            </div>
+
+            <div class="modal-preview-section">
+                <div class="preview-header-bar">
+                    <h4 id="batch-import-count-badge" data-i18n="batchImport.previewTitle">已辨識項目</h4>
+                    <span class="preview-hint" data-i18n="batchImport.previewSubtitle">您可以在匯入前直接修改名稱與標籤，或取消勾選不需匯入的項目：</span>
+                </div>
+                <div id="batch-import-preview-container" class="batch-import-preview-container">
+                    <!-- 動態生成解析項目列表 -->
+                </div>
+            </div>
+        </div>
+
+        <div class="modal-footer">
+            <button id="batch-import-cancel-btn" class="btn-secondary" data-i18n="batchImport.closeBtn">關閉</button>
+            <button id="batch-import-submit-btn" class="btn-primary" data-i18n="batchImport.importBtn">📥 確認匯入</button>
+        </div>
+    </dialog>
 
     <script type="module" src="js/main.js"></script>
 </body>

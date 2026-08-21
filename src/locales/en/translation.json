@@ -31,16 +31,117 @@
     "searchPlaceholder": "Enter keywords...",
     "exportBtn": "Export URL JSON",
     "importBtn": "Import URL JSON",
+    "maintenanceBtn": "🛠️ Batch Maintenance",
     "allTags": "All",
+    "batch": {
+      "selectedCount": "{{count}} selected",
+      "selectAll": "Select All",
+      "deselectAll": "Deselect All",
+      "replaceDomain": "Replace Domain",
+      "addTag": "➕ Add Tag",
+      "deleteSelected": "🗑️ Delete Selected",
+      "exportSelected": "💾 Export Selected",
+      "promptAddTag": "Enter tag name to add in batch:",
+      "confirmDelete": "Are you sure you want to delete {{count}} selected URL(s)? This action cannot be undone."
+    },
     "card": {
+      "selectCard": "Select this URL",
       "namePlaceholder": "Enter a name",
       "copyTooltip": "Click to copy URL",
       "copied": "✅ Copied!",
       "tagsPlaceholder": "Tags (comma-separated)",
       "load": "Load",
-      "delete": "Delete"
+      "open": "🔗 Open",
+      "openTooltip": "Open URL in a new tab",
+      "delete": "Delete",
+      "pin": "☆ Pin to top",
+      "unpin": "⭐ Unpin"
     },
     "importSuccess": "Successfully imported {{count}} items!",
-    "importError": "Error: Invalid JSON format for import."
+    "importError": "Error: Invalid JSON format for import.",
+    "sort": {
+      "label": "Sort by:",
+      "frequency": "🔥 Most Used",
+      "recent": "🕒 Recently Used",
+      "created": "🆕 Newest First",
+      "alpha": "🔤 Name A-Z"
+    }
+  },
+  "maintenance": {
+    "title": "🛠️ Batch Maintenance Tools",
+    "closeBtn": "✕ Close",
+    "tabs": {
+      "domain": "🌐 Replace Domain",
+      "findReplace": "🔍 Find & Replace",
+      "cleanup": "🧹 Cleanup & Organize"
+    },
+    "scope": {
+      "label": "Scope:",
+      "all": "All Saved URLs ({{count}} total)",
+      "filtered": "Currently Filtered URLs ({{count}} total)",
+      "selected": "Selected URLs ({{count}} total)"
+    },
+    "domain": {
+      "desc": "Quickly replace old test or staging domains/hosts across saved URLs in batch.",
+      "selectOldDomain": "Select Existing Domain:",
+      "oldDomainPlaceholder": "e.g., api.dev.example.com",
+      "newDomainLabel": "New Domain / Host:",
+      "newDomainPlaceholder": "e.g., api.qa.example.com or https://new.domain.com:8080",
+      "customDomainOption": "✏️ Enter custom domain...",
+      "noDomains": "No valid domains found in saved list"
+    },
+    "findReplace": {
+      "desc": "Search for any substring in URLs or labels and replace them in batch.",
+      "findLabel": "Find Target String:",
+      "findPlaceholder": "e.g., /v1/ or env=dev",
+      "replaceLabel": "Replace With:",
+      "replacePlaceholder": "e.g., /v2/ or env=qa",
+      "targetField": "Target Field:",
+      "fieldAll": "All (URL & Name)",
+      "fieldUrl": "URL only",
+      "fieldLabel": "Name only",
+      "matchCase": "Match Case"
+    },
+    "cleanup": {
+      "desc": "Inspect duplicate URLs and clean up redundant entries.",
+      "duplicateTitle": "Duplicate URL Detection",
+      "noDuplicates": "🎉 Great! No duplicate URLs found.",
+      "duplicatesFound": "Found {{count}} duplicate URL items:",
+      "removeDuplicatesBtn": "🧹 Remove Duplicates (Keep latest)",
+      "removeSuccess": "Successfully cleaned up {{count}} duplicate items!"
+    },
+    "preview": {
+      "title": "Live Preview (Will affect {{count}} items)",
+      "noChanges": "No matching changes found",
+      "original": "Original:",
+      "modified": "Changed to:"
+    },
+    "applyBtn": "🚀 Apply Updates",
+    "successAlert": "✅ Successfully updated {{count}} URL(s)!",
+    "noTargetAlert": "No URLs were affected."
+  },
+  "batchImport": {
+    "btn": "📥 Batch Paste Import",
+    "title": "📥 Quick Batch Paste Import URLs",
+    "desc": "Paste multiple URLs, Markdown links [Name](URL), CSV rows, or text containing URLs. The system will automatically analyze and assign suggested names and tags.",
+    "textareaPlaceholder": "Paste URL list or text here...\n\nExample:\nhttps://api.dev.example.com/v1/users?id=10\n- [User API](https://api.example.com/users)\nOrder System, https://stage-orders.company.com/admin, orders",
+    "optionsTitle": "Import Options:",
+    "autoName": "✨ Auto-generate suggested names",
+    "autoTag": "🏷️ Auto-generate category & environment tags",
+    "skipExisting": "🚫 Skip duplicate URLs already in list",
+    "commonTagLabel": "➕ Append common tag (optional):",
+    "commonTagPlaceholder": "e.g., 2026-q3-test",
+    "previewTitle": "Parsed Items ({{count}} found)",
+    "previewSubtitle": "You can adjust names and tags, or uncheck items before importing:",
+    "colSelect": "Select",
+    "colUrl": "URL",
+    "colLabel": "Name",
+    "colTags": "Tags",
+    "badgeExisting": "Already exists in list",
+    "noUrlsFound": "No valid URLs detected yet. Paste your URL list above.",
+    "importBtn": "📥 Import {{count}} URL(s)",
+    "closeBtn": "✕ Close",
+    "successAlert": "🎉 Successfully imported {{count}} URL(s)!",
+    "noSelectedAlert": "Please select at least one URL to import."
   }
 }
