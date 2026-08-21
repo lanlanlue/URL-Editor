@@ -1,4 +1,4 @@
-<!DOCTYPE html><html lang=en><meta charset=UTF-8><meta name=referrer content=no-referrer><meta http-equiv=Permissions-Policy content="accelerometer=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=()"><meta name=viewport content="width=device-width, initial-scale=1.0"><script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-9603285949500141" crossorigin=anonymous></script><title>URL Editor</title><link rel=stylesheet href=/URL-Editor/URL-Editor.6864acab.css><link rel=icon href=/URL-Editor/icon.b850ebbb.svg type=image/svg+xml><script src=/URL-Editor/URL-Editor.5cf9e66e.js></script><link rel=stylesheet href=/URL-Editor/URL-Editor.d3a65544.css><body>
+<!DOCTYPE html><html lang=en><meta charset=UTF-8><meta name=referrer content=no-referrer><meta http-equiv=Permissions-Policy content="accelerometer=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=()"><meta name=viewport content="width=device-width, initial-scale=1.0"><script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-9603285949500141" crossorigin=anonymous></script><title>URL Editor</title><link rel=stylesheet href=/URL-Editor/URL-Editor.6864acab.css><link rel=icon href=/URL-Editor/icon.b850ebbb.svg type=image/svg+xml><script src=/URL-Editor/URL-Editor.5cf9e66e.js></script><link rel=stylesheet href=/URL-Editor/URL-Editor.9d10d3e0.css><body>
     <header>
         <h1 data-i18n=header.title>URL 編輯工具</h1>
         <div class=controls>
@@ -25,29 +25,63 @@
                 <div class=form-group>
                     <label for=domain data-i18n=editor.domainLabel>Domain:</label>
                     <input id=domain placeholder=domain>
+                    
+                    <div class="chips-container mt-0-5">
+                        <span class=chips-label data-i18n=chips.protocol>協定：</span>
+                        <button type=button class=chip-btn id=chip-protocol>http ↔ https</button>
+                        <span class="chips-label ml-0-5" data-i18n=chips.ports>Port：</span>
+                        <button type=button class=chip-btn data-port=3000>:3000</button>
+                        <button type=button class=chip-btn data-port=8080>:8080</button>
+                        <button type=button class=chip-btn data-port=5000>:5000</button>
+                        <span class="chips-label ml-0-5" data-i18n=chips.env>環境：</span>
+                        <button type=button class=chip-btn data-env=dev>dev</button>
+                        <button type=button class=chip-btn data-env=qa>qa</button>
+                        <button type=button class=chip-btn data-env=staging>staging</button>
+                        <button type=button class=chip-btn data-env=prod>prod</button>
+                    </div>
                 </div>
                 <div class=form-group>
                     <label for=path data-i18n=editor.pathLabel>Path:</label>
                     <input id=path placeholder=/path>
                 </div>
-                <p><strong data-i18n=editor.paramsLabel>參數：</strong></p>
+                
+                <div class=params-header-row>
+                    <strong data-i18n=editor.paramsLabel>參數：</strong>
+                    <div class=presets-chip-bar>
+                        <span class=presets-title data-i18n=presets.label>常用預設包：</span>
+                        <div id=editor-preset-chips class=preset-chips-list></div>
+                        <button type=button id=open-preset-manage-btn class="chip-btn chip-btn--accent" data-i18n=presets.manageBtn>⚙️ 管理參數包</button>
+                    </div>
+                </div>
                 <div id=params-container></div>
                 <button id=add-param-btn data-i18n=editor.addParamBtn>➕ 新增參數</button>
                 <button id=rebuild-url-btn data-i18n=editor.rebuildBtn>重新組合 URL</button>
                 <button id=save-url-btn data-i18n=editor.saveBtn>💾 儲存到清單</button>
+                <button id=editor-qrcode-btn class=btn-secondary data-i18n=qrcode.btn>📱 QR Code</button>
                 <p id=param-warning class="hidden mt-0-5 text-warning"></p>
                 <p>
                     <strong data-i18n=editor.rebuiltUrlLabel>新網址：</strong>
                     <code id=rebuilt-url role=button tabindex=0 title="Click or press Enter to copy"></code>
                 </p>
+
+                
+                <div class="mt-0-5 rebuild-history-bar">
+                    <label for=rebuild-history-select data-i18n=history.label>🕒 最近重組歷史：</label>
+                    <select id=rebuild-history-select class=history-select>
+                        <option value data-i18n=history.selectPlaceholder>-- 選擇歷史 URL 快速載入 --</option>
+                    </select>
+                </div>
             </div>
 
         </section>
 
         <section id=url-list>
             <h2 data-i18n=urlList.title>URL 清單</h2>
-            <div id=tag-filters>
-                
+            <div class="mb-0-5 tag-filters-header-row">
+                <div id=tag-filters>
+                    
+                </div>
+                <button id=open-tag-manager-btn class="chip-btn chip-btn--accent" data-i18n=tagManager.manageBtn>🏷️ 管理標籤</button>
             </div>
 
             <div class=sort-search-bar>
@@ -60,6 +94,19 @@
                         <option value=alpha data-i18n=urlList.sort.alpha>🔤 名稱 A-Z</option>
                     </select>
                 </div>
+
+                
+                <div class=view-mode-container>
+                    <div class=view-mode-toggle>
+                        <button id=view-mode-cards-btn class="active view-btn" data-i18n=viewMode.cards>📋 卡片清單</button>
+                        <button id=view-mode-grouped-btn class=view-btn data-i18n=viewMode.grouped>📁 Domain 分組</button>
+                    </div>
+                    <div id=accordion-controls class="accordion-controls hidden">
+                        <button id=accordion-expand-all class=chip-btn data-i18n=viewMode.expandAll>📂 全部展開</button>
+                        <button id=accordion-collapse-all class=chip-btn data-i18n=viewMode.collapseAll>📁 全部收合</button>
+                    </div>
+                </div>
+
                 <div class=search-container>
                     <label for=search-url data-i18n=urlList.searchLabel>🔍 搜尋清單：</label>
                     <input type=search id=search-url data-i18n=[placeholder]urlList.searchPlaceholder placeholder=輸入關鍵字...>
@@ -76,6 +123,7 @@
                     <span id=batch-selected-count-badge class=batch-count-badge>已選取 0 項</span>
                 </div>
                 <div class=batch-action-buttons>
+                    <button id=batch-check-health-btn class=batch-btn data-i18n=urlList.batch.checkHealth>📡 檢查連線狀態</button>
                     <button id=batch-replace-domain-btn class=batch-btn data-i18n=urlList.batch.replaceDomain>替換網域</button>
                     <button id=batch-add-tag-btn class=batch-btn data-i18n=urlList.batch.addTag>➕ 新增標籤</button>
                     <button id=batch-export-btn class=batch-btn data-i18n=urlList.batch.exportSelected>💾 匯出所選</button>
@@ -92,6 +140,9 @@
                 <button id=export-json-btn data-i18n=urlList.exportBtn>匯出 URL JSON</button>
                 <input id=import-json-file type=file accept=.json class=hidden>
                 <button id=import-json-btn data-i18n=urlList.importBtn>匯入 URL JSON</button>
+                <button id=export-csv-btn class=btn-secondary data-i18n=urlList.exportCsvBtn>📄 匯出 CSV</button>
+                <input id=import-csv-file type=file accept=.csv class=hidden>
+                <button id=import-csv-btn class=btn-secondary data-i18n=urlList.importCsvBtn>📥 匯入 CSV</button>
             </div>
         </section>
 
@@ -253,6 +304,60 @@
         </div>
     </dialog>
 
-    <script type=module src=/URL-Editor/URL-Editor.18c75930.js></script>
+    
+    <dialog id=qrcode-modal class="maintenance-modal qrcode-modal">
+        <div class=modal-header>
+            <h3 id=qrcode-title data-i18n=qrcode.title>📱 行動裝置掃描測試 QR Code</h3>
+            <button id=qrcode-close-btn class=modal-close-btn aria-label=Close data-i18n=qrcode.closeBtn>✕</button>
+        </div>
+        <div class="modal-body qrcode-modal-body">
+            <div class=qrcode-canvas-wrapper>
+                <canvas id=qrcode-canvas width=240 height=240></canvas>
+            </div>
+            <code id=qrcode-text-code class=qrcode-url-code></code>
+        </div>
+        <div class=modal-footer>
+            <button id=qrcode-copy-btn class=btn-primary data-i18n=qrcode.copyBtn>📋 複製 URL</button>
+        </div>
+    </dialog>
+
+    
+    <dialog id=preset-modal class="maintenance-modal preset-modal">
+        <div class=modal-header>
+            <h3 data-i18n=presets.title>⚙️ 常用參數預設包管理</h3>
+            <button id=preset-close-btn class=modal-close-btn aria-label=Close data-i18n=batchImport.closeBtn>✕</button>
+        </div>
+        <div class=modal-body>
+            <div id=preset-list-container class="mb-1 preset-list-container">
+                
+            </div>
+
+            <div class=cleanup-card>
+                <h4 data-i18n=presets.addTitle>➕ 新增自訂參數包：</h4>
+                <div class=form-group>
+                    <input id=preset-new-name data-i18n=[placeholder]presets.namePlaceholder placeholder="預設包名稱 (例如：QA 測試包)">
+                </div>
+                <div class=form-group>
+                    <input id=preset-new-params data-i18n=[placeholder]presets.paramsPlaceholder placeholder="參數組合 (例如：env=qa&amp;debug=true)">
+                </div>
+                <button id=preset-add-btn class=btn-primary data-i18n=presets.addSubmitBtn>➕ 儲存為預設包</button>
+            </div>
+        </div>
+    </dialog>
+
+    
+    <dialog id=tag-manager-modal class="maintenance-modal preset-modal">
+        <div class=modal-header>
+            <h3 data-i18n=tagManager.title>🏷️ 標籤集中管理</h3>
+            <button id=tag-manager-close-btn class=modal-close-btn aria-label=Close data-i18n=batchImport.closeBtn>✕</button>
+        </div>
+        <div class=modal-body>
+            <div id=tag-manager-list-container class="mb-1 preset-list-container">
+                
+            </div>
+        </div>
+    </dialog>
+
+    <script type=module src=/URL-Editor/URL-Editor.216ad4ea.js></script>
 
 
