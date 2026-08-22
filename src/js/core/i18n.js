@@ -3,8 +3,8 @@ import LanguageDetector from 'i18next-browser-languagedetector';
 
 // Import translation files directly. This is more robust than using http-backend
 // as it ensures files are included in the bundle and avoids race conditions.
-import enTranslation from '../locales/en/translation.json';
-import zhTWTranslation from '../locales/zh-TW/translation.json';
+import enTranslation from '../../locales/en/translation.json';
+import zhTWTranslation from '../../locales/zh-TW/translation.json';
 
 i18next.use(LanguageDetector).init({
   fallbackLng: 'en', // 如果偵測不到語言，預設使用英文

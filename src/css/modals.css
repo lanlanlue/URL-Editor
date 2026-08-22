@@ -1,0 +1,192 @@
+/* Modals & Dialogs */
+.maintenance-modal {
+  border: 1px solid var(--card-border);
+  background-color: var(--card-bg);
+  color: var(--text-color);
+  border-radius: var(--radius-lg);
+  width: 90%;
+  max-width: 680px;
+  padding: 1.25rem;
+  box-shadow: var(--shadow-lg);
+}
+
+.maintenance-modal::backdrop {
+  background-color: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(3px);
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--card-border);
+}
+
+.modal-header h3 {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 600;
+}
+
+.modal-close-btn {
+  background: transparent;
+  border: none;
+  font-size: 1.2rem;
+  color: var(--card-text);
+  cursor: pointer;
+  padding: 0.2rem 0.5rem;
+}
+
+.modal-tabs {
+  display: flex;
+  gap: 0.5rem;
+  border-bottom: 1px solid var(--card-border);
+  margin-bottom: 1rem;
+}
+
+.tab-btn {
+  background: transparent;
+  color: var(--card-text);
+  border: none;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  padding: 0.5rem 0.75rem;
+  font-weight: 500;
+}
+
+.tab-btn.active {
+  border-bottom-color: var(--accent-color);
+  color: var(--accent-color);
+}
+
+.modal-body {
+  margin-bottom: 1rem;
+}
+
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--card-border);
+}
+
+/* Preset & Tag Manager Modals */
+.preset-list-container {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.preset-item-row,
+.tag-manager-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background-color: var(--bg-color);
+  border: 1px solid var(--card-border);
+  padding: 0.6rem 0.8rem;
+  border-radius: var(--radius-sm);
+}
+
+.preset-item-info,
+.tag-manager-info {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.preset-item-code {
+  font-size: 0.78rem;
+  color: var(--accent-color);
+}
+
+.preset-item-actions,
+.tag-manager-actions {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.preset-item-edit-form {
+  display: flex;
+  gap: 0.5rem;
+  flex: 1;
+  margin-right: 0.5rem;
+}
+
+.preset-edit-input-name,
+.preset-edit-input-params {
+  flex: 1;
+  font-size: 0.8rem;
+  padding: 0.3rem 0.5rem;
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-color);
+  color: var(--text-color);
+}
+
+/* QR Code Modal */
+.qrcode-modal-body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem 0;
+}
+
+.qrcode-canvas-wrapper {
+  background: #ffffff;
+  padding: 0.75rem;
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+}
+
+.qrcode-url-code {
+  word-break: break-all;
+  text-align: center;
+  max-width: 320px;
+  font-size: 0.85rem;
+}
+
+/* Cleanup & Import Textarea */
+.cleanup-card {
+  background-color: var(--bg-color);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-md);
+  padding: 1rem;
+  margin-top: 0.75rem;
+}
+
+.batch-import-textarea {
+  width: 100%;
+  padding: 0.65rem;
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-color);
+  color: var(--text-color);
+  font-family: monospace;
+  font-size: 0.85rem;
+  resize: vertical;
+}
+
+.batch-import-preview-container {
+  max-height: 220px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.batch-import-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  background-color: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-sm);
+  padding: 0.6rem 0.8rem;
+}

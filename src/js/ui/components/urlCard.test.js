@@ -2,7 +2,7 @@ import { fireEvent, getByText } from '@testing-library/dom';
 import { createUrlCard } from './urlCard';
 
 // 模擬 i18next，因為 createUrlCard 依賴它來取得翻譯文字
-jest.mock('../i18n', () => ({
+jest.mock('../../core/i18n', () => ({
   __esModule: true,
   default: {
     t: (key) => key, // 簡單地返回 key 作為翻譯結果

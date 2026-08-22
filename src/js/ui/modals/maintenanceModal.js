@@ -1,9 +1,9 @@
-import i18next from '../i18n';
+import i18next from '../../core/i18n';
 import {
   extractDomainsFromUrls,
   batchProcessUrls,
   findDuplicateUrls,
-} from '../urlParser';
+} from '../../core/urlParser';
 
 let currentScope = 'all'; // 'all' | 'filtered' | 'selected'
 let currentTab = 'domain'; // 'domain' | 'findReplace' | 'cleanup'

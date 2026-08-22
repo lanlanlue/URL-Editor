@@ -1,0 +1,169 @@
+/* URL Editor Section */
+#url-editor {
+  background-color: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-md);
+  padding: 1.25rem;
+  box-shadow: var(--shadow-sm);
+}
+
+.url-input {
+  margin-bottom: 1rem;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin-bottom: 0.75rem;
+}
+
+.form-group label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--card-text);
+}
+
+.form-group input,
+.form-group select {
+  padding: 0.45rem 0.65rem;
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-color);
+  color: var(--text-color);
+}
+
+#url-main-input {
+  flex: 1;
+  min-width: 200px;
+  border: 1px solid var(--card-border);
+  background: var(--bg-color);
+  color: var(--text-color);
+  padding: 0.45rem 0.65rem;
+  border-radius: var(--radius-sm);
+}
+
+/* Switcher Chips Bar */
+.switcher-chips-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin-top: 0.4rem;
+  padding: 0.5rem 0.65rem;
+  background-color: var(--bg-color);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-sm);
+}
+
+.chip-group {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.chip-label {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--card-text);
+  min-width: 70px;
+}
+
+.chip-btn {
+  background-color: var(--btn-bg);
+  color: var(--btn-text);
+  border: 1px solid var(--card-border);
+  padding: 0.18rem 0.5rem;
+  font-size: 0.75rem;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.chip-btn:hover {
+  background-color: var(--accent-color);
+  color: #fff;
+  border-color: var(--accent-color);
+}
+
+.chip-btn--accent {
+  background-color: rgba(2, 132, 199, 0.1);
+  color: var(--accent-color);
+  border-color: var(--accent-color);
+}
+
+.param-row {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.param-row input {
+  flex: 1;
+  padding: 0.35rem 0.6rem;
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-color);
+  color: var(--text-color);
+}
+
+.param-row button {
+  background-color: var(--btn-delete);
+  padding: 0.2rem 0.6rem;
+}
+
+.params-header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+  margin-bottom: 0.5rem;
+}
+
+.presets-chip-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.preset-chips-list {
+  display: flex;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+}
+
+#rebuilt-url {
+  cursor: pointer;
+  user-select: all;
+  word-break: break-all;
+  padding: 0.2rem 0.4rem;
+  background: var(--bg-color);
+  border-radius: 4px;
+  border: 1px solid var(--card-border);
+  transition: color 0.2s ease;
+}
+
+#rebuilt-url.copied {
+  color: #10b981;
+  font-weight: bold;
+}
+
+/* Rebuild History */
+.rebuild-history-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.history-select {
+  flex: 1;
+  padding: 0.35rem 0.6rem;
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-color);
+  color: var(--text-color);
+  font-size: 0.85rem;
+}

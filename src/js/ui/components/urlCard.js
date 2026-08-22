@@ -1,4 +1,4 @@
-import i18next from '../i18n';
+import i18next from '../../core/i18n';
 
 /**
  * Creates a URL card element.
@@ -63,6 +63,26 @@ export function createUrlCard(entry, callbacks, isSelected = false) {
     callbacks.onUpdate(id, 'label', labelInput.value);
   });
 
+  // Favicon image
+  let domain = '';
+  try {
+    domain = new URL(url).hostname;
+  } catch (e) {
+    // Ignore invalid URL
+  }
+
+  const favicon = document.createElement('img');
+  favicon.className = 'url-card__favicon';
+  if (domain) {
+    favicon.src = `https://www.google.com/s2/favicons?domain=${encodeURIComponent(domain)}&sz=32`;
+    favicon.alt = '';
+    favicon.onerror = () => {
+      favicon.style.display = 'none';
+    };
+  } else {
+    favicon.style.display = 'none';
+  }
+
   // Health status badge
   const healthBadge = document.createElement('span');
   healthBadge.className = 'url-card__health-badge';
@@ -104,6 +124,7 @@ export function createUrlCard(entry, callbacks, isSelected = false) {
   });
 
   header.appendChild(checkbox);
+  header.appendChild(favicon);
   header.appendChild(labelInput);
   header.appendChild(healthBadge);
   header.appendChild(usageBadge);

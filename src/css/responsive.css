@@ -1,0 +1,92 @@
+/* Media Queries (Mobile & Tablet Responsiveness) */
+@media (max-width: 640px) {
+  body {
+    padding: 0.75rem;
+  }
+
+  header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.75rem;
+  }
+
+  .sort-search-bar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .sort-container,
+  .search-container,
+  .view-mode-container {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .search-container input {
+    flex: 1;
+  }
+
+  .url-card {
+    padding: 0.85rem;
+    max-width: 100%;
+    min-width: 100%;
+  }
+
+  .batch-action-bar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.75rem;
+  }
+
+  .batch-action-buttons {
+    width: 100%;
+  }
+
+  .batch-btn {
+    flex: 1;
+    text-align: center;
+  }
+
+  .url-list-actions {
+    flex-direction: column;
+  }
+
+  .url-list-actions button {
+    width: 100%;
+  }
+
+  .maintenance-modal {
+    width: 95%;
+    max-height: 90vh;
+    padding: 1rem;
+  }
+
+  .modal-tabs {
+    flex-direction: column;
+    border-bottom: none;
+  }
+
+  .tab-btn {
+    text-align: left;
+    border-bottom: none;
+    border-left: 3px solid transparent;
+  }
+
+  .tab-btn.active {
+    border-left-color: var(--accent-color);
+    border-bottom-color: transparent;
+  }
+
+  .preset-item-row,
+  .tag-manager-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.5rem;
+  }
+
+  .preset-item-actions,
+  .tag-manager-actions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+}

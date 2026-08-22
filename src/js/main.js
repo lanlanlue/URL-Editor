@@ -1,24 +1,25 @@
-import { initDarkMode } from './darkMode.js';
-import i18next, { updateContent } from './i18n.js';
-import { createUrlCard } from './ui/urlCard.js';
-import { initUrlEditor, loadUrlInEditor } from './editor.js';
+import { initDarkMode } from './core/darkMode.js';
+import i18next, { updateContent } from './core/i18n.js';
+import { createUrlCard } from './ui/components/urlCard.js';
+import { initUrlEditor, loadUrlInEditor } from './ui/components/editor.js';
 import {
   initMaintenanceModal,
   openMaintenanceModal,
-} from './ui/maintenanceModal.js';
+} from './ui/modals/maintenanceModal.js';
 import {
   initBatchImportModal,
   openBatchImportModal,
-} from './ui/batchImportModal.js';
-import { initQrCodeModal, openQrCodeModal } from './ui/qrCodeModal.js';
-import { initPresetModal } from './ui/presetModal.js';
+} from './ui/modals/batchImportModal.js';
+import { initQrCodeModal, openQrCodeModal } from './ui/modals/qrCodeModal.js';
+import { initPresetModal } from './ui/modals/presetModal.js';
 import {
   initTagManagerModal,
   openTagManagerModal,
-} from './ui/tagManagerModal.js';
+} from './ui/modals/tagManagerModal.js';
 import { exportToCsvString, parseCsvString } from './utils/csvParser.js';
 import { checkUrlHealth } from './utils/healthCheck.js';
-import { findDuplicateUrls } from './urlParser.js';
+
+import { findDuplicateUrls } from './core/urlParser.js';
 
 // DOM references
 const exportBtn = document.getElementById('export-json-btn');

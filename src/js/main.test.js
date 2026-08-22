@@ -4,7 +4,7 @@ import { screen, fireEvent, findByText } from '@testing-library/dom';
 
 // 模擬 darkMode 模組
 // We still mock darkMode to isolate the test to main.js logic
-jest.mock('./darkMode.js', () => ({
+jest.mock('./core/darkMode.js', () => ({
   initDarkMode: jest.fn(),
 }));
 
