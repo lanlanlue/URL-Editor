@@ -4,6 +4,18 @@
 
 ---
 
+## [2.1.2] - 2026-08-29
+
+### 🐛 熱修復 (Hotfix)
+
+#### 🌐 多國語系同步修正
+- **修復 `en` 翻譯檔結構錯誤**：`urlList.batch` 出現重複鍵值定義，導致 `promptAddTag` 與 `confirmDelete` 在執行期被覆蓋而遺失；已合併為單一完整物件。
+- **補齊 `en` 語系遺漏鍵值**：新增 `urlList.tagManager.title / rename / delete` 及 `urlList.importSuccess` 以與 `zh-TW` 完全對齊。
+- **補齊 `zh-TW` 語系遺漏鍵值**：新增 `urlList.card.checkHealth` 對應「連線檢查」按鈕，避免語系切換時顯示鍵名原始字串。
+- **驗證**：兩語系檔案現均包含 203 個鍵值，差異為零。
+
+---
+
 ## [2.1.1] - 2026-08-29
 
 ### 🐛 缺陷修復 (Bug Fixes & UX Polish)

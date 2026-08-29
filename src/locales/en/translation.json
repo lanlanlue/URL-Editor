@@ -33,16 +33,10 @@
     "importBtn": "Import URL JSON",
     "maintenanceBtn": "🛠️ Batch Maintenance",
     "allTags": "All",
-    "batch": {
-      "selectedCount": "{{count}} selected",
-      "selectAll": "Select All",
-      "deselectAll": "Deselect All",
-      "replaceDomain": "Replace Domain",
-      "addTag": "➕ Add Tag",
-      "deleteSelected": "🗑️ Delete Selected",
-      "exportSelected": "💾 Export Selected",
-      "promptAddTag": "Enter tag name to add in batch:",
-      "confirmDelete": "Are you sure you want to delete {{count}} selected URL(s)? This action cannot be undone."
+    "tagManager": {
+      "title": "🏷️ Tag Manager",
+      "rename": "Rename Tag",
+      "delete": "Delete Tag"
     },
     "card": {
       "selectCard": "Select this URL",
@@ -69,16 +63,19 @@
     "exportCsvBtn": "📄 Export CSV",
     "importCsvBtn": "📥 Import CSV",
     "batch": {
+      "selectedCount": "{{count}} selected",
       "selectAll": "Select All",
       "deselectAll": "Deselect All",
-      "selectedCount": "Selected {{count}} items",
       "replaceDomain": "Replace Domain",
       "addTag": "➕ Add Tag",
-      "exportSelected": "💾 Export Selected",
       "deleteSelected": "🗑️ Delete Selected",
+      "exportSelected": "💾 Export Selected",
       "checkHealth": "📡 Check Selected Connection",
-      "liveTest": "🧪 Live Multi-Page Test"
+      "liveTest": "🧪 Live Multi-Page Test",
+      "promptAddTag": "Enter tag name to add in batch:",
+      "confirmDelete": "Are you sure you want to delete {{count}} selected URL(s)? This action cannot be undone."
     },
+    "importSuccess": "Successfully imported {{count}} URL(s)!",
     "importError": "Error: Invalid JSON format for import.",
     "sort": {
       "label": "Sort by:",
