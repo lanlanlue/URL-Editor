@@ -4,6 +4,33 @@
 
 ---
 
+## [2.1.0] - 2026-08-29
+
+### 🚀 新增功能 (Features)
+
+#### 📊 表格檢視模式 (Table View Mode)
+- **多維檢視切換**：新增 `表格檢視 (Table View)` 模式，與 `卡片檢視 (Cards)`、`Domain 分組檢視 (Grouped)` 並列三大清單呈現模式。
+- **行內即時編輯**：支援在表格欄位中直接變更網址名稱 (Label) 與標籤 (Tags)。
+- **一鍵快速動作**：整合一鍵複製網址、還原載入至編輯器、新分頁開啟、獨立健康檢查、產生 QR Code 與刪除。
+- **即時狀態與統計指示**：表格整合即時健康狀態燈號 (🟢 線上 / 🔴 離線 / 🟡 檢查中) 與使用次數熱度指標 (🔥)。
+
+#### ⚡ 即時端點測試沙盒 (Live Test & Sandbox Modal)
+- **HTTP 請求沙盒**：支援直接在應用中發送測試請求至指定 URL（支援 `GET`、`POST`、`HEAD` 方法）。
+- **請求客製化**：支援自訂 Request Headers 與 Request Body（支援 JSON 快速格式化）。
+- **即時回應檢驗**：即時呈現 HTTP 狀態碼 (Status Code)、連線耗時 (Timing / Latency)、回應標頭 (Response Headers) 與語法高亮回應主體 (Response Body)。
+- **CORS 狀態診斷**：提供 CORS 與網路連線失敗提示，加速 API 除錯與端點驗證。
+
+#### 🎨 Favicon 增強與快取備援服務 (`faviconService`)
+- **多層級 Favicon 備援**：支援 Google Favicon Service、DuckDuckGo 與本地 SVG 預設圖標階層式回退機制。
+- **離線感知 (Offline Awareness)**：離線狀態下自動降級為本地內建圖標，防止無效網路請求。
+
+### 💎 優化與改進 (Improvements & Polish)
+- **🎨 深色模式與全域視覺精修**：全面優化對比度、Glassmorphism 效果、Modal 玻璃擬態與按鈕微互動。
+- **🧪 測試覆蓋率擴充**：新增 9 個測試套件 (65 項測試全部通過)，包含 Live Test Modal、URL Card Table View 與 Jest 全域設定。
+- **🤖 自動化發布流程**：新增 GitHub Actions Release 工作流，自動於 Tag 推送時建置發布包並建立 GitHub Release。
+
+---
+
 ## [2.0.0] - 2026-08-22
 
 ### 🎉 重大功能發佈 (Major Release)
