@@ -221,12 +221,36 @@ export function createUrlRow(entry, callbacks, isSelected = false) {
   });
   tdCheck.appendChild(checkbox);
 
-  // ── Col 2: Favicon ───────────────────────────────────────
+  // ── Col 2: Pin Button ────────────────────────────────────
+  const tdPin = document.createElement('td');
+  tdPin.className = 'url-table__col-pin';
+  const pinBtn = document.createElement('button');
+  pinBtn.className = `url-table__pin-btn ${isPinned ? 'is-pinned' : ''}`;
+  pinBtn.textContent = isPinned ? '⭐' : '☆';
+  pinBtn.title = isPinned
+    ? i18next.t('urlList.card.unpin')
+    : i18next.t('urlList.card.pin');
+  pinBtn.setAttribute('aria-label', pinBtn.title);
+  pinBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const newPinned = !tr.classList.contains('url-table__row--pinned');
+    tr.classList.toggle('url-table__row--pinned', newPinned);
+    pinBtn.classList.toggle('is-pinned', newPinned);
+    pinBtn.textContent = newPinned ? '⭐' : '☆';
+    pinBtn.title = newPinned
+      ? i18next.t('urlList.card.unpin')
+      : i18next.t('urlList.card.pin');
+    pinBtn.setAttribute('aria-label', pinBtn.title);
+    if (callbacks.onPin) callbacks.onPin(id, newPinned);
+  });
+  tdPin.appendChild(pinBtn);
+
+  // ── Col 3: Favicon ───────────────────────────────────────
   const tdFav = document.createElement('td');
   tdFav.className = 'url-table__col-favicon';
   tdFav.appendChild(_createFaviconElement(url, 'url-table__favicon'));
 
-  // ── Col 3: Label ─────────────────────────────────────────
+  // ── Col 4: Label ─────────────────────────────────────────
   const tdLabel = document.createElement('td');
   tdLabel.className = 'url-table__col-label';
   const labelInput = document.createElement('input');
@@ -239,7 +263,7 @@ export function createUrlRow(entry, callbacks, isSelected = false) {
   });
   tdLabel.appendChild(labelInput);
 
-  // ── Col 4: URL ───────────────────────────────────────────
+  // ── Col 5: URL ───────────────────────────────────────────
   const tdUrl = document.createElement('td');
   tdUrl.className = 'url-table__col-url';
   const urlCode = document.createElement('code');
@@ -260,7 +284,7 @@ export function createUrlRow(entry, callbacks, isSelected = false) {
   });
   tdUrl.appendChild(urlCode);
 
-  // ── Col 5: Tags ──────────────────────────────────────────
+  // ── Col 6: Tags ──────────────────────────────────────────
   const tdTags = document.createElement('td');
   tdTags.className = 'url-table__col-tags';
   const tagsInput = document.createElement('input');
@@ -277,13 +301,13 @@ export function createUrlRow(entry, callbacks, isSelected = false) {
   });
   tdTags.appendChild(tagsInput);
 
-  // ── Col 6: Health ────────────────────────────────────────
+  // ── Col 7: Health ────────────────────────────────────────
   const tdHealth = document.createElement('td');
   tdHealth.className = 'url-table__col-health';
   const healthEl = _buildHealthEl(healthStatus);
   tdHealth.appendChild(healthEl);
 
-  // ── Col 7: Usage ─────────────────────────────────────────
+  // ── Col 8: Usage ─────────────────────────────────────────
   const tdUsage = document.createElement('td');
   tdUsage.className = 'url-table__col-usage';
   if (usageCount > 0) {
@@ -294,7 +318,7 @@ export function createUrlRow(entry, callbacks, isSelected = false) {
     tdUsage.appendChild(usageEl);
   }
 
-  // ── Col 8: Actions ───────────────────────────────────────
+  // ── Col 9: Actions ───────────────────────────────────────
   const tdActions = document.createElement('td');
   tdActions.className = 'url-table__col-actions';
   const actionsDiv = document.createElement('div');
@@ -311,7 +335,7 @@ export function createUrlRow(entry, callbacks, isSelected = false) {
 
   const openBtn = _makeRowBtn(
     '↗',
-    'url-table__action-btn',
+    'url-table__action-btn url-table__action-btn--open',
     i18next.t('urlList.card.open'),
     () => {
       if (callbacks.onOpen) callbacks.onOpen(url, id);
@@ -320,7 +344,7 @@ export function createUrlRow(entry, callbacks, isSelected = false) {
 
   const healthBtn = _makeRowBtn(
     '📡',
-    'url-table__action-btn',
+    'url-table__action-btn url-table__action-btn--health',
     i18next.t('healthCheck.btn'),
     () => {
       if (callbacks.onCheckHealth) callbacks.onCheckHealth(url, id);
@@ -329,7 +353,7 @@ export function createUrlRow(entry, callbacks, isSelected = false) {
 
   const qrBtn = _makeRowBtn(
     '⊡',
-    'url-table__action-btn',
+    'url-table__action-btn url-table__action-btn--qr',
     i18next.t('qrcode.btn'),
     () => {
       if (callbacks.onQrCode) callbacks.onQrCode(url, label || url);
@@ -353,6 +377,7 @@ export function createUrlRow(entry, callbacks, isSelected = false) {
   // ── Assemble row ─────────────────────────────────────────
   [
     tdCheck,
+    tdPin,
     tdFav,
     tdLabel,
     tdUrl,

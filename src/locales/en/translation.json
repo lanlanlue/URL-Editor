@@ -50,11 +50,11 @@
       "copyTooltip": "Click to copy URL",
       "copied": "✅ Copied!",
       "tagsPlaceholder": "Tags (comma-separated)",
-      "load": "Load",
+      "load": "↩ Load",
       "open": "🔗 Open",
       "openTooltip": "Open URL in a new tab",
       "checkHealth": "📡 Health Check",
-      "delete": "Delete",
+      "delete": "🗑️ Delete",
       "pin": "☆ Pin to top",
       "unpin": "⭐ Unpin"
     },

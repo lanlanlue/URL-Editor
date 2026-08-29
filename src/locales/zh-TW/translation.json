@@ -59,10 +59,10 @@
       "copyTooltip": "點擊複製 URL",
       "copied": "✅ 已複製！",
       "tagsPlaceholder": "標籤 (以逗號 , 分隔)",
-      "load": "載入",
+      "load": "↩ 載入",
       "open": "🔗 開啟",
       "openTooltip": "在新分頁開啟此 URL",
-      "delete": "刪除",
+      "delete": "🗑️ 刪除",
       "pin": "☆ 釘選置頂",
       "unpin": "⭐ 取消釘選"
     },

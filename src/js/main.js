@@ -461,6 +461,7 @@ function renderUrlList() {
     thead.innerHTML = `
       <tr>
         <th class="col-check url-table__col-check"></th>
+        <th class="col-pin url-table__col-pin"></th>
         <th class="col-favicon url-table__col-favicon"></th>
         <th class="col-label url-table__col-label">${i18next.t('urlList.table.name', { defaultValue: '名稱' })}</th>
         <th class="col-url url-table__col-url">${i18next.t('urlList.table.url', { defaultValue: 'URL' })}</th>

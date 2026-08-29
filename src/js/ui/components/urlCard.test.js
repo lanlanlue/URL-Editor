@@ -34,6 +34,8 @@ describe('ui/urlCard', () => {
       onOpen: jest.fn(),
       onPin: jest.fn(),
       onToggleSelect: jest.fn(),
+      onCheckHealth: jest.fn(),
+      onQrCode: jest.fn(),
     };
   });
 
@@ -222,5 +224,61 @@ describe('ui/urlCard', () => {
     const usageEl = row.querySelector('.url-table__usage');
 
     expect(usageEl).toBeNull();
+  });
+
+  test('should toggle pin state and call onPin callback in table row', () => {
+    const row = createUrlRow(sampleEntry, mockCallbacks);
+    document.body.appendChild(row);
+    const pinBtn = row.querySelector('.url-table__pin-btn');
+
+    expect(row.classList.contains('url-table__row--pinned')).toBe(false);
+    expect(pinBtn.classList.contains('is-pinned')).toBe(false);
+
+    fireEvent.click(pinBtn);
+
+    expect(row.classList.contains('url-table__row--pinned')).toBe(true);
+    expect(pinBtn.classList.contains('is-pinned')).toBe(true);
+    expect(mockCallbacks.onPin).toHaveBeenCalledWith('test-uuid-123', true);
+
+    document.body.removeChild(row);
+  });
+
+  test('should call actions callbacks when table row action buttons are clicked', () => {
+    const row = createUrlRow(sampleEntry, mockCallbacks);
+    document.body.appendChild(row);
+
+    const loadBtn = row.querySelector('.url-table__action-btn--load');
+    fireEvent.click(loadBtn);
+    expect(mockCallbacks.onLoad).toHaveBeenCalledWith(
+      'https://gemini.google.com',
+      'test-uuid-123'
+    );
+
+    const openBtn = row.querySelector('.url-table__action-btn--open');
+    fireEvent.click(openBtn);
+    expect(mockCallbacks.onOpen).toHaveBeenCalledWith(
+      'https://gemini.google.com',
+      'test-uuid-123'
+    );
+
+    const healthBtn = row.querySelector('.url-table__action-btn--health');
+    fireEvent.click(healthBtn);
+    expect(mockCallbacks.onCheckHealth).toHaveBeenCalledWith(
+      'https://gemini.google.com',
+      'test-uuid-123'
+    );
+
+    const qrBtn = row.querySelector('.url-table__action-btn--qr');
+    fireEvent.click(qrBtn);
+    expect(mockCallbacks.onQrCode).toHaveBeenCalledWith(
+      'https://gemini.google.com',
+      'Gemini'
+    );
+
+    const delBtn = row.querySelector('.url-table__action-btn--delete');
+    fireEvent.click(delBtn);
+    expect(mockCallbacks.onDelete).toHaveBeenCalledWith('test-uuid-123');
+
+    document.body.removeChild(row);
   });
 });
