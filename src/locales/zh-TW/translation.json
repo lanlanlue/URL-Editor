@@ -49,6 +49,7 @@
       "deleteSelected": "🗑️ 刪除所選",
       "exportSelected": "💾 匯出所選",
       "checkHealth": "📡 檢查連線狀態",
+      "liveTest": "🧪 即時多頁測試",
       "promptAddTag": "請輸入要批次新增的標籤名稱：",
       "confirmDelete": "確定要刪除選取的 {{count}} 筆 URL 嗎？此動作無法復原。"
     },
@@ -64,6 +65,14 @@
       "delete": "刪除",
       "pin": "☆ 釘選置頂",
       "unpin": "⭐ 取消釘選"
+    },
+    "table": {
+      "name": "名稱",
+      "url": "URL",
+      "tags": "標籤",
+      "health": "狀態",
+      "usage": "使用次數",
+      "actions": "操作"
     },
     "importSuccess": "成功匯入 {{count}} 筆資料！",
     "importError": "匯入的 JSON 格式錯誤",
@@ -176,6 +185,7 @@
     "closeBtn": "✕ 關閉"
   },
   "viewMode": {
+    "table": "≡ 表格檢視",
     "cards": "📋 卡片清單",
     "grouped": "📁 Domain 分組",
     "expandAll": "📂 全部展開",
@@ -208,5 +218,47 @@
     "online": "🟢 線上",
     "offline": "🔴 無法連線",
     "batchStarted": "🚀 已開始檢測 {{count}} 筆 URL 連線狀態"
+  },
+  "liveTest": {
+    "title": "🧪 網站多頁面即時測試與預覽工作台",
+    "subtitle": "同時載入多個目標網址進行可視化比對與連線狀況檢測",
+    "stats": {
+      "total": "共 {{count}} 個網址",
+      "online": "🟢 {{count}} 正常",
+      "offline": "🔴 {{count}} 異常",
+      "checking": "⏳ {{count}} 檢測中"
+    },
+    "filter": {
+      "all": "全部 ({{count}})",
+      "offline": "🔴 僅顯示異常 ({{count}})",
+      "online": "🟢 僅顯示正常 ({{count}})"
+    },
+    "layout": {
+      "auto": "🔲 自適應網格",
+      "cols1": "1 欄堆疊",
+      "cols2": "2 欄對照",
+      "cols3": "3 欄並列"
+    },
+    "device": {
+      "desktop": "🖥️ 桌面 (100%)",
+      "tablet": "💻 平板 (1024px)",
+      "mobile": "📱 手機 (375px)"
+    },
+    "actions": {
+      "reloadAll": "🔄 全部重載",
+      "recheckHealth": "📡 重新檢測連線",
+      "reloadIframe": "重新載入此頁面",
+      "openNewTab": "在新分頁開啟",
+      "copyUrl": "複製網址",
+      "close": "✕ 關閉 (ESC)"
+    },
+    "status": {
+      "online": "🟢 連線正常",
+      "offline": "🔴 連線異常 / 無法連通",
+      "checking": "⏳ 正在檢測連線...",
+      "xframeWarn": "🔒 此網站設有限制嵌入保護 (X-Frame-Options)，連線狀態正常，建議直接點擊新分頁開啟瀏覽",
+      "offlineWarn": "⚠️ 無法連線至此網站！請確認網址格式、網路連線或伺服器運作狀態"
+    },
+    "emptySelection": "目前未選取任何 URL 進行測試。"
   }
 }

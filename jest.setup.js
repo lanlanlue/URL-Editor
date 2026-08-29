@@ -8,3 +8,12 @@ Object.defineProperty(self, 'crypto', {
     randomUUID: () => crypto.randomUUID(),
   },
 });
+
+// JSDOM does not implement IntersectionObserver. Provide a no-op stub so that
+// modules using it for lazy-loading can be imported without errors in tests.
+global.IntersectionObserver = class IntersectionObserver {
+  constructor() {}
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+};

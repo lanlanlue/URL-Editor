@@ -1,6 +1,6 @@
 import { initDarkMode } from './core/darkMode.js';
 import i18next, { updateContent } from './core/i18n.js';
-import { createUrlCard } from './ui/components/urlCard.js';
+import { createUrlCard, createUrlRow } from './ui/components/urlCard.js';
 import { initUrlEditor, loadUrlInEditor } from './ui/components/editor.js';
 import {
   initMaintenanceModal,
@@ -16,6 +16,10 @@ import {
   initTagManagerModal,
   openTagManagerModal,
 } from './ui/modals/tagManagerModal.js';
+import {
+  initLiveTestModal,
+  openLiveTestModal,
+} from './ui/modals/liveTestModal.js';
 import { exportToCsvString, parseCsvString } from './utils/csvParser.js';
 import { checkUrlHealth } from './utils/healthCheck.js';
 
@@ -34,6 +38,7 @@ const editorBatchImportBtn = document.getElementById('editor-batch-import-btn');
 const openTagManagerBtn = document.getElementById('open-tag-manager-btn');
 
 // View Mode DOM references
+const viewModeTableBtn = document.getElementById('view-mode-table-btn');
 const viewModeCardsBtn = document.getElementById('view-mode-cards-btn');
 const viewModeGroupedBtn = document.getElementById('view-mode-grouped-btn');
 const accordionControls = document.getElementById('accordion-controls');
@@ -56,6 +61,7 @@ const batchAddTagBtn = document.getElementById('batch-add-tag-btn');
 const batchExportBtn = document.getElementById('batch-export-btn');
 const batchDeleteBtn = document.getElementById('batch-delete-btn');
 const batchCheckHealthBtn = document.getElementById('batch-check-health-btn');
+const batchLiveTestBtn = document.getElementById('batch-live-test-btn');
 
 // --- 應用程式狀態管理 ---
 let appState = {
@@ -168,6 +174,22 @@ function trackUrlUsage(id) {
       if (badge) {
         badge.textContent = `🔥 ${urlEntry.usageCount}`;
         badge.style.display = '';
+      }
+      const tableUsage = document.querySelector(
+        `[data-url-id="${id}"] .url-table__usage`
+      );
+      if (tableUsage) {
+        tableUsage.textContent = `🔥 ${urlEntry.usageCount}`;
+      } else {
+        const tdUsage = document.querySelector(
+          `[data-url-id="${id}"] .url-table__col-usage`
+        );
+        if (tdUsage) {
+          const usageEl = document.createElement('span');
+          usageEl.className = 'url-table__usage';
+          usageEl.textContent = `🔥 ${urlEntry.usageCount}`;
+          tdUsage.appendChild(usageEl);
+        }
       }
     }
   }
@@ -292,6 +314,7 @@ function updateBatchActionBar(urlsToRender = []) {
   }
 
   const hasSelection = count > 0;
+  if (batchLiveTestBtn) batchLiveTestBtn.disabled = !hasSelection;
   if (batchReplaceDomainBtn) batchReplaceDomainBtn.disabled = !hasSelection;
   if (batchAddTagBtn) batchAddTagBtn.disabled = !hasSelection;
   if (batchExportBtn) batchExportBtn.disabled = !hasSelection;
@@ -331,52 +354,70 @@ async function runSingleHealthCheck(targetUrl, targetId) {
   }
 }
 
-function createCardElement(entry, urlsToRender) {
-  const isSelected = appState.selectedIds.has(entry.id);
-  return createUrlCard(
-    entry,
-    {
-      onUpdate: updateCardProperty,
-      onLoad: (url, id) => {
-        trackUrlUsage(id);
-        loadUrlInEditor(url);
-      },
-      onCopy: (id) => {
-        trackUrlUsage(id);
-      },
-      onOpen: (url, id) => {
-        trackUrlUsage(id);
-        window.open(url, '_blank', 'noopener,noreferrer');
-      },
-      onQrCode: (url, title) => {
-        openQrCodeModal(url, title);
-      },
-      onCheckHealth: (url, id) => {
-        runSingleHealthCheck(url, id);
-      },
-      onPin: (id, isPinned) => {
-        updateCardProperty(id, 'isPinned', isPinned);
-      },
-      onDelete: (id) => {
-        appState.urls = appState.urls.filter((urlEntry) => urlEntry.id !== id);
-        appState.selectedIds.delete(id);
-        saveState();
-        renderUrlList();
-      },
-      onToggleSelect: (id, checked) => {
-        if (checked) {
-          appState.selectedIds.add(id);
-        } else {
-          appState.selectedIds.delete(id);
-        }
-        updateBatchActionBar(urlsToRender);
-      },
+// 建立共用 callbacks 物件（卡片與表格行列共用）
+function _makeCallbacks(urlsToRender) {
+  return {
+    onUpdate: updateCardProperty,
+    onLoad: (url, id) => {
+      trackUrlUsage(id);
+      loadUrlInEditor(url);
     },
-    isSelected
-  );
+    onCopy: (id) => {
+      trackUrlUsage(id);
+    },
+    onOpen: (url, id) => {
+      trackUrlUsage(id);
+      window.open(url, '_blank', 'noopener,noreferrer');
+    },
+    onQrCode: (url, title) => {
+      openQrCodeModal(url, title);
+    },
+    onCheckHealth: (url, id) => {
+      runSingleHealthCheck(url, id);
+    },
+    onPin: (id, isPinned) => {
+      updateCardProperty(id, 'isPinned', isPinned);
+    },
+    onDelete: (id) => {
+      appState.urls = appState.urls.filter((urlEntry) => urlEntry.id !== id);
+      appState.selectedIds.delete(id);
+      saveState();
+      renderUrlList();
+    },
+    onToggleSelect: (id, checked) => {
+      if (checked) {
+        appState.selectedIds.add(id);
+      } else {
+        appState.selectedIds.delete(id);
+      }
+      updateBatchActionBar(urlsToRender);
+      // 更新統計
+      const statSelected = document.getElementById('stat-selected');
+      if (statSelected) statSelected.textContent = appState.selectedIds.size;
+    },
+  };
 }
 
-// 渲染 URL 清單 (支援 📋 卡片模式與 📁 Domain 分組 Accordion)
+function createCardElement(entry, urlsToRender) {
+  const isSelected = appState.selectedIds.has(entry.id);
+  return createUrlCard(entry, _makeCallbacks(urlsToRender), isSelected);
+}
+
+// 更新 workspace count badge 與 sidebar 統計欄
+function _updateStatBadges(urlsToRender) {
+  const countBadge = document.getElementById('workspace-count-badge');
+  if (countBadge) {
+    countBadge.textContent = `${urlsToRender.length} 筆`;
+  }
+  const statTotal = document.getElementById('stat-total');
+  if (statTotal) statTotal.textContent = appState.urls.length;
+  const statFiltered = document.getElementById('stat-filtered');
+  if (statFiltered) statFiltered.textContent = urlsToRender.length;
+  const statSelected = document.getElementById('stat-selected');
+  if (statSelected) statSelected.textContent = appState.selectedIds.size;
+}
+
+// 渲染 URL 清單（支援 表格 / 卡片 / Domain 分組 三種視圖）
 function renderUrlList() {
   const container = document.getElementById('url-cards-container');
   const emptyMessage = document.getElementById('empty-list-message');
@@ -385,63 +426,109 @@ function renderUrlList() {
   container.innerHTML = '';
   const urlsToRender = getFilteredUrls();
 
+  // 清理已刪除條目的選取狀態
   const existingIds = new Set(appState.urls.map((u) => u.id));
   appState.selectedIds.forEach((id) => {
-    if (!existingIds.has(id)) {
-      appState.selectedIds.delete(id);
-    }
+    if (!existingIds.has(id)) appState.selectedIds.delete(id);
   });
 
-  if (urlsToRender.length > 0) {
-    emptyMessage.classList.add('hidden');
+  // 更新統計 Badge
+  _updateStatBadges(urlsToRender);
 
-    if (appState.viewMode === 'grouped') {
-      // Group by domain
-      const groups = new Map();
-      urlsToRender.forEach((entry) => {
-        const domain = extractDomain(entry.url);
-        if (!groups.has(domain)) groups.set(domain, []);
-        groups.get(domain).push(entry);
-      });
-
-      groups.forEach((groupUrls, domainName) => {
-        const accordion = document.createElement('details');
-        accordion.className = 'domain-accordion';
-        accordion.open = true;
-
-        const summary = document.createElement('summary');
-        summary.className = 'domain-accordion__summary';
-
-        const title = document.createElement('span');
-        title.className = 'domain-accordion__title';
-        title.textContent = `🌐 ${domainName}`;
-
-        const badge = document.createElement('span');
-        badge.className = 'badge badge--secondary';
-        badge.textContent = `${groupUrls.length}`;
-
-        summary.appendChild(title);
-        summary.appendChild(badge);
-        accordion.appendChild(summary);
-
-        const groupBody = document.createElement('div');
-        groupBody.className = 'domain-accordion__body';
-
-        groupUrls.forEach((entry) => {
-          groupBody.appendChild(createCardElement(entry, urlsToRender));
-        });
-
-        accordion.appendChild(groupBody);
-        container.appendChild(accordion);
-      });
-    } else {
-      // Regular Cards grid
-      urlsToRender.forEach((entry) => {
-        container.appendChild(createCardElement(entry, urlsToRender));
-      });
-    }
-  } else {
+  if (urlsToRender.length === 0) {
     emptyMessage.classList.remove('hidden');
+    renderTagFilters();
+    updateBatchActionBar(urlsToRender);
+    updateViewModeUI();
+    return;
+  }
+
+  emptyMessage.classList.add('hidden');
+
+  if (appState.viewMode === 'table') {
+    // ── 表格模式 ──────────────────────────────────────────
+    container.className = 'view--table';
+
+    const wrapper = document.createElement('div');
+    wrapper.className = 'url-table-wrapper';
+
+    const table = document.createElement('table');
+    table.className = 'url-table';
+
+    // 表頭
+    const thead = document.createElement('thead');
+    thead.className = 'url-table__head';
+    thead.innerHTML = `
+      <tr>
+        <th class="col-check url-table__col-check"></th>
+        <th class="col-favicon url-table__col-favicon"></th>
+        <th class="col-label url-table__col-label">${i18next.t('urlList.table.name', { defaultValue: '名稱' })}</th>
+        <th class="col-url url-table__col-url">${i18next.t('urlList.table.url', { defaultValue: 'URL' })}</th>
+        <th class="col-tags url-table__col-tags">${i18next.t('urlList.table.tags', { defaultValue: '標籤' })}</th>
+        <th class="col-health url-table__col-health">${i18next.t('urlList.table.health', { defaultValue: '狀態' })}</th>
+        <th class="col-usage url-table__col-usage">${i18next.t('urlList.table.usage', { defaultValue: '使用次數' })}</th>
+        <th class="col-actions url-table__col-actions">${i18next.t('urlList.table.actions', { defaultValue: '操作' })}</th>
+      </tr>`;
+    table.appendChild(thead);
+
+    // 表身
+    const tbody = document.createElement('tbody');
+    urlsToRender.forEach((entry) => {
+      const isSelected = appState.selectedIds.has(entry.id);
+      tbody.appendChild(
+        createUrlRow(entry, _makeCallbacks(urlsToRender), isSelected)
+      );
+    });
+    table.appendChild(tbody);
+    wrapper.appendChild(table);
+    container.appendChild(wrapper);
+  } else if (appState.viewMode === 'grouped') {
+    // ── Domain 分組模式 ────────────────────────────────────
+    container.className = 'view--grouped';
+
+    const groups = new Map();
+    urlsToRender.forEach((entry) => {
+      const domain = extractDomain(entry.url);
+      if (!groups.has(domain)) groups.set(domain, []);
+      groups.get(domain).push(entry);
+    });
+
+    groups.forEach((groupUrls, domainName) => {
+      const accordion = document.createElement('details');
+      accordion.className = 'domain-accordion';
+      accordion.open = true;
+
+      const summary = document.createElement('summary');
+      summary.className = 'domain-accordion__summary';
+
+      const titleSpan = document.createElement('span');
+      titleSpan.className = 'domain-accordion__title';
+      titleSpan.textContent = `🌐 ${domainName}`;
+
+      const badge = document.createElement('span');
+      badge.className = 'badge badge--secondary';
+      badge.textContent = `${groupUrls.length}`;
+
+      summary.appendChild(titleSpan);
+      summary.appendChild(badge);
+      accordion.appendChild(summary);
+
+      const groupBody = document.createElement('div');
+      groupBody.className = 'domain-accordion__body';
+
+      groupUrls.forEach((entry) => {
+        groupBody.appendChild(createCardElement(entry, urlsToRender));
+      });
+
+      accordion.appendChild(groupBody);
+      container.appendChild(accordion);
+    });
+  } else {
+    // ── 卡片模式 ──────────────────────────────────────────
+    container.className = 'view--cards';
+    urlsToRender.forEach((entry) => {
+      container.appendChild(createCardElement(entry, urlsToRender));
+    });
   }
 
   renderTagFilters();
@@ -450,16 +537,19 @@ function renderUrlList() {
 }
 
 function updateViewModeUI() {
-  if (viewModeCardsBtn && viewModeGroupedBtn) {
-    if (appState.viewMode === 'grouped') {
-      viewModeGroupedBtn.classList.add('active');
-      viewModeCardsBtn.classList.remove('active');
-      if (accordionControls) accordionControls.classList.remove('hidden');
-    } else {
-      viewModeCardsBtn.classList.add('active');
-      viewModeGroupedBtn.classList.remove('active');
-      if (accordionControls) accordionControls.classList.add('hidden');
-    }
+  [viewModeTableBtn, viewModeCardsBtn, viewModeGroupedBtn].forEach((btn) => {
+    if (btn) btn.classList.remove('active');
+  });
+
+  if (appState.viewMode === 'table' && viewModeTableBtn) {
+    viewModeTableBtn.classList.add('active');
+    if (accordionControls) accordionControls.classList.add('hidden');
+  } else if (appState.viewMode === 'grouped' && viewModeGroupedBtn) {
+    viewModeGroupedBtn.classList.add('active');
+    if (accordionControls) accordionControls.classList.remove('hidden');
+  } else if (viewModeCardsBtn) {
+    viewModeCardsBtn.classList.add('active');
+    if (accordionControls) accordionControls.classList.add('hidden');
   }
 }
 
@@ -577,11 +667,95 @@ function cleanupDuplicateUrls() {
   return removedCount;
 }
 
+// 初始化介面與字體大小縮放
+function initUiScale() {
+  const scaleSelect = document.getElementById('ui-scale-select');
+  const savedScale = localStorage.getItem('uiScale') || 'normal';
+
+  const applyScale = (scale) => {
+    document.documentElement.classList.remove(
+      'scale-compact',
+      'scale-normal',
+      'scale-medium',
+      'scale-large',
+      'scale-xlarge'
+    );
+    document.documentElement.classList.add(`scale-${scale}`);
+    localStorage.setItem('uiScale', scale);
+    if (scaleSelect) scaleSelect.value = scale;
+  };
+
+  applyScale(savedScale);
+
+  if (scaleSelect) {
+    scaleSelect.addEventListener('change', (e) => {
+      applyScale(e.target.value);
+    });
+  }
+}
+
+// 初始化左右面板拖曳調整寬度 (Panel Resizer)
+function initPanelResizer() {
+  const resizer = document.getElementById('panel-resizer');
+  const sidebar = document.querySelector('.sidebar');
+  const appBody = document.querySelector('.app-body');
+  if (!resizer || !sidebar || !appBody) return;
+
+  const savedWidth = localStorage.getItem('sidebarWidth');
+  if (savedWidth && window.innerWidth > 768) {
+    sidebar.style.flex = `0 0 ${savedWidth}px`;
+  }
+
+  let isDragging = false;
+
+  const startDragging = () => {
+    if (window.innerWidth <= 768) return;
+    isDragging = true;
+    resizer.classList.add('is-dragging');
+    document.body.classList.add('is-resizing');
+  };
+
+  const onDrag = (e) => {
+    if (!isDragging) return;
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    const bodyRect = appBody.getBoundingClientRect();
+    let newWidth = clientX - bodyRect.left;
+
+    // 限制在安全範圍：最小 320px，最大為總寬度扣除 320px
+    const minW = 320;
+    const maxW = Math.max(minW, bodyRect.width - 320);
+    newWidth = Math.max(minW, Math.min(newWidth, maxW));
+
+    sidebar.style.flex = `0 0 ${newWidth}px`;
+  };
+
+  const stopDragging = () => {
+    if (!isDragging) return;
+    isDragging = false;
+    resizer.classList.remove('is-dragging');
+    document.body.classList.remove('is-resizing');
+
+    const finalWidth = sidebar.getBoundingClientRect().width;
+    localStorage.setItem('sidebarWidth', Math.round(finalWidth));
+  };
+
+  resizer.addEventListener('mousedown', startDragging);
+  resizer.addEventListener('touchstart', startDragging, { passive: true });
+
+  window.addEventListener('mousemove', onDrag);
+  window.addEventListener('touchmove', onDrag, { passive: true });
+
+  window.addEventListener('mouseup', stopDragging);
+  window.addEventListener('touchend', stopDragging);
+}
+
 // 初始化所有功能
 loadState();
 migrateDataToV2();
 migrateDataToV3();
 initDarkMode();
+initUiScale();
+initPanelResizer();
 initUrlEditor({
   onSave: saveUrlToHistory,
   onQrCode: (url, title) => openQrCodeModal(url, title),
@@ -591,8 +765,17 @@ initBatchImportModal();
 initQrCodeModal();
 initPresetModal();
 initTagManagerModal();
+initLiveTestModal();
 
 // 視圖切換按鈕事件
+if (viewModeTableBtn) {
+  viewModeTableBtn.addEventListener('click', () => {
+    appState.viewMode = 'table';
+    saveState();
+    renderUrlList();
+  });
+}
+
 if (viewModeCardsBtn) {
   viewModeCardsBtn.addEventListener('click', () => {
     appState.viewMode = 'cards';
@@ -683,6 +866,23 @@ if (openBatchImportBtn) {
   openBatchImportBtn.addEventListener('click', handleBatchImportAction);
 }
 
+// 底部重複操作按鈕
+const openBatchImportBtnBottom = document.getElementById(
+  'open-batch-import-btn-bottom'
+);
+if (openBatchImportBtnBottom) {
+  openBatchImportBtnBottom.addEventListener('click', handleBatchImportAction);
+}
+
+const openMaintenanceBtnBottom = document.getElementById(
+  'open-maintenance-btn-bottom'
+);
+if (openMaintenanceBtnBottom) {
+  openMaintenanceBtnBottom.addEventListener('click', () => {
+    if (openMaintenanceBtn) openMaintenanceBtn.click();
+  });
+}
+
 if (editorBatchImportBtn) {
   editorBatchImportBtn.addEventListener('click', handleBatchImportAction);
 }
@@ -744,6 +944,16 @@ if (batchSelectAllCheckbox) {
       rendered.forEach((u) => appState.selectedIds.delete(u.id));
     }
     renderUrlList();
+  });
+}
+
+if (batchLiveTestBtn) {
+  batchLiveTestBtn.addEventListener('click', () => {
+    if (appState.selectedIds.size === 0) return;
+    const selected = appState.urls.filter((u) =>
+      appState.selectedIds.has(u.id)
+    );
+    openLiveTestModal({ urls: selected });
   });
 }
 
@@ -838,6 +1048,35 @@ if (searchInput) {
     renderUrlList();
   });
 }
+
+// 側邊欄摺疊按鈕事件
+document.querySelectorAll('.sidebar-collapse-btn').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    const targetId = btn.dataset.target;
+    if (targetId) {
+      const targetBody = document.getElementById(targetId);
+      if (targetBody) {
+        const isCollapsed = targetBody.classList.toggle('collapsed');
+        btn.textContent = isCollapsed ? '▸' : '▾';
+      }
+    }
+  });
+});
+
+// 全域快捷鍵 ⌘K / Ctrl+K 聚焦搜尋框，Esc 取消聚焦
+document.addEventListener('keydown', (e) => {
+  if ((e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'K')) {
+    e.preventDefault();
+    if (searchInput) {
+      searchInput.focus();
+      searchInput.select();
+    }
+  } else if (e.key === 'Escape') {
+    if (searchInput && document.activeElement === searchInput) {
+      searchInput.blur();
+    }
+  }
+});
 
 i18next.init().then(() => {
   document.documentElement.lang = i18next.language;

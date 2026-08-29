@@ -1,18 +1,84 @@
-/* Media Queries (Mobile & Tablet Responsiveness) */
-@media (max-width: 640px) {
-  body {
-    padding: 0.75rem;
+/* ==========================================================================
+   Responsive — 行動裝置 & 平板適配
+   已更新：配合寬敞的 URL 編輯工作區與精簡的 URL 清單區
+   ========================================================================== */
+
+/* ——————————————————————
+   平板（≤ 900px）：微調編輯器最小寬度
+   —————————————————————— */
+@media (max-width: 900px) {
+  :root {
+    --sidebar-min-width: 380px;
   }
 
-  header {
+  .editor-domain-path-grid {
+    grid-template-columns: 1fr;
+    gap: 0.5rem;
+  }
+
+  .param-row input:first-child {
+    flex: 0 0 130px;
+    min-width: 110px;
+  }
+}
+
+/* ——————————————————————
+   小型裝置（≤ 768px）：側邊欄折疊為頂部面板
+   —————————————————————— */
+@media (max-width: 768px) {
+  body {
+    overflow: auto;
+  }
+
+  .app-body {
     flex-direction: column;
-    align-items: flex-start;
-    gap: 0.75rem;
+    height: auto;
+    overflow: visible;
+  }
+
+  .sidebar {
+    width: 100%;
+    min-width: 100%;
+    max-width: 100%;
+    height: auto;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+    max-height: none;
+    overflow-y: visible;
+  }
+
+  .workspace {
+    width: 100%;
+    min-width: 100%;
+    height: auto;
+    overflow: visible;
+  }
+
+  .workspace-content {
+    overflow-y: visible;
+  }
+
+  .topnav-search {
+    max-width: 240px;
+  }
+
+  .editor-domain-path-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .filter-bar {
+    flex-wrap: wrap;
+    gap: 0.35rem;
+  }
+
+  .filter-bar__search {
+    width: 100%;
   }
 
   .sort-search-bar {
     flex-direction: column;
     align-items: stretch;
+    gap: 0.5rem;
   }
 
   .sort-container,
@@ -24,27 +90,43 @@
 
   .search-container input {
     flex: 1;
+    width: auto;
   }
 
+  /* 表格模式：隱藏非關鍵欄位 */
+  .col-usage,
+  .url-table__col-usage,
+  .col-favicon,
+  .url-table__col-favicon {
+    display: none;
+  }
+
+  .col-tags,
+  .url-table__col-tags {
+    display: none;
+  }
+
+  /* 卡片模式 */
   .url-card {
-    padding: 0.85rem;
-    max-width: 100%;
     min-width: 100%;
+    max-width: 100%;
   }
 
   .batch-action-bar {
     flex-direction: column;
     align-items: stretch;
-    gap: 0.75rem;
+    gap: 0.5rem;
   }
 
   .batch-action-buttons {
     width: 100%;
+    flex-wrap: wrap;
   }
 
   .batch-btn {
     flex: 1;
     text-align: center;
+    justify-content: center;
   }
 
   .url-list-actions {
@@ -53,40 +135,104 @@
 
   .url-list-actions button {
     width: 100%;
+    justify-content: center;
+  }
+}
+
+/* ——————————————————————
+   超小螢幕（≤ 480px）
+   —————————————————————— */
+@media (max-width: 480px) {
+  .topnav-search {
+    display: none;
   }
 
+  .topnav-brand {
+    width: auto;
+  }
+
+  .workspace-toolbar {
+    padding: 0.5rem 0.75rem;
+    gap: 0.4rem;
+    flex-wrap: wrap;
+  }
+
+  .workspace-title {
+    font-size: 0.82rem;
+  }
+
+  .param-row {
+    flex-wrap: wrap;
+  }
+
+  .param-row input:first-child {
+    flex: 1 1 100%;
+    max-width: 100%;
+  }
+
+  .param-row input:nth-child(2) {
+    flex: 1;
+  }
+
+  .params-table-header {
+    display: none;
+  }
+
+  /* Modal 全寬 */
   .maintenance-modal {
-    width: 95%;
-    max-height: 90vh;
-    padding: 1rem;
+    width: 100%;
+    border-radius: 0;
+    max-height: 95vh;
   }
 
   .modal-tabs {
-    flex-direction: column;
-    border-bottom: none;
+    padding: 0 0.75rem;
+    overflow-x: auto;
   }
 
   .tab-btn {
-    text-align: left;
-    border-bottom: none;
-    border-left: 3px solid transparent;
+    white-space: nowrap;
+    font-size: 0.73rem;
+    padding: 0.5rem 0.55rem;
   }
 
-  .tab-btn.active {
-    border-left-color: var(--accent-color);
-    border-bottom-color: transparent;
+  .modal-body {
+    padding: 0.875rem;
+    max-height: 55vh;
+  }
+
+  .modal-footer {
+    padding: 0.65rem 0.875rem;
+  }
+
+  .scope-options {
+    flex-direction: column;
+    gap: 0.4rem;
   }
 
   .preset-item-row,
   .tag-manager-row {
     flex-direction: column;
     align-items: flex-start;
-    gap: 0.5rem;
+    gap: 0.4rem;
   }
 
   .preset-item-actions,
   .tag-manager-actions {
     width: 100%;
     justify-content: flex-end;
+  }
+}
+
+/* ——————————————————————
+   寬螢幕（≥ 1200px）：擴展導航與表格
+   —————————————————————— */
+@media (min-width: 1200px) {
+  .topnav-search {
+    max-width: 560px;
+  }
+
+  .col-tags {
+    width: 18%;
   }
 }

@@ -6,5 +6,7 @@
 @import './base.css';
 @import './editor.css';
 @import './cards.css';
+@import './table.css';
 @import './modals.css';
+@import './live-test.css';
 @import './responsive.css';

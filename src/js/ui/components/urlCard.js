@@ -1,19 +1,12 @@
 import i18next from '../../core/i18n';
+import { createFaviconImg } from '../../utils/faviconService';
 
 /**
- * Creates a URL card element.
+ * Creates a URL card element (卡片模式).
  * @param {object} entry - The URL entry data.
- * @param {object} callbacks - An object containing callback functions.
- * @param {function} callbacks.onUpdate - Called when a property is updated.
- * @param {function} callbacks.onLoad - Called when the load button is clicked.
- * @param {function} callbacks.onDelete - Called when the delete button is clicked.
- * @param {function} [callbacks.onCopy] - Called when URL is copied.
- * @param {function} [callbacks.onOpen] - Called when open-in-tab button is clicked.
- * @param {function} [callbacks.onPin] - Called when pin button is toggled.
- * @param {function} [callbacks.onCheckHealth] - Called when health check button is clicked.
- * @param {function} [callbacks.onToggleSelect] - Called when checkbox selection changes.
- * @param {boolean} [isSelected=false] - Whether the card is currently selected.
- * @returns {HTMLElement} The created card element.
+ * @param {object} callbacks - Callback functions.
+ * @param {boolean} [isSelected=false]
+ * @returns {HTMLElement}
  */
 export function createUrlCard(entry, callbacks, isSelected = false) {
   const {
@@ -32,7 +25,7 @@ export function createUrlCard(entry, callbacks, isSelected = false) {
   if (isSelected) card.classList.add('url-card--selected');
   if (isPinned) card.classList.add('url-card--pinned');
 
-  // --- Header row: checkbox | label input | usage badge | health badge | pin btn ---
+  // --- Header row: checkbox | favicon | label input | health badge | usage badge | pin btn ---
   const header = document.createElement('div');
   header.className = 'url-card__header';
 
@@ -54,6 +47,9 @@ export function createUrlCard(entry, callbacks, isSelected = false) {
     }
   });
 
+  // Favicon with fallback
+  const favicon = _createFaviconElement(url, 'url-card__favicon');
+
   // Label input
   const labelInput = document.createElement('input');
   labelInput.placeholder = i18next.t('urlList.card.namePlaceholder');
@@ -63,43 +59,12 @@ export function createUrlCard(entry, callbacks, isSelected = false) {
     callbacks.onUpdate(id, 'label', labelInput.value);
   });
 
-  // Favicon image
-  let domain = '';
-  try {
-    domain = new URL(url).hostname;
-  } catch (e) {
-    // Ignore invalid URL
-  }
-
-  const favicon = document.createElement('img');
-  favicon.className = 'url-card__favicon';
-  if (domain) {
-    favicon.src = `https://www.google.com/s2/favicons?domain=${encodeURIComponent(domain)}&sz=32`;
-    favicon.alt = '';
-    favicon.onerror = () => {
-      favicon.style.display = 'none';
-    };
-  } else {
-    favicon.style.display = 'none';
-  }
-
-  // Health status badge
+  // Health badge
   const healthBadge = document.createElement('span');
   healthBadge.className = 'url-card__health-badge';
-  if (healthStatus === 'checking') {
-    healthBadge.className += ' health--checking';
-    healthBadge.textContent = i18next.t('healthCheck.checking');
-  } else if (healthStatus === 'online') {
-    healthBadge.className += ' health--online';
-    healthBadge.textContent = i18next.t('healthCheck.online');
-  } else if (healthStatus === 'offline') {
-    healthBadge.className += ' health--offline';
-    healthBadge.textContent = i18next.t('healthCheck.offline');
-  } else {
-    healthBadge.style.display = 'none';
-  }
+  _applyHealthBadge(healthBadge, healthStatus);
 
-  // Usage count badge
+  // Usage badge
   const usageBadge = document.createElement('span');
   usageBadge.className = 'url-card__usage-badge';
   usageBadge.textContent = `🔥 ${usageCount}`;
@@ -130,7 +95,7 @@ export function createUrlCard(entry, callbacks, isSelected = false) {
   header.appendChild(usageBadge);
   header.appendChild(pinBtn);
 
-  // --- URL display with copy on click ---
+  // URL display
   const text = document.createElement('code');
   text.textContent = url;
   text.className = 'url-card__url-value';
@@ -145,7 +110,7 @@ export function createUrlCard(entry, callbacks, isSelected = false) {
     });
   });
 
-  // --- Tags input ---
+  // Tags input
   const tagsInput = document.createElement('input');
   tagsInput.type = 'text';
   tagsInput.placeholder = i18next.t('urlList.card.tagsPlaceholder');
@@ -159,50 +124,55 @@ export function createUrlCard(entry, callbacks, isSelected = false) {
     callbacks.onUpdate(id, 'tags', newTags);
   });
 
-  // --- Action buttons ---
-  const loadBtn = document.createElement('button');
-  loadBtn.textContent = i18next.t('urlList.card.load');
-  loadBtn.className = 'url-card__button';
-  loadBtn.addEventListener('click', () => {
-    if (callbacks.onLoad) callbacks.onLoad(url, id);
-  });
+  // Action buttons
+  const loadBtn = _makeCardBtn(
+    i18next.t('urlList.card.load'),
+    'url-card__button url-card__button--load',
+    () => {
+      if (callbacks.onLoad) callbacks.onLoad(url, id);
+    }
+  );
 
-  const openBtn = document.createElement('button');
-  openBtn.textContent = i18next.t('urlList.card.open');
-  openBtn.className = 'url-card__button url-card__button--open';
+  const openBtn = _makeCardBtn(
+    i18next.t('urlList.card.open'),
+    'url-card__button url-card__button--open',
+    () => {
+      if (callbacks.onOpen) callbacks.onOpen(url, id);
+    }
+  );
   openBtn.title = i18next.t('urlList.card.openTooltip');
-  openBtn.addEventListener('click', () => {
-    if (callbacks.onOpen) callbacks.onOpen(url, id);
-  });
 
-  const healthBtn = document.createElement('button');
-  healthBtn.textContent = i18next.t('healthCheck.btn');
-  healthBtn.className = 'url-card__button url-card__button--health';
+  const healthBtn = _makeCardBtn(
+    i18next.t('healthCheck.btn'),
+    'url-card__button url-card__button--health',
+    () => {
+      if (callbacks.onCheckHealth) callbacks.onCheckHealth(url, id);
+    }
+  );
   healthBtn.title = i18next.t('healthCheck.btnTooltip');
-  healthBtn.addEventListener('click', () => {
-    if (callbacks.onCheckHealth) callbacks.onCheckHealth(url, id);
-  });
 
-  const qrBtn = document.createElement('button');
-  qrBtn.textContent = i18next.t('qrcode.btn');
-  qrBtn.className = 'url-card__button url-card__button--qr';
+  const qrBtn = _makeCardBtn(
+    i18next.t('qrcode.btn'),
+    'url-card__button url-card__button--qr',
+    () => {
+      if (callbacks.onQrCode) callbacks.onQrCode(url, label || url);
+    }
+  );
   qrBtn.title = i18next.t('qrcode.btnTooltip');
-  qrBtn.addEventListener('click', () => {
-    if (callbacks.onQrCode) callbacks.onQrCode(url, label || url);
-  });
 
-  const delBtn = document.createElement('button');
-  delBtn.textContent = i18next.t('urlList.card.delete');
-  delBtn.className = 'url-card__button url-card__button--delete';
-  delBtn.addEventListener('click', () => callbacks.onDelete(id));
+  const delBtn = _makeCardBtn(
+    i18next.t('urlList.card.delete'),
+    'url-card__button url-card__button--delete',
+    () => {
+      callbacks.onDelete(id);
+    }
+  );
 
   const actions = document.createElement('div');
   actions.className = 'url-card__actions';
-  actions.appendChild(loadBtn);
-  actions.appendChild(openBtn);
-  actions.appendChild(healthBtn);
-  actions.appendChild(qrBtn);
-  actions.appendChild(delBtn);
+  [loadBtn, openBtn, healthBtn, qrBtn, delBtn].forEach((b) =>
+    actions.appendChild(b)
+  );
 
   card.appendChild(header);
   card.appendChild(text);
@@ -210,4 +180,256 @@ export function createUrlCard(entry, callbacks, isSelected = false) {
   card.appendChild(actions);
 
   return card;
+}
+
+/**
+ * Creates a URL table row element (表格模式 — 高密度橫向行列).
+ * @param {object} entry - The URL entry data.
+ * @param {object} callbacks - Callback functions (same interface as createUrlCard).
+ * @param {boolean} [isSelected=false]
+ * @returns {HTMLTableRowElement}
+ */
+export function createUrlRow(entry, callbacks, isSelected = false) {
+  const {
+    id,
+    url,
+    label = '',
+    tags = [],
+    usageCount = 0,
+    isPinned = false,
+    healthStatus = null,
+  } = entry;
+
+  const tr = document.createElement('tr');
+  tr.className = 'url-table__row';
+  tr.dataset.urlId = id;
+  if (isSelected) tr.classList.add('url-table__row--selected');
+  if (isPinned) tr.classList.add('url-table__row--pinned');
+
+  // ── Col 1: Checkbox ──────────────────────────────────────
+  const tdCheck = document.createElement('td');
+  tdCheck.className = 'url-table__col-check';
+  const checkbox = document.createElement('input');
+  checkbox.type = 'checkbox';
+  checkbox.checked = isSelected;
+  checkbox.title = i18next.t('urlList.card.selectCard');
+  checkbox.setAttribute('aria-label', i18next.t('urlList.card.selectCard'));
+  checkbox.addEventListener('change', () => {
+    tr.classList.toggle('url-table__row--selected', checkbox.checked);
+    if (callbacks.onToggleSelect)
+      callbacks.onToggleSelect(id, checkbox.checked);
+  });
+  tdCheck.appendChild(checkbox);
+
+  // ── Col 2: Favicon ───────────────────────────────────────
+  const tdFav = document.createElement('td');
+  tdFav.className = 'url-table__col-favicon';
+  tdFav.appendChild(_createFaviconElement(url, 'url-table__favicon'));
+
+  // ── Col 3: Label ─────────────────────────────────────────
+  const tdLabel = document.createElement('td');
+  tdLabel.className = 'url-table__col-label';
+  const labelInput = document.createElement('input');
+  labelInput.type = 'text';
+  labelInput.className = 'url-table__label-input';
+  labelInput.value = label;
+  labelInput.placeholder = i18next.t('urlList.card.namePlaceholder');
+  labelInput.addEventListener('change', () => {
+    callbacks.onUpdate(id, 'label', labelInput.value);
+  });
+  tdLabel.appendChild(labelInput);
+
+  // ── Col 4: URL ───────────────────────────────────────────
+  const tdUrl = document.createElement('td');
+  tdUrl.className = 'url-table__col-url';
+  const urlCode = document.createElement('code');
+  urlCode.className = 'url-table__url-code';
+  urlCode.textContent = url;
+  urlCode.title = i18next.t('urlList.card.copyTooltip');
+  urlCode.addEventListener('click', () => {
+    navigator.clipboard.writeText(url).then(() => {
+      urlCode.classList.add('copied');
+      const original = urlCode.textContent;
+      urlCode.textContent = i18next.t('urlList.card.copied');
+      if (callbacks.onCopy) callbacks.onCopy(id);
+      setTimeout(() => {
+        urlCode.textContent = original;
+        urlCode.classList.remove('copied');
+      }, 1200);
+    });
+  });
+  tdUrl.appendChild(urlCode);
+
+  // ── Col 5: Tags ──────────────────────────────────────────
+  const tdTags = document.createElement('td');
+  tdTags.className = 'url-table__col-tags';
+  const tagsInput = document.createElement('input');
+  tagsInput.type = 'text';
+  tagsInput.className = 'url-table__tags-input';
+  tagsInput.value = tags.join(', ');
+  tagsInput.placeholder = i18next.t('urlList.card.tagsPlaceholder');
+  tagsInput.addEventListener('change', () => {
+    const newTags = tagsInput.value
+      .split(',')
+      .map((t) => t.trim())
+      .filter(Boolean);
+    callbacks.onUpdate(id, 'tags', newTags);
+  });
+  tdTags.appendChild(tagsInput);
+
+  // ── Col 6: Health ────────────────────────────────────────
+  const tdHealth = document.createElement('td');
+  tdHealth.className = 'url-table__col-health';
+  const healthEl = _buildHealthEl(healthStatus);
+  tdHealth.appendChild(healthEl);
+
+  // ── Col 7: Usage ─────────────────────────────────────────
+  const tdUsage = document.createElement('td');
+  tdUsage.className = 'url-table__col-usage';
+  if (usageCount > 0) {
+    const usageEl = document.createElement('span');
+    usageEl.className = 'url-table__usage';
+    usageEl.textContent = `🔥 ${usageCount}`;
+    usageEl.title = `${i18next.t('urlList.table.usage', { defaultValue: '使用次數' })}: ${usageCount}`;
+    tdUsage.appendChild(usageEl);
+  }
+
+  // ── Col 8: Actions ───────────────────────────────────────
+  const tdActions = document.createElement('td');
+  tdActions.className = 'url-table__col-actions';
+  const actionsDiv = document.createElement('div');
+  actionsDiv.className = 'url-table__actions';
+
+  const loadBtn = _makeRowBtn(
+    '↩',
+    'url-table__action-btn url-table__action-btn--load',
+    i18next.t('urlList.card.load'),
+    () => {
+      if (callbacks.onLoad) callbacks.onLoad(url, id);
+    }
+  );
+
+  const openBtn = _makeRowBtn(
+    '↗',
+    'url-table__action-btn',
+    i18next.t('urlList.card.open'),
+    () => {
+      if (callbacks.onOpen) callbacks.onOpen(url, id);
+    }
+  );
+
+  const healthBtn = _makeRowBtn(
+    '📡',
+    'url-table__action-btn',
+    i18next.t('healthCheck.btn'),
+    () => {
+      if (callbacks.onCheckHealth) callbacks.onCheckHealth(url, id);
+    }
+  );
+
+  const qrBtn = _makeRowBtn(
+    '⊡',
+    'url-table__action-btn',
+    i18next.t('qrcode.btn'),
+    () => {
+      if (callbacks.onQrCode) callbacks.onQrCode(url, label || url);
+    }
+  );
+
+  const delBtn = _makeRowBtn(
+    '✕',
+    'url-table__action-btn url-table__action-btn--delete',
+    i18next.t('urlList.card.delete'),
+    () => {
+      callbacks.onDelete(id);
+    }
+  );
+
+  [loadBtn, openBtn, healthBtn, qrBtn, delBtn].forEach((b) =>
+    actionsDiv.appendChild(b)
+  );
+  tdActions.appendChild(actionsDiv);
+
+  // ── Assemble row ─────────────────────────────────────────
+  [
+    tdCheck,
+    tdFav,
+    tdLabel,
+    tdUrl,
+    tdTags,
+    tdHealth,
+    tdUsage,
+    tdActions,
+  ].forEach((td) => tr.appendChild(td));
+
+  return tr;
+}
+
+// ── Internal helpers ──────────────────────────────────────────────────────────
+
+function _makeCardBtn(text, className, handler) {
+  const btn = document.createElement('button');
+  btn.textContent = text;
+  btn.className = className;
+  btn.addEventListener('click', handler);
+  return btn;
+}
+
+function _makeRowBtn(icon, className, title, handler) {
+  const btn = document.createElement('button');
+  btn.className = className;
+  btn.textContent = icon;
+  btn.title = title;
+  btn.setAttribute('aria-label', title);
+  btn.addEventListener('click', handler);
+  return btn;
+}
+
+function _applyHealthBadge(el, healthStatus) {
+  if (healthStatus === 'checking') {
+    el.className = 'url-card__health-badge health--checking';
+    el.textContent = i18next.t('healthCheck.checking');
+  } else if (healthStatus === 'online') {
+    el.className = 'url-card__health-badge health--online';
+    el.textContent = i18next.t('healthCheck.online');
+  } else if (healthStatus === 'offline') {
+    el.className = 'url-card__health-badge health--offline';
+    el.textContent = i18next.t('healthCheck.offline');
+  } else {
+    el.style.display = 'none';
+  }
+}
+
+function _buildHealthEl(healthStatus) {
+  const wrapper = document.createElement('span');
+
+  if (!healthStatus) return wrapper;
+
+  wrapper.className = `url-table__health url-table__health--${healthStatus}`;
+
+  const dot = document.createElement('span');
+  dot.className = 'url-table__health-dot';
+  wrapper.appendChild(dot);
+
+  const label = document.createElement('span');
+  if (healthStatus === 'online')
+    label.textContent = i18next.t('healthCheck.online');
+  if (healthStatus === 'offline')
+    label.textContent = i18next.t('healthCheck.offline');
+  if (healthStatus === 'checking')
+    label.textContent = i18next.t('healthCheck.checking');
+  wrapper.appendChild(label);
+
+  return wrapper;
+}
+
+/**
+ * Thin wrapper kept for local readability – delegates to the shared,
+ * offline-aware faviconService.
+ * @param {string} url       - Full URL of the site.
+ * @param {string} className - CSS class for the <img>.
+ * @returns {HTMLImageElement}
+ */
+function _createFaviconElement(url, className) {
+  return createFaviconImg(url, className);
 }

@@ -1,6 +1,5 @@
 export function initDarkMode() {
   const toggleBtn = document.getElementById('toggle-dark');
-  // 使用 documentElement (<html>) 來套用主題 class，這樣 CSS 權重更高、更穩定
   const htmlEl = document.documentElement;
 
   if (!toggleBtn) {
@@ -11,8 +10,14 @@ export function initDarkMode() {
   const applyTheme = (theme) => {
     if (theme === 'dark') {
       htmlEl.classList.add('dark');
+      htmlEl.classList.remove('light');
+      toggleBtn.textContent = '🌙';
+      toggleBtn.title = '切換為亮色主題';
     } else {
       htmlEl.classList.remove('dark');
+      htmlEl.classList.add('light');
+      toggleBtn.textContent = '☀️';
+      toggleBtn.title = '切換為深色主題';
     }
     // 將使用者的選擇儲存起來
     try {
@@ -33,6 +38,8 @@ export function initDarkMode() {
         applyTheme(savedTheme);
       } else if (prefersDark) {
         applyTheme('dark');
+      } else {
+        applyTheme('light');
       }
     } catch (e) {
       console.error('Failed to initialize theme', e);
@@ -40,7 +47,8 @@ export function initDarkMode() {
   };
 
   toggleBtn.addEventListener('click', () => {
-    const newTheme = htmlEl.classList.contains('dark') ? 'light' : 'dark';
+    const isDark = htmlEl.classList.contains('dark');
+    const newTheme = isDark ? 'light' : 'dark';
     applyTheme(newTheme);
   });
 

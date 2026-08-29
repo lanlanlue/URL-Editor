@@ -58,6 +58,14 @@
       "pin": "☆ Pin to top",
       "unpin": "⭐ Unpin"
     },
+    "table": {
+      "name": "Name",
+      "url": "URL",
+      "tags": "Tags",
+      "health": "Status",
+      "usage": "Usage",
+      "actions": "Actions"
+    },
     "exportCsvBtn": "📄 Export CSV",
     "importCsvBtn": "📥 Import CSV",
     "batch": {
@@ -68,7 +76,8 @@
       "addTag": "➕ Add Tag",
       "exportSelected": "💾 Export Selected",
       "deleteSelected": "🗑️ Delete Selected",
-      "checkHealth": "📡 Check Selected Connection"
+      "checkHealth": "📡 Check Selected Connection",
+      "liveTest": "🧪 Live Multi-Page Test"
     },
     "importError": "Error: Invalid JSON format for import.",
     "sort": {
@@ -180,6 +189,7 @@
     "closeBtn": "✕ Close"
   },
   "viewMode": {
+    "table": "≡ Table View",
     "cards": "📋 Card View",
     "grouped": "📁 Group by Domain",
     "expandAll": "📂 Expand All",
@@ -212,5 +222,47 @@
     "online": "🟢 Online",
     "offline": "🔴 Offline",
     "batchStarted": "🚀 Started health check for {{count}} URLs"
+  },
+  "liveTest": {
+    "title": "🧪 Live Web Test Workbench",
+    "subtitle": "Simultaneously load and preview multiple target URLs with live visual inspection & connectivity status",
+    "stats": {
+      "total": "Total {{count}} URLs",
+      "online": "🟢 {{count}} Online",
+      "offline": "🔴 {{count}} Offline",
+      "checking": "⏳ {{count}} Checking"
+    },
+    "filter": {
+      "all": "All ({{count}})",
+      "offline": "🔴 Broken Only ({{count}})",
+      "online": "🟢 Online Only ({{count}})"
+    },
+    "layout": {
+      "auto": "🔲 Auto Grid",
+      "cols1": "1 Col Stack",
+      "cols2": "2 Cols Split",
+      "cols3": "3 Cols Grid"
+    },
+    "device": {
+      "desktop": "🖥️ Desktop (100%)",
+      "tablet": "💻 Tablet (1024px)",
+      "mobile": "📱 Mobile (375px)"
+    },
+    "actions": {
+      "reloadAll": "🔄 Reload All",
+      "recheckHealth": "📡 Recheck Connectivity",
+      "reloadIframe": "Reload this frame",
+      "openNewTab": "Open in new tab",
+      "copyUrl": "Copy URL",
+      "close": "✕ Close (ESC)"
+    },
+    "status": {
+      "online": "🟢 Online (Reachable)",
+      "offline": "🔴 Offline (Unreachable)",
+      "checking": "⏳ Checking connectivity...",
+      "xframeWarn": "🔒 Target site blocks iframe embedding (X-Frame-Options), but network connection is OK. Click to open in a new tab.",
+      "offlineWarn": "⚠️ Unable to connect to this website! Please verify the URL format, network, or server status."
+    },
+    "emptySelection": "No URLs currently selected for live testing."
   }
 }

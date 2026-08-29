@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-TW">
 
 <head>
     <meta charset="UTF-8">
@@ -14,8 +14,19 @@
         content="accelerometer=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=()">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <!-- Google AdSense Code Start -->
-    <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-9603285949500141"
-        crossorigin="anonymous"></script>
+    <!-- Only load AdSense when the browser has internet access.
+         In offline / intranet environments the script is skipped silently
+         so it never delays or blocks the application. -->
+    <script>
+      if (navigator.onLine) {
+        var _ads = document.createElement('script');
+        _ads.async = true;
+        _ads.crossOrigin = 'anonymous';
+        _ads.onerror = function() { /* ignore – offline or ad-blocker */ };
+        _ads.src = 'https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-9603285949500141';
+        document.head.appendChild(_ads);
+      }
+    </script>
     <!-- Google AdSense Code End -->
     <title>URL Editor</title>
     <link rel="stylesheet" href="css/popup.css" />
@@ -25,123 +36,281 @@
 </head>
 
 <body>
-    <header>
-        <h1 data-i18n="header.title">URL 編輯工具</h1>
-        <div class="controls">
-            <select id="language-switcher" class="language-switcher">
-                <option value="en">English</option>
-                <option value="zh-TW">繁體中文</option>
-            </select>
-            <button id="toggle-dark" data-i18n="header.toggleTheme">🌙 切換主題</button>
+    <!-- ================================================
+         頂部導航列
+         ================================================ -->
+    <nav class="topnav">
+        <!-- 品牌 Logo -->
+        <div class="topnav-brand">
+            <span class="topnav-logo">URL Editor</span>
+            <span class="topnav-version">v2</span>
         </div>
-    </header>
 
-    <main>
-        <section id="url-editor">
-            <h2 data-i18n="editor.title">URL 編輯器</h2>
-            <div class="url-input">
-                <label for="url-main-input" data-i18n="editor.label">請輸入網址：</label>
-                <input type="text" id="url-main-input" data-i18n="[placeholder]editor.placeholder"
-                    placeholder="https://example.com/path?foo=bar" />
-                <button id="parse-btn" data-i18n="editor.parseBtn">解析網址</button>
-                <button id="editor-batch-import-btn" class="btn-secondary" data-i18n="batchImport.btn">📥 批次貼上匯入</button>
-                <p id="url-error" class="text-error hidden"></p>
-            </div>
+        <!-- 全域搜尋 -->
+        <div class="topnav-search">
+            <span class="topnav-search-icon">⌕</span>
+            <input
+                type="search"
+                id="search-url"
+                data-i18n="[placeholder]urlList.searchPlaceholder"
+                placeholder="搜尋 URL、名稱或標籤…"
+                autocomplete="off"
+            >
+            <kbd class="topnav-kbd">⌘K</kbd>
+        </div>
 
-            <div id="parsed-output" class="hidden mt-1">
-                <div class="form-group">
-                    <label for="domain" data-i18n="editor.domainLabel">Domain:</label>
-                    <input id="domain" placeholder="domain" />
-                    <!-- 快捷切換晶片區 -->
-                    <div class="chips-container mt-0-5">
-                        <span class="chips-label" data-i18n="chips.protocol">協定：</span>
-                        <button type="button" class="chip-btn" id="chip-protocol">http ↔ https</button>
-                        <span class="chips-label ml-0-5" data-i18n="chips.ports">Port：</span>
-                        <button type="button" class="chip-btn" data-port="3000">:3000</button>
-                        <button type="button" class="chip-btn" data-port="8080">:8080</button>
-                        <button type="button" class="chip-btn" data-port="5000">:5000</button>
-                        <span class="chips-label ml-0-5" data-i18n="chips.env">環境：</span>
-                        <button type="button" class="chip-btn" data-env="dev">dev</button>
-                        <button type="button" class="chip-btn" data-env="qa">qa</button>
-                        <button type="button" class="chip-btn" data-env="staging">staging</button>
-                        <button type="button" class="chip-btn" data-env="prod">prod</button>
+        <!-- 右側控制區 -->
+        <div class="topnav-controls">
+            <select id="ui-scale-select" class="scale-switcher" title="介面與字體大小">
+                <option value="compact">字體: 小 (90%)</option>
+                <option value="normal" selected>字體: 標準 (100%)</option>
+                <option value="medium">字體: 適中 (110%)</option>
+                <option value="large">字體: 放大 (120%)</option>
+                <option value="xlarge">字體: 特大 (130%)</option>
+            </select>
+            <select id="language-switcher" class="language-switcher">
+                <option value="en">EN</option>
+                <option value="zh-TW">中文</option>
+            </select>
+            <button id="toggle-dark" title="切換明暗主題" aria-label="切換明暗主題">
+                🌙
+            </button>
+        </div>
+    </nav>
+
+    <!-- ================================================
+         應用主體（側邊欄 + 寬度調節條 + 工作區）
+         ================================================ -->
+    <div class="app-body">
+
+        <!-- ============================================
+             左側：URL 編輯工作區
+             ============================================ -->
+        <aside class="sidebar">
+
+            <!-- § URL 編輯器 -->
+            <section id="url-editor" class="sidebar-section">
+                <div class="sidebar-section-header">
+                    <span class="sidebar-section-title" data-i18n="editor.title">URL 編輯器</span>
+                    <button class="sidebar-collapse-btn" data-target="editor-body" aria-label="折疊" title="折疊">▾</button>
+                </div>
+                <div class="sidebar-section-body" id="editor-body">
+
+                    <!-- URL 主輸入框 -->
+                    <div class="url-input">
+                        <label for="url-main-input" data-i18n="editor.label">請輸入網址</label>
+                        <input
+                            type="text"
+                            id="url-main-input"
+                            data-i18n="[placeholder]editor.placeholder"
+                            placeholder="https://api.example.com/v2/users?env=prod"
+                            autocomplete="off"
+                            spellcheck="false"
+                        />
+                        <div class="url-input-action-row">
+                            <button id="parse-btn" class="btn-primary" data-i18n="editor.parseBtn">解析網址</button>
+                        </div>
+                        <p id="url-error" class="text-error hidden"></p>
+                    </div>
+
+                    <!-- 解析結果表單 -->
+                    <div id="parsed-output" class="hidden mt-0-5">
+
+                        <!-- Domain & Path 欄位網格 -->
+                        <div class="editor-domain-path-grid">
+                            <div class="form-group">
+                                <label for="domain" data-i18n="editor.domainLabel">Domain</label>
+                                <input id="domain" placeholder="example.com" spellcheck="false" />
+                            </div>
+                            <div class="form-group">
+                                <label for="path" data-i18n="editor.pathLabel">Path</label>
+                                <input id="path" placeholder="/api/v2/resource" spellcheck="false" />
+                            </div>
+                        </div>
+
+                        <!-- 快捷切換晶片區 -->
+                        <div class="chips-container">
+                            <span class="chips-label" data-i18n="chips.protocol">協定</span>
+                            <button type="button" class="chip-btn" id="chip-protocol">http ↔ https</button>
+                            <span class="chips-label ml-0-5" data-i18n="chips.ports">Port</span>
+                            <button type="button" class="chip-btn" data-port="3000">:3000</button>
+                            <button type="button" class="chip-btn" data-port="8080">:8080</button>
+                            <button type="button" class="chip-btn" data-port="5000">:5000</button>
+                            <span class="chips-label ml-0-5" data-i18n="chips.env">環境</span>
+                            <button type="button" class="chip-btn" data-env="dev">dev</button>
+                            <button type="button" class="chip-btn" data-env="qa">qa</button>
+                            <button type="button" class="chip-btn" data-env="staging">staging</button>
+                            <button type="button" class="chip-btn chip-btn--accent" data-env="prod">prod</button>
+                        </div>
+
+                        <!-- 參數 Header Row -->
+                        <div class="params-header-row">
+                            <strong data-i18n="editor.paramsLabel">Query 參數</strong>
+                            <div class="presets-chip-bar">
+                                <span class="presets-title" data-i18n="presets.label">預設包</span>
+                                <div id="editor-preset-chips" class="preset-chips-list"></div>
+                                <button type="button" id="open-preset-manage-btn" class="chip-btn chip-btn--accent" data-i18n="presets.manageBtn">管理</button>
+                            </div>
+                        </div>
+
+                        <!-- 參數表頭 -->
+                        <div class="params-table-header">
+                            <span class="col-param-key">KEY 參數名稱</span>
+                            <span class="col-param-val">VALUE 參數值</span>
+                            <span class="col-param-act"></span>
+                        </div>
+
+                        <!-- 參數列表 -->
+                        <div id="params-container"></div>
+
+                        <!-- 編輯器操作按鈕 -->
+                        <div class="editor-actions">
+                            <button id="add-param-btn" class="btn-ghost" data-i18n="editor.addParamBtn">＋ 新增參數</button>
+                            <button id="rebuild-url-btn" data-i18n="editor.rebuildBtn">重新組合</button>
+                            <button id="save-url-btn" class="btn-primary" data-i18n="editor.saveBtn">儲存</button>
+                            <button id="editor-qrcode-btn" class="btn-ghost" data-i18n="qrcode.btn">QR Code</button>
+                        </div>
+
+                        <p id="param-warning" class="text-warning hidden mt-0-5"></p>
+
+                        <!-- 組合結果 URL -->
+                        <div class="rebuilt-url-row">
+                            <p class="rebuilt-url-label" data-i18n="editor.rebuiltUrlLabel">組合結果</p>
+                            <code id="rebuilt-url" role="button" tabindex="0" title="點擊複製"></code>
+                        </div>
+
+                        <!-- 重組歷史 -->
+                        <div class="rebuild-history-bar mt-0-5">
+                            <label for="rebuild-history-select" data-i18n="history.label">重組歷史</label>
+                            <select id="rebuild-history-select" class="history-select">
+                                <option value="" data-i18n="history.selectPlaceholder">-- 選擇歷史快速載入 --</option>
+                            </select>
+                        </div>
+
+                    </div><!-- /parsed-output -->
+                </div><!-- /editor-body -->
+            </section>
+
+            <!-- § 快速工具 -->
+            <section class="sidebar-section">
+                <div class="sidebar-section-header">
+                    <span class="sidebar-section-title">快速工具</span>
+                    <button class="sidebar-collapse-btn" data-target="tools-body" aria-label="折疊" title="折疊">▾</button>
+                </div>
+                <div class="sidebar-section-body" id="tools-body">
+                    <div class="tools-grid">
+                        <button id="open-batch-import-btn" class="sidebar-tool-btn" data-i18n="batchImport.btn">
+                            <span>📥</span> 批次匯入
+                        </button>
+                        <button id="open-maintenance-btn" class="sidebar-tool-btn" data-i18n="urlList.maintenanceBtn">
+                            <span>🛠️</span> 維護工具
+                        </button>
+                        <button id="open-tag-manager-btn" class="sidebar-tool-btn" data-i18n="tagManager.manageBtn">
+                            <span>🏷️</span> 管理標籤
+                        </button>
+                        <button id="export-json-btn" class="sidebar-tool-btn" data-i18n="urlList.exportBtn">
+                            <span>↑</span> 匯出 JSON
+                        </button>
+                        <button id="import-json-btn" class="sidebar-tool-btn" data-i18n="urlList.importBtn">
+                            <span>↓</span> 匯入 JSON
+                        </button>
+                        <button id="export-csv-btn" class="sidebar-tool-btn" data-i18n="urlList.exportCsvBtn">
+                            <span>↑</span> 匯出 CSV
+                        </button>
+                        <button id="import-csv-btn" class="sidebar-tool-btn" data-i18n="urlList.importCsvBtn">
+                            <span>↓</span> 匯入 CSV
+                        </button>
+                    </div>
+                    <input id="import-json-file" type="file" accept=".json" class="hidden">
+                    <input id="import-csv-file" type="file" accept=".csv" class="hidden">
+                </div>
+            </section>
+
+            <!-- § 使用統計 -->
+            <section class="sidebar-section">
+                <div class="sidebar-section-header">
+                    <span class="sidebar-section-title">統計摘要</span>
+                </div>
+                <div class="sidebar-section-body sidebar-stats" id="stats-body">
+                    <div class="stat-row">
+                        <span class="stat-label">已儲存</span>
+                        <span class="stat-value" id="stat-total">—</span>
+                    </div>
+                    <div class="stat-row">
+                        <span class="stat-label">已篩選</span>
+                        <span class="stat-value" id="stat-filtered">—</span>
+                    </div>
+                    <div class="stat-row">
+                        <span class="stat-label">已選取</span>
+                        <span class="stat-value" id="stat-selected">0</span>
                     </div>
                 </div>
-                <div class="form-group">
-                    <label for="path" data-i18n="editor.pathLabel">Path:</label>
-                    <input id="path" placeholder="/path" />
-                </div>
-                
-                <div class="params-header-row">
-                    <strong data-i18n="editor.paramsLabel">參數：</strong>
-                    <div class="presets-chip-bar">
-                        <span class="presets-title" data-i18n="presets.label">常用預設包：</span>
-                        <div id="editor-preset-chips" class="preset-chips-list"></div>
-                        <button type="button" id="open-preset-manage-btn" class="chip-btn chip-btn--accent" data-i18n="presets.manageBtn">⚙️ 管理參數包</button>
-                    </div>
-                </div>
-                <div id="params-container"></div>
-                <button id="add-param-btn" data-i18n="editor.addParamBtn">➕ 新增參數</button>
-                <button id="rebuild-url-btn" data-i18n="editor.rebuildBtn">重新組合 URL</button>
-                <button id="save-url-btn" data-i18n="editor.saveBtn">💾 儲存到清單</button>
-                <button id="editor-qrcode-btn" class="btn-secondary" data-i18n="qrcode.btn">📱 QR Code</button>
-                <p id="param-warning" class="text-warning hidden mt-0-5"></p>
-                <p>
-                    <strong data-i18n="editor.rebuiltUrlLabel">新網址：</strong>
-                    <code id="rebuilt-url" role="button" tabindex="0" title="Click or press Enter to copy"></code>
-                </p>
+            </section>
 
-                <!-- 重組歷史紀錄 -->
-                <div class="rebuild-history-bar mt-0-5">
-                    <label for="rebuild-history-select" data-i18n="history.label">🕒 最近重組歷史：</label>
-                    <select id="rebuild-history-select" class="history-select">
-                        <option value="" data-i18n="history.selectPlaceholder">-- 選擇歷史 URL 快速載入 --</option>
-                    </select>
-                </div>
-            </div>
+        </aside><!-- /sidebar -->
 
-        </section>
+        <!-- 左右可拖曳寬度調節條 -->
+        <div id="panel-resizer" class="panel-resizer" role="separator" aria-orientation="vertical" title="拖曳調整左右寬度"></div>
 
-        <section id="url-list">
-            <h2 data-i18n="urlList.title">URL 清單</h2>
-            <div class="tag-filters-header-row mb-0-5">
-                <div id="tag-filters">
-                    <!-- 標籤過濾按鈕將由 JS 動態生成於此 -->
-                </div>
-                <button id="open-tag-manager-btn" class="chip-btn chip-btn--accent" data-i18n="tagManager.manageBtn">🏷️ 管理標籤</button>
-            </div>
+        <!-- ============================================
+             右側：URL 儲存庫與數據工作區
+             ============================================ -->
+        <main id="url-list" class="workspace">
 
-            <div class="sort-search-bar">
-                <div class="sort-container">
-                    <label for="sort-select" data-i18n="urlList.sort.label">排序方式：</label>
-                    <select id="sort-select" class="sort-select">
-                        <option value="created" data-i18n="urlList.sort.created">🆕 建立時間（新→舊）</option>
-                        <option value="frequency" data-i18n="urlList.sort.frequency">🔥 使用頻率（高→低）</option>
-                        <option value="recent" data-i18n="urlList.sort.recent">🕒 最近使用</option>
-                        <option value="alpha" data-i18n="urlList.sort.alpha">🔤 名稱 A-Z</option>
-                    </select>
-                </div>
+            <!-- 工作區 Toolbar -->
+            <div class="workspace-toolbar">
+                <span class="workspace-title" data-i18n="urlList.title">URL 清單</span>
+                <span class="workspace-count-badge" id="workspace-count-badge">0 筆</span>
 
-                <!-- 視圖切換 (卡片 / Domain 分組) -->
-                <div class="view-mode-container">
+                <div class="workspace-toolbar-right">
+                    <!-- 視圖切換 -->
                     <div class="view-mode-toggle">
-                        <button id="view-mode-cards-btn" class="view-btn active" data-i18n="viewMode.cards">📋 卡片清單</button>
-                        <button id="view-mode-grouped-btn" class="view-btn" data-i18n="viewMode.grouped">📁 Domain 分組</button>
+                        <button id="view-mode-table-btn" class="view-btn active" title="表格檢視" data-i18n="viewMode.table">
+                            ≡ 表格
+                        </button>
+                        <button id="view-mode-cards-btn" class="view-btn" title="卡片檢視" data-i18n="viewMode.cards">
+                            ⊞ 卡片
+                        </button>
+                        <button id="view-mode-grouped-btn" class="view-btn" title="Domain 分組" data-i18n="viewMode.grouped">
+                            ⊟ 分組
+                        </button>
                     </div>
-                    <div id="accordion-controls" class="accordion-controls hidden">
-                        <button id="accordion-expand-all" class="chip-btn" data-i18n="viewMode.expandAll">📂 全部展開</button>
-                        <button id="accordion-collapse-all" class="chip-btn" data-i18n="viewMode.collapseAll">📁 全部收合</button>
-                    </div>
-                </div>
 
-                <div class="search-container">
-                    <label for="search-url" data-i18n="urlList.searchLabel">🔍 搜尋清單：</label>
-                    <input type="search" id="search-url" data-i18n="[placeholder]urlList.searchPlaceholder"
-                        placeholder="輸入關鍵字...">
+                    <!-- Domain 分組的展開/收合控制 -->
+                    <div id="accordion-controls" class="accordion-controls hidden">
+                        <button id="accordion-expand-all" class="chip-btn" data-i18n="viewMode.expandAll">全展開</button>
+                        <button id="accordion-collapse-all" class="chip-btn" data-i18n="viewMode.collapseAll">全收合</button>
+                    </div>
+
+                    <!-- 排序 -->
+                    <select id="sort-select" class="sort-select" title="排序方式">
+                        <option value="created" data-i18n="urlList.sort.created">建立時間</option>
+                        <option value="frequency" data-i18n="urlList.sort.frequency">使用頻率</option>
+                        <option value="recent" data-i18n="urlList.sort.recent">最近使用</option>
+                        <option value="alpha" data-i18n="urlList.sort.alpha">名稱 A–Z</option>
+                    </select>
                 </div>
             </div>
 
-            <!-- 批次勾選操作列 -->
+            <!-- 篩選列（標籤 + 搜尋） -->
+            <div class="filter-bar">
+                <span class="filter-bar__label">篩選</span>
+
+                <!-- 標籤過濾按鈕（JS 動態生成）-->
+                <div class="filter-bar__chips">
+                    <div id="tag-filters" style="display:contents"></div>
+                    <button id="open-tag-manager-btn-filter" class="tag-filter-chip" style="display:none">🏷️ 管理</button>
+                </div>
+
+                <div class="filter-bar__divider"></div>
+
+                <!-- 搜尋（此處與 topnav 的 search-url 共用同一 input） -->
+                <div class="filter-bar__tag-actions">
+                    <button id="open-tag-manager-btn-2" class="chip-btn chip-btn--accent" data-i18n="tagManager.manageBtn" style="display:none">🏷️ 管理標籤</button>
+                </div>
+            </div>
+
+            <!-- 批次操作列（有選取時顯示） -->
             <div id="batch-action-bar" class="batch-action-bar hidden">
                 <div class="batch-action-info">
                     <label class="batch-select-all-label">
@@ -151,48 +320,50 @@
                     <span id="batch-selected-count-badge" class="batch-count-badge">已選取 0 項</span>
                 </div>
                 <div class="batch-action-buttons">
-                    <button id="batch-check-health-btn" class="batch-btn" data-i18n="urlList.batch.checkHealth">📡 檢查連線狀態</button>
+                    <button id="batch-live-test-btn" class="batch-btn batch-btn--accent" data-i18n="urlList.batch.liveTest">🧪 即時多頁測試</button>
+                    <button id="batch-check-health-btn" class="batch-btn" data-i18n="urlList.batch.checkHealth">📡 連線檢查</button>
                     <button id="batch-replace-domain-btn" class="batch-btn" data-i18n="urlList.batch.replaceDomain">替換網域</button>
-                    <button id="batch-add-tag-btn" class="batch-btn" data-i18n="urlList.batch.addTag">➕ 新增標籤</button>
-                    <button id="batch-export-btn" class="batch-btn" data-i18n="urlList.batch.exportSelected">💾 匯出所選</button>
-                    <button id="batch-delete-btn" class="batch-btn batch-btn--delete" data-i18n="urlList.batch.deleteSelected">🗑️ 刪除所選</button>
+                    <button id="batch-add-tag-btn" class="batch-btn" data-i18n="urlList.batch.addTag">＋ 新增標籤</button>
+                    <button id="batch-export-btn" class="batch-btn" data-i18n="urlList.batch.exportSelected">↑ 匯出所選</button>
+                    <button id="batch-delete-btn" class="batch-btn batch-btn--delete" data-i18n="urlList.batch.deleteSelected">刪除所選</button>
                 </div>
             </div>
 
-            <div id="url-cards-container"></div>
-            <p id="empty-list-message" class="hidden" data-i18n="urlList.emptyMessage">這裡沒有符合條件的 URL。</p>
-            <!-- URL 卡片列表底部操作按鈕 -->
-            <div class="url-list-actions">
-                <button id="open-batch-import-btn" class="btn-highlight" data-i18n="batchImport.btn">📥 批次貼上匯入</button>
-                <button id="open-maintenance-btn" class="btn-highlight" data-i18n="urlList.maintenanceBtn">🛠️ 批次維護工具</button>
-                <button id="export-json-btn" data-i18n="urlList.exportBtn">匯出 URL JSON</button>
-                <input id="import-json-file" type="file" accept=".json" class="hidden">
-                <button id="import-json-btn" data-i18n="urlList.importBtn">匯入 URL JSON</button>
-                <button id="export-csv-btn" class="btn-secondary" data-i18n="urlList.exportCsvBtn">📄 匯出 CSV</button>
-                <input id="import-csv-file" type="file" accept=".csv" class="hidden">
-                <button id="import-csv-btn" class="btn-secondary" data-i18n="urlList.importCsvBtn">📥 匯入 CSV</button>
+            <!-- 主要內容區 -->
+            <div class="workspace-content">
+                <!-- URL 卡片 / 表格列表（JS 動態渲染） -->
+                <div id="url-cards-container" class="view--table"></div>
+
+                <!-- 空狀態 -->
+                <p id="empty-list-message" class="hidden" data-i18n="urlList.emptyMessage">
+                    這裡沒有符合條件的 URL。
+                </p>
             </div>
-        </section>
 
-    </main>
+        </main><!-- /workspace -->
 
-    <!-- 批次維護工具 Dialog Modal -->
+    </div><!-- /app-body -->
+
+
+    <!-- ================================================
+         批次維護工具 Dialog
+         ================================================ -->
     <dialog id="maintenance-modal" class="maintenance-modal">
         <div class="modal-header">
-            <h3 data-i18n="maintenance.title">🛠️ URL 批次維護工具</h3>
-            <button id="modal-close-btn" class="modal-close-btn" aria-label="Close" data-i18n="maintenance.closeBtn">✕</button>
+            <h3 data-i18n="maintenance.title">URL 批次維護工具</h3>
+            <button id="modal-close-btn" class="modal-close-btn" aria-label="關閉">✕</button>
         </div>
 
         <div class="modal-tabs">
-            <button id="tab-btn-domain" class="tab-btn active" data-i18n="maintenance.tabs.domain">🌐 批次替換 Domain</button>
-            <button id="tab-btn-find" class="tab-btn" data-i18n="maintenance.tabs.findReplace">🔍 搜尋與取代</button>
-            <button id="tab-btn-cleanup" class="tab-btn" data-i18n="maintenance.tabs.cleanup">🧹 資料整理與清理</button>
+            <button id="tab-btn-domain" class="tab-btn active" data-i18n="maintenance.tabs.domain">批次替換 Domain</button>
+            <button id="tab-btn-find" class="tab-btn" data-i18n="maintenance.tabs.findReplace">搜尋與取代</button>
+            <button id="tab-btn-cleanup" class="tab-btn" data-i18n="maintenance.tabs.cleanup">資料整理</button>
         </div>
 
         <div class="modal-body">
-            <!-- 作用範圍選擇 -->
+            <!-- 作用範圍 -->
             <div class="modal-scope-section">
-                <label class="modal-scope-title" data-i18n="maintenance.scope.label">作用範圍：</label>
+                <label class="modal-scope-title" data-i18n="maintenance.scope.label">作用範圍</label>
                 <div class="scope-options">
                     <label class="radio-label">
                         <input type="radio" name="modal-scope" id="modal-scope-all" value="all" checked>
@@ -200,45 +371,45 @@
                     </label>
                     <label class="radio-label">
                         <input type="radio" name="modal-scope" id="modal-scope-filtered" value="filtered">
-                        <span id="modal-scope-filtered-label">目前篩選出的 URL</span>
+                        <span id="modal-scope-filtered-label">目前篩選結果</span>
                     </label>
                     <label class="radio-label">
                         <input type="radio" name="modal-scope" id="modal-scope-selected" value="selected">
-                        <span id="modal-scope-selected-label">已勾選的 URL</span>
+                        <span id="modal-scope-selected-label">已勾選項目</span>
                     </label>
                 </div>
             </div>
 
-            <!-- 分頁 1: 批次替換 Domain -->
+            <!-- Tab 1：批次替換 Domain -->
             <div id="tab-panel-domain" class="tab-panel">
-                <p class="panel-desc" data-i18n="maintenance.domain.desc">快速將儲存清單中舊的測試或生產 Domain / Host 一鍵替換為新 Domain。</p>
+                <p class="panel-desc" data-i18n="maintenance.domain.desc">將清單中的舊 Domain / Host 一鍵替換為新 Domain。</p>
                 <div class="form-group">
-                    <label for="modal-existing-domains" data-i18n="maintenance.domain.selectOldDomain">選擇現存的 Domain：</label>
+                    <label for="modal-existing-domains" data-i18n="maintenance.domain.selectOldDomain">選擇現存的 Domain</label>
                     <select id="modal-existing-domains" class="modal-select"></select>
                 </div>
                 <div class="form-group">
-                    <label for="modal-old-domain" data-i18n="editor.domainLabel">舊 Domain / Host：</label>
+                    <label for="modal-old-domain" data-i18n="editor.domainLabel">舊 Domain / Host</label>
                     <input type="text" id="modal-old-domain" data-i18n="[placeholder]maintenance.domain.oldDomainPlaceholder" placeholder="例如：api.dev.example.com">
                 </div>
                 <div class="form-group">
-                    <label for="modal-new-domain" data-i18n="maintenance.domain.newDomainLabel">新 Domain / Host：</label>
-                    <input type="text" id="modal-new-domain" data-i18n="[placeholder]maintenance.domain.newDomainPlaceholder" placeholder="例如：api.qa.example.com 或 https://new.domain.com:8080">
+                    <label for="modal-new-domain" data-i18n="maintenance.domain.newDomainLabel">新 Domain / Host</label>
+                    <input type="text" id="modal-new-domain" data-i18n="[placeholder]maintenance.domain.newDomainPlaceholder" placeholder="例如：api.qa.example.com">
                 </div>
             </div>
 
-            <!-- 分頁 2: 搜尋與取代 -->
+            <!-- Tab 2：搜尋與取代 -->
             <div id="tab-panel-find" class="tab-panel hidden">
-                <p class="panel-desc" data-i18n="maintenance.findReplace.desc">在所有 URL 或名稱標籤中搜尋指定字串並進行批次替換。</p>
+                <p class="panel-desc" data-i18n="maintenance.findReplace.desc">在所有 URL 或名稱標籤中搜尋字串並批次替換。</p>
                 <div class="form-group">
-                    <label for="modal-find-text" data-i18n="maintenance.findReplace.findLabel">搜尋目標字串：</label>
+                    <label for="modal-find-text" data-i18n="maintenance.findReplace.findLabel">搜尋目標字串</label>
                     <input type="text" id="modal-find-text" data-i18n="[placeholder]maintenance.findReplace.findPlaceholder" placeholder="例如：/v1/ 或 env=dev">
                 </div>
                 <div class="form-group">
-                    <label for="modal-replace-text" data-i18n="maintenance.findReplace.replaceLabel">替換為：</label>
+                    <label for="modal-replace-text" data-i18n="maintenance.findReplace.replaceLabel">替換為</label>
                     <input type="text" id="modal-replace-text" data-i18n="[placeholder]maintenance.findReplace.replacePlaceholder" placeholder="例如：/v2/ 或 env=qa">
                 </div>
                 <div class="form-group">
-                    <label for="modal-target-field-select" data-i18n="maintenance.findReplace.targetField">替換欄位：</label>
+                    <label for="modal-target-field-select" data-i18n="maintenance.findReplace.targetField">替換欄位</label>
                     <select id="modal-target-field-select" class="modal-select">
                         <option value="all" data-i18n="maintenance.findReplace.fieldAll">全部（URL 與名稱）</option>
                         <option value="url" data-i18n="maintenance.findReplace.fieldUrl">僅限 URL 網址</option>
@@ -248,69 +419,77 @@
                 <div class="form-group-checkbox">
                     <label>
                         <input type="checkbox" id="modal-match-case">
-                        <span data-i18n="maintenance.findReplace.matchCase">區分大小寫 (Match Case)</span>
+                        <span data-i18n="maintenance.findReplace.matchCase">區分大小寫</span>
                     </label>
                 </div>
             </div>
 
-            <!-- 分頁 3: 資料整理與清理 -->
+            <!-- Tab 3：資料整理 -->
             <div id="tab-panel-cleanup" class="tab-panel hidden">
-                <p class="panel-desc" data-i18n="maintenance.cleanup.desc">檢查重複的 URL 並進行清理與優化。</p>
+                <p class="panel-desc" data-i18n="maintenance.cleanup.desc">檢查重複 URL 並進行清理優化。</p>
                 <div class="cleanup-card">
                     <h4 data-i18n="maintenance.cleanup.duplicateTitle">重複 URL 檢測</h4>
                     <p id="modal-duplicates-msg"></p>
                     <ul id="modal-duplicates-list" class="duplicates-list"></ul>
-                    <button id="modal-cleanup-btn" class="btn-warning" data-i18n="maintenance.cleanup.removeDuplicatesBtn">🧹 一鍵清理重複項目 (保留最新一筆)</button>
+                    <button id="modal-cleanup-btn" class="btn-warning" data-i18n="maintenance.cleanup.removeDuplicatesBtn">一鍵清理重複項目（保留最新）</button>
                 </div>
             </div>
 
-            <!-- 即時預覽區塊 -->
+            <!-- 即時預覽 -->
             <div id="modal-preview-section" class="modal-preview-section">
                 <h4 id="modal-preview-count" data-i18n="maintenance.preview.title">即時預覽</h4>
-                <div id="modal-preview-list" class="modal-preview-list">
-                    <!-- 動態生成 Diff 預覽 -->
-                </div>
+                <div id="modal-preview-list" class="modal-preview-list"></div>
             </div>
         </div>
 
         <div class="modal-footer">
-            <button id="modal-cancel-btn" class="btn-secondary" data-i18n="maintenance.closeBtn">關閉</button>
-            <button id="modal-apply-btn" class="btn-primary" data-i18n="maintenance.applyBtn">🚀 確認套用更新</button>
+            <button id="modal-cancel-btn" class="btn-ghost" data-i18n="maintenance.closeBtn">關閉</button>
+            <button id="modal-apply-btn" class="btn-primary" data-i18n="maintenance.applyBtn">確認套用</button>
         </div>
     </dialog>
 
-    <!-- 批次貼上匯入 Dialog Modal -->
+    <!-- ================================================
+         批次貼上匯入 Dialog
+         ================================================ -->
     <dialog id="batch-import-modal" class="maintenance-modal batch-import-modal">
         <div class="modal-header">
-            <h3 data-i18n="batchImport.title">📥 快速批次貼上匯入 URL</h3>
-            <button id="batch-import-close-btn" class="modal-close-btn" aria-label="Close" data-i18n="batchImport.closeBtn">✕</button>
+            <h3 data-i18n="batchImport.title">批次貼上匯入 URL</h3>
+            <button id="batch-import-close-btn" class="modal-close-btn" aria-label="關閉">✕</button>
         </div>
 
         <div class="modal-body">
-            <p class="panel-desc" data-i18n="batchImport.desc">支援一次貼上多組 URL、Markdown 連結 [名稱](網址)、CSV 或包含網址的文字內容。系統將自動分析並帶上建議名稱與標籤。</p>
+            <p class="panel-desc" data-i18n="batchImport.desc">
+                支援一次貼上多組 URL、Markdown 連結 <code>[名稱](網址)</code>、CSV 或包含網址的文字。系統將自動分析並帶上建議名稱與標籤。
+            </p>
 
             <div class="form-group">
-                <textarea id="batch-import-textarea" class="batch-import-textarea" rows="6" data-i18n="[placeholder]batchImport.textareaPlaceholder" placeholder="在此貼上 URL 清單..."></textarea>
+                <textarea
+                    id="batch-import-textarea"
+                    class="batch-import-textarea"
+                    rows="6"
+                    data-i18n="[placeholder]batchImport.textareaPlaceholder"
+                    placeholder="在此貼上 URL 清單…"
+                ></textarea>
             </div>
 
             <div class="modal-scope-section">
-                <label class="modal-scope-title" data-i18n="batchImport.optionsTitle">匯入選項：</label>
+                <label class="modal-scope-title" data-i18n="batchImport.optionsTitle">匯入選項</label>
                 <div class="batch-options-grid">
                     <label class="form-group-checkbox">
                         <input type="checkbox" id="batch-import-autoname" checked>
-                        <span data-i18n="batchImport.autoName">✨ 自動產生建議名稱</span>
+                        <span data-i18n="batchImport.autoName">自動產生建議名稱</span>
                     </label>
                     <label class="form-group-checkbox">
                         <input type="checkbox" id="batch-import-autotag" checked>
-                        <span data-i18n="batchImport.autoTag">🏷️ 自動產生建議分類與環境標籤</span>
+                        <span data-i18n="batchImport.autoTag">自動產生建議分類與環境標籤</span>
                     </label>
                     <label class="form-group-checkbox">
                         <input type="checkbox" id="batch-import-skip-existing" checked>
-                        <span data-i18n="batchImport.skipExisting">🚫 跳過已存在的重複 URL</span>
+                        <span data-i18n="batchImport.skipExisting">跳過已存在的重複 URL</span>
                     </label>
                 </div>
                 <div class="form-group mt-0-5">
-                    <label for="batch-import-commontag" data-i18n="batchImport.commonTagLabel">➕ 附加通用標籤 (可選)：</label>
+                    <label for="batch-import-commontag" data-i18n="batchImport.commonTagLabel">附加通用標籤（可選）</label>
                     <input type="text" id="batch-import-commontag" data-i18n="[placeholder]batchImport.commonTagPlaceholder" placeholder="例如：2026-q3-test">
                 </div>
             </div>
@@ -318,25 +497,25 @@
             <div class="modal-preview-section">
                 <div class="preview-header-bar">
                     <h4 id="batch-import-count-badge" data-i18n="batchImport.previewTitle">已辨識項目</h4>
-                    <span class="preview-hint" data-i18n="batchImport.previewSubtitle">您可以在匯入前直接修改名稱與標籤，或取消勾選不需匯入的項目：</span>
+                    <span class="preview-hint" data-i18n="batchImport.previewSubtitle">可在匯入前修改名稱、標籤或取消勾選</span>
                 </div>
-                <div id="batch-import-preview-container" class="batch-import-preview-container">
-                    <!-- 動態生成解析項目列表 -->
-                </div>
+                <div id="batch-import-preview-container" class="batch-import-preview-container"></div>
             </div>
         </div>
 
         <div class="modal-footer">
-            <button id="batch-import-cancel-btn" class="btn-secondary" data-i18n="batchImport.closeBtn">關閉</button>
-            <button id="batch-import-submit-btn" class="btn-primary" data-i18n="batchImport.importBtn">📥 確認匯入</button>
+            <button id="batch-import-cancel-btn" class="btn-ghost" data-i18n="batchImport.closeBtn">關閉</button>
+            <button id="batch-import-submit-btn" class="btn-primary" data-i18n="batchImport.importBtn">確認匯入</button>
         </div>
     </dialog>
 
-    <!-- QR Code Dialog Modal -->
+    <!-- ================================================
+         QR Code Dialog
+         ================================================ -->
     <dialog id="qrcode-modal" class="maintenance-modal qrcode-modal">
         <div class="modal-header">
-            <h3 id="qrcode-title" data-i18n="qrcode.title">📱 行動裝置掃描測試 QR Code</h3>
-            <button id="qrcode-close-btn" class="modal-close-btn" aria-label="Close" data-i18n="qrcode.closeBtn">✕</button>
+            <h3 id="qrcode-title" data-i18n="qrcode.title">行動裝置掃描 QR Code</h3>
+            <button id="qrcode-close-btn" class="modal-close-btn" aria-label="關閉">✕</button>
         </div>
         <div class="modal-body qrcode-modal-body">
             <div class="qrcode-canvas-wrapper">
@@ -345,43 +524,99 @@
             <code id="qrcode-text-code" class="qrcode-url-code"></code>
         </div>
         <div class="modal-footer">
-            <button id="qrcode-copy-btn" class="btn-primary" data-i18n="qrcode.copyBtn">📋 複製 URL</button>
+            <button id="qrcode-copy-btn" class="btn-primary" data-i18n="qrcode.copyBtn">複製 URL</button>
         </div>
     </dialog>
 
-    <!-- 常用參數預設包管理 Dialog Modal -->
+    <!-- ================================================
+         常用參數預設包管理 Dialog
+         ================================================ -->
     <dialog id="preset-modal" class="maintenance-modal preset-modal">
         <div class="modal-header">
-            <h3 data-i18n="presets.title">⚙️ 常用參數預設包管理</h3>
-            <button id="preset-close-btn" class="modal-close-btn" aria-label="Close" data-i18n="batchImport.closeBtn">✕</button>
+            <h3 data-i18n="presets.title">參數預設包管理</h3>
+            <button id="preset-close-btn" class="modal-close-btn" aria-label="關閉">✕</button>
         </div>
         <div class="modal-body">
-            <div id="preset-list-container" class="preset-list-container mb-1">
-                <!-- 動態生成現有參數預設包 -->
-            </div>
-
+            <div id="preset-list-container" class="preset-list-container mb-1"></div>
             <div class="cleanup-card">
-                <h4 data-i18n="presets.addTitle">➕ 新增自訂參數包：</h4>
+                <h4 data-i18n="presets.addTitle">新增自訂參數包</h4>
                 <div class="form-group">
-                    <input type="text" id="preset-new-name" data-i18n="[placeholder]presets.namePlaceholder" placeholder="預設包名稱 (例如：QA 測試包)">
+                    <input type="text" id="preset-new-name" data-i18n="[placeholder]presets.namePlaceholder" placeholder="預設包名稱（例如：QA 測試組）">
                 </div>
                 <div class="form-group">
-                    <input type="text" id="preset-new-params" data-i18n="[placeholder]presets.paramsPlaceholder" placeholder="參數組合 (例如：env=qa&debug=true)">
+                    <input type="text" id="preset-new-params" data-i18n="[placeholder]presets.paramsPlaceholder" placeholder="參數組合（例如：env=qa&debug=true）">
                 </div>
-                <button id="preset-add-btn" class="btn-primary" data-i18n="presets.addSubmitBtn">➕ 儲存為預設包</button>
+                <button id="preset-add-btn" class="btn-primary" data-i18n="presets.addSubmitBtn">儲存為預設包</button>
             </div>
         </div>
     </dialog>
 
-    <!-- 標籤集中管理 Dialog Modal -->
+    <!-- ================================================
+         標籤集中管理 Dialog
+         ================================================ -->
     <dialog id="tag-manager-modal" class="maintenance-modal preset-modal">
         <div class="modal-header">
-            <h3 data-i18n="tagManager.title">🏷️ 標籤集中管理</h3>
-            <button id="tag-manager-close-btn" class="modal-close-btn" aria-label="Close" data-i18n="batchImport.closeBtn">✕</button>
+            <h3 data-i18n="tagManager.title">標籤集中管理</h3>
+            <button id="tag-manager-close-btn" class="modal-close-btn" aria-label="關閉">✕</button>
         </div>
         <div class="modal-body">
-            <div id="tag-manager-list-container" class="preset-list-container mb-1">
-                <!-- 動態生成現有標籤與包含筆數 -->
+            <div id="tag-manager-list-container" class="preset-list-container mb-1"></div>
+        </div>
+    </dialog>
+
+    <!-- ================================================
+         網站多頁面即時測試與預覽 Dialog
+         ================================================ -->
+    <dialog id="live-test-modal" class="live-test-modal">
+        <div class="live-test-header">
+            <div class="live-test-header__top">
+                <div class="live-test-title-group">
+                    <h3 class="live-test-title" data-i18n="liveTest.title">🧪 網站多頁面即時測試與預覽工作台</h3>
+                    <span class="live-test-subtitle" data-i18n="liveTest.subtitle">同時載入多個目標網址進行可視化比對與連線狀況檢測</span>
+                </div>
+                <div class="live-test-stats-bar">
+                    <span id="live-stat-total" class="live-stat-pill">共 0 個網址</span>
+                    <span id="live-stat-online" class="live-stat-pill live-stat-pill--online">🟢 0 正常</span>
+                    <span id="live-stat-offline" class="live-stat-pill live-stat-pill--offline">🔴 0 異常</span>
+                    <button id="live-test-close-btn" class="modal-close-btn" aria-label="關閉" data-i18n="[title]liveTest.actions.close">✕</button>
+                </div>
+            </div>
+            <div class="live-test-controls">
+                <!-- 篩選模式 -->
+                <div class="live-test-filters">
+                    <button id="live-filter-all" class="live-ctrl-btn active" data-filter="all" data-i18n="liveTest.filter.all">全部</button>
+                    <button id="live-filter-offline" class="live-ctrl-btn live-ctrl-btn--danger" data-filter="offline" data-i18n="liveTest.filter.offline">🔴 僅顯示異常</button>
+                    <button id="live-filter-online" class="live-ctrl-btn" data-filter="online" data-i18n="liveTest.filter.online">🟢 僅顯示正常</button>
+                </div>
+
+                <!-- 欄數與裝置配置 -->
+                <div class="live-test-layout-btns">
+                    <select id="live-device-select" class="live-ctrl-select" title="裝置預覽寬度">
+                        <option value="desktop" data-i18n="liveTest.device.desktop">🖥️ 桌面 (100%)</option>
+                        <option value="tablet" data-i18n="liveTest.device.tablet">💻 平板 (1024px)</option>
+                        <option value="mobile" data-i18n="liveTest.device.mobile">📱 手機 (375px)</option>
+                    </select>
+
+                    <div class="live-test-divider"></div>
+
+                    <button id="live-grid-auto" class="live-ctrl-btn active" data-cols="auto" title="自適應網格" data-i18n="liveTest.layout.auto">🔲 自適應</button>
+                    <button id="live-grid-cols2" class="live-ctrl-btn" data-cols="2" title="2 欄並列" data-i18n="liveTest.layout.cols2">2 欄</button>
+                    <button id="live-grid-cols3" class="live-ctrl-btn" data-cols="3" title="3 欄並列" data-i18n="liveTest.layout.cols3">3 欄</button>
+                    <button id="live-grid-cols1" class="live-ctrl-btn" data-cols="1" title="1 欄堆疊" data-i18n="liveTest.layout.cols1">1 欄</button>
+                </div>
+
+                <!-- 動作按鈕 -->
+                <div class="live-test-actions-group">
+                    <button id="live-reload-all-btn" class="live-ctrl-btn" data-i18n="liveTest.actions.reloadAll">🔄 全部重載</button>
+                    <button id="live-recheck-health-btn" class="live-ctrl-btn" data-i18n="liveTest.actions.recheckHealth">📡 重新檢測連線</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="live-test-body">
+            <div id="live-test-grid" class="live-test-grid live-grid--auto"></div>
+            <div id="live-test-empty-msg" class="live-test-empty hidden" data-i18n="liveTest.emptySelection">
+                目前未選取任何 URL 進行測試。
             </div>
         </div>
     </dialog>

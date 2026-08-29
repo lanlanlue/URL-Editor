@@ -1,5 +1,5 @@
 import { fireEvent, getByText } from '@testing-library/dom';
-import { createUrlCard } from './urlCard';
+import { createUrlCard, createUrlRow } from './urlCard';
 
 // 模擬 i18next，因為 createUrlCard 依賴它來取得翻譯文字
 jest.mock('../../core/i18n', () => ({
@@ -159,5 +159,68 @@ describe('ui/urlCard', () => {
       'https://gemini.google.com',
       'test-uuid-123'
     );
+  });
+
+  // ── Table Row Mode Tests ──
+  test('should render table row with correct columns and data', () => {
+    const row = createUrlRow(sampleEntry, mockCallbacks);
+
+    expect(row.tagName).toBe('TR');
+    expect(row.classList.contains('url-table__row')).toBe(true);
+    expect(row.querySelector('.url-table__label-input').value).toBe('Gemini');
+    expect(row.querySelector('.url-table__url-code').textContent).toBe(
+      'https://gemini.google.com'
+    );
+    expect(row.querySelector('.url-table__tags-input').value).toBe(
+      'ai, google'
+    );
+  });
+
+  test('should toggle table row selection on checkbox change', () => {
+    const row = createUrlRow(sampleEntry, mockCallbacks, false);
+    document.body.appendChild(row);
+    const checkbox = row.querySelector('.url-table__col-check input');
+
+    expect(checkbox.checked).toBe(false);
+    expect(row.classList.contains('url-table__row--selected')).toBe(false);
+
+    fireEvent.click(checkbox);
+
+    expect(checkbox.checked).toBe(true);
+    expect(row.classList.contains('url-table__row--selected')).toBe(true);
+    expect(mockCallbacks.onToggleSelect).toHaveBeenCalledWith(
+      'test-uuid-123',
+      true
+    );
+
+    document.body.removeChild(row);
+  });
+
+  test('should trigger onUpdate when editing label in table row', () => {
+    const row = createUrlRow(sampleEntry, mockCallbacks);
+    const labelInput = row.querySelector('.url-table__label-input');
+
+    fireEvent.change(labelInput, { target: { value: 'Gemini Advanced' } });
+
+    expect(mockCallbacks.onUpdate).toHaveBeenCalledWith(
+      'test-uuid-123',
+      'label',
+      'Gemini Advanced'
+    );
+  });
+
+  test('should render usage badge when usageCount > 0 in table row', () => {
+    const row = createUrlRow({ ...sampleEntry, usageCount: 7 }, mockCallbacks);
+    const usageEl = row.querySelector('.url-table__usage');
+
+    expect(usageEl).not.toBeNull();
+    expect(usageEl.textContent).toBe('🔥 7');
+  });
+
+  test('should not render usage badge when usageCount is 0 in table row', () => {
+    const row = createUrlRow({ ...sampleEntry, usageCount: 0 }, mockCallbacks);
+    const usageEl = row.querySelector('.url-table__usage');
+
+    expect(usageEl).toBeNull();
   });
 });

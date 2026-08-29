@@ -1,0 +1,510 @@
+/* ==========================================================================
+   Table — URL 資料表格模式
+   高密度橫向行列，取代傳統卡片網格
+   ========================================================================== */
+
+/* ——————————————————————
+   Table Wrapper
+   —————————————————————— */
+.url-table-wrapper {
+  width: 100%;
+  overflow-x: auto;
+}
+
+/* ——————————————————————
+   Table Container
+   —————————————————————— */
+.url-table {
+  width: 100%;
+  border-collapse: collapse;
+  border-spacing: 0;
+  table-layout: fixed;
+}
+
+/* ——————————————————————
+   Table Header
+   —————————————————————— */
+.url-table__head {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: var(--bg);
+}
+
+.url-table__head th {
+  font-size: 0.68rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  padding: 0 0.75rem 0.5rem;
+  text-align: left;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg);
+}
+
+.url-table__head th:first-child {
+  padding-left: 0;
+  width: 32px;
+}
+
+/* Column widths */
+.col-favicon, .url-table__col-favicon { width: 28px; }
+.col-label, .url-table__col-label     { width: 20%; min-width: 120px; }
+.col-url, .url-table__col-url         { width: auto; min-width: 180px; }
+.col-tags, .url-table__col-tags       { width: 14%; min-width: 90px; }
+.col-health, .url-table__col-health   { width: 68px; }
+.col-usage, .url-table__col-usage     { width: 72px; min-width: 68px; }
+.col-actions, .url-table__col-actions { width: 160px; min-width: 160px; }
+
+.url-table__head th.col-health,
+.url-table__head th.url-table__col-health {
+  text-align: center;
+}
+
+.url-table__head th.col-usage,
+.url-table__head th.url-table__col-usage {
+  text-align: center;
+}
+
+.url-table__head th.col-actions,
+.url-table__head th.url-table__col-actions {
+  text-align: right;
+  padding-right: 0.75rem;
+}
+
+/* ——————————————————————
+   Table Rows
+   —————————————————————— */
+.url-table__row {
+  border-bottom: 1px solid var(--border);
+  transition: background 0.08s;
+  position: relative;
+}
+
+.url-table__row:hover {
+  background: var(--surface);
+}
+
+.url-table__row--selected {
+  background: var(--accent-subtle);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.url-table__row--selected:hover {
+  background: rgba(16, 185, 129, 0.1);
+}
+
+.url-table__row--pinned .url-table__col-label::after {
+  content: '⭐';
+  font-size: 0.65rem;
+  margin-left: 4px;
+  opacity: 0.7;
+}
+
+.url-table__row td {
+  padding: 0.45rem 0.75rem;
+  vertical-align: middle;
+  font-size: 0.8rem;
+}
+
+.url-table__row td:first-child {
+  padding-left: 0;
+}
+
+/* ——————————————————————
+   Checkbox cell
+   —————————————————————— */
+.url-table__col-check {
+  width: 32px;
+  text-align: center;
+}
+
+.url-table__col-check input[type="checkbox"] {
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  cursor: pointer;
+  accent-color: var(--accent);
+}
+
+/* ——————————————————————
+   Favicon cell
+   —————————————————————— */
+.url-table__col-favicon {
+  width: 28px;
+  padding: 0 !important;
+}
+
+.url-table__favicon {
+  width: 14px;
+  height: 14px;
+  object-fit: contain;
+  display: block;
+  border-radius: 2px;
+  margin: 0 auto;
+}
+
+/* ——————————————————————
+   Label cell
+   —————————————————————— */
+.url-table__col-label {
+  overflow: hidden;
+}
+
+.url-table__label-input {
+  width: 100%;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: 0.8rem;
+  font-weight: 500;
+  padding: 0.18rem 0.3rem;
+  transition: border-color 0.1s, background 0.1s;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.url-table__label-input:hover {
+  border-color: var(--border);
+  background: var(--surface-hover);
+}
+
+.url-table__label-input:focus {
+  border-color: var(--border-strong);
+  background: var(--surface);
+  outline: none;
+}
+
+.url-table__label-input::placeholder {
+  color: var(--text-muted);
+  font-weight: 400;
+}
+
+/* ——————————————————————
+   URL cell
+   —————————————————————— */
+.url-table__col-url {
+  overflow: hidden;
+  max-width: 0; /* forces ellipsis with table-layout:fixed */
+}
+
+.url-table__url-code {
+  display: block;
+  font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+  font-size: 0.73rem;
+  color: var(--accent);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+  padding: 0.18rem 0.3rem;
+  border-radius: var(--radius-sm);
+  transition: background 0.1s;
+}
+
+.url-table__url-code:hover {
+  background: var(--accent-subtle);
+}
+
+.url-table__url-code.copied {
+  color: var(--text-muted);
+}
+
+/* ——————————————————————
+   Tags cell
+   —————————————————————— */
+.url-table__col-tags {
+  overflow: hidden;
+}
+
+.url-table__tags-input {
+  width: 100%;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-size: 0.73rem;
+  padding: 0.18rem 0.3rem;
+  transition: border-color 0.1s, background 0.1s;
+}
+
+.url-table__tags-input:hover {
+  border-color: var(--border);
+  background: var(--surface-hover);
+}
+
+.url-table__tags-input:focus {
+  border-color: var(--border-strong);
+  background: var(--surface);
+  outline: none;
+}
+
+.url-table__tags-input::placeholder {
+  color: var(--text-muted);
+}
+
+/* Inline tag badges (read-only display) */
+.url-table__tags-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  padding: 0.18rem 0;
+}
+
+.url-table__tag-pill {
+  font-size: 0.65rem;
+  font-weight: 500;
+  padding: 1px 6px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--surface-hover);
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+/* ——————————————————————
+   Health badge cell
+   —————————————————————— */
+.url-table__col-health {
+  text-align: center;
+}
+
+.url-table__health {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 0.68rem;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.url-table__health-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.url-table__health--online  { color: var(--status-online); }
+.url-table__health--online .url-table__health-dot { background: var(--status-online); }
+
+.url-table__health--offline { color: var(--status-offline); }
+.url-table__health--offline .url-table__health-dot { background: var(--status-offline); }
+
+.url-table__health--checking { color: var(--text-muted); }
+.url-table__health--checking .url-table__health-dot {
+  background: var(--text-muted);
+  animation: pulse-dot 1.2s ease-in-out infinite;
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+/* ——————————————————————
+   Usage badge cell
+   —————————————————————— */
+.url-table__col-usage {
+  text-align: center;
+  white-space: nowrap;
+}
+
+.url-table__usage {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: var(--status-warn);
+  background: rgba(245, 158, 11, 0.1);
+  padding: 1px 5px;
+  border-radius: var(--radius-sm);
+  white-space: nowrap;
+  user-select: none;
+}
+
+/* ——————————————————————
+   Actions cell
+   —————————————————————— */
+.url-table__col-actions {
+  text-align: right;
+  padding-right: 0.75rem !important;
+}
+
+.url-table__actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 3px;
+  opacity: 0;
+  transition: opacity 0.1s;
+  flex-wrap: nowrap;
+  white-space: nowrap;
+}
+
+.url-table__row:hover .url-table__actions,
+.url-table__row--selected .url-table__actions {
+  opacity: 1;
+}
+
+.url-table__action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  font-size: 0.7rem;
+  cursor: pointer;
+  transition: background 0.1s, border-color 0.1s, color 0.1s;
+  flex-shrink: 0;
+}
+
+.url-table__action-btn:hover {
+  background: var(--surface-hover);
+  border-color: var(--border);
+  color: var(--text-primary);
+}
+
+.url-table__action-btn--delete:hover {
+  background: rgba(239, 68, 68, 0.1);
+  border-color: rgba(239, 68, 68, 0.25);
+  color: var(--status-offline);
+}
+
+.url-table__action-btn--load:hover {
+  background: var(--accent-subtle);
+  border-color: var(--accent-ring);
+  color: var(--accent);
+}
+
+/* ——————————————————————
+   Empty state (table mode)
+   —————————————————————— */
+.url-table__empty {
+  text-align: center;
+  padding: 3rem 1rem;
+  color: var(--text-muted);
+  font-size: 0.82rem;
+}
+
+/* ——————————————————————
+   Domain accordion (table mode enhancement)
+   —————————————————————— */
+.domain-accordion {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  margin-bottom: 0.5rem;
+  overflow: hidden;
+}
+
+.domain-accordion[open] > .domain-accordion__summary {
+  border-bottom: 1px solid var(--border);
+}
+
+.domain-accordion__summary {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.55rem 0.75rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  cursor: pointer;
+  user-select: none;
+  list-style: none;
+  gap: 0.5rem;
+}
+
+.domain-accordion__summary::-webkit-details-marker { display: none; }
+
+.domain-accordion__title {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.domain-accordion__body {
+  padding: 0;
+}
+
+.domain-accordion__body .url-table {
+  border: none;
+}
+
+.domain-accordion__body .url-table__head th {
+  background: var(--surface);
+}
+
+/* ——————————————————————
+   Filter Bar (above table)
+   —————————————————————— */
+.filter-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg);
+  flex-wrap: wrap;
+  flex-shrink: 0;
+}
+
+.filter-bar__label {
+  font-size: 0.68rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.filter-bar__divider {
+  width: 1px;
+  height: 16px;
+  background: var(--border);
+  flex-shrink: 0;
+}
+
+.filter-bar__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  flex: 1;
+}
+
+/* tag-filter-chip styles are in base.css — reused here */
+
+.filter-bar__search {
+  position: relative;
+  flex-shrink: 0;
+  width: 200px;
+}
+
+.filter-bar__search-icon {
+  position: absolute;
+  left: 0.5rem;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  pointer-events: none;
+}
+
+.filter-bar__search input {
+  width: 100%;
+  padding: 0.3rem 0.5rem 0.3rem 1.8rem;
+  font-size: 0.78rem;
+}

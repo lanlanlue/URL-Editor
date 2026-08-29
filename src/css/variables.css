@@ -1,44 +1,115 @@
-/* 明亮主題變數 */
+/* ==========================================================================
+   Design Tokens — Dark-first & Light Mode (Linear / Vercel aesthetic)
+   ========================================================================== */
+
 :root {
-  --bg-color: #f8fafc;
-  --text-color: #0f172a;
-  --accent-color: #0284c7;
-  --accent-hover: #0369a1;
+  /* Neutral palette */
+  --neutral-950: #0a0a0a;
+  --neutral-900: #111111;
+  --neutral-800: #1f1f1f;
+  --neutral-700: #2e2e2e;
+  --neutral-600: #404040;
+  --neutral-500: #737373;
+  --neutral-400: #a3a3a3;
+  --neutral-200: #e5e5e5;
+  --neutral-100: #f5f5f5;
+  --neutral-50:  #fafafa;
 
-  --card-bg: #ffffff;
-  --card-text: #334155;
-  --card-border: #e2e8f0;
-  --btn-bg: #f1f5f9;
-  --btn-hover: #e2e8f0;
-  --btn-text: #1e293b;
-  --btn-delete: #ef4444;
+  /* Accent — Emerald 500 */
+  --accent:        #10b981;
+  --accent-hover:  #059669;
+  --accent-subtle: rgba(16, 185, 129, 0.12);
+  --accent-ring:   rgba(16, 185, 129, 0.3);
+
+  /* Semantic surfaces (預設深色 Dark-first) */
+  --bg:            var(--neutral-950);
+  --surface:       var(--neutral-900);
+  --surface-hover: var(--neutral-800);
+  --border:        var(--neutral-800);
+  --border-strong: var(--neutral-700);
+
+  /* Typography */
+  --text-primary:   var(--neutral-50);
+  --text-secondary: var(--neutral-400);
+  --text-muted:     var(--neutral-500);
+
+  /* Semantic status */
+  --status-online:  #10b981;
+  --status-offline: #ef4444;
+  --status-warn:    #f59e0b;
+
+  /* Radius */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+
+  /* Shadows — no glow, no neon */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 4px 8px rgba(0, 0, 0, 0.5);
+  --shadow-lg: 0 8px 20px rgba(0, 0, 0, 0.6);
+
+  /* Layout dimensions */
+  --topnav-height: 48px;
+  --editor-width-ratio: 1.15;
+  --sidebar-min-width: 360px;
+  --sidebar-max-width: 680px;
+
+  /* Legacy aliases (used by JS-generated cards/modals) */
+  --bg-color:    var(--bg);
+  --text-color:  var(--text-primary);
+  --accent-color: var(--accent);
+  --card-bg:     var(--surface);
+  --card-text:   var(--text-secondary);
+  --card-border: var(--border);
+  --btn-bg:      var(--surface-hover);
+  --btn-hover:   var(--neutral-700);
+  --btn-text:    var(--text-primary);
+  --btn-delete:  var(--status-offline);
   --btn-delete-hover: #dc2626;
-
-  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.05);
-  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.08);
-  --shadow-lg: 0 10px 25px rgba(0, 0, 0, 0.12);
-  --radius-sm: 6px;
-  --radius-md: 10px;
-  --radius-lg: 14px;
 }
 
-/* 暗黑主題變數 */
+/* Light mode (亮色主題) */
+html.light,
+body.light,
+.light {
+  --bg:            #f8fafc;
+  --surface:       #ffffff;
+  --surface-hover: #f1f5f9;
+  --border:        #e2e8f0;
+  --border-strong: #cbd5e1;
+  --text-primary:  #0f172a;
+  --text-secondary:#475569;
+  --text-muted:    #64748b;
+
+  --bg-color:    var(--bg);
+  --text-color:  var(--text-primary);
+  --card-bg:     var(--surface);
+  --card-text:   var(--text-secondary);
+  --card-border: var(--border);
+  --btn-bg:      var(--surface-hover);
+  --btn-hover:   #e2e8f0;
+  --btn-text:    var(--text-primary);
+}
+
+/* Explicit Dark mode (深色主題) */
+html.dark,
+body.dark,
 .dark {
-  --bg-color: #0f172a;
-  --text-color: #f8fafc;
-  --accent-color: #38bdf8;
-  --accent-hover: #7dd3fc;
+  --bg:            var(--neutral-950);
+  --surface:       var(--neutral-900);
+  --surface-hover: var(--neutral-800);
+  --border:        var(--neutral-800);
+  --border-strong: var(--neutral-700);
+  --text-primary:   var(--neutral-50);
+  --text-secondary: var(--neutral-400);
+  --text-muted:     var(--neutral-500);
 
-  --card-bg: #1e293b;
-  --card-text: #e2e8f0;
-  --card-border: #334155;
-  --btn-bg: #334155;
-  --btn-hover: #475569;
-  --btn-text: #f8fafc;
-  --btn-delete: #f87171;
-  --btn-delete-hover: #ef4444;
-
-  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.3);
-  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.35);
-  --shadow-lg: 0 10px 25px rgba(0, 0, 0, 0.45);
+  --bg-color:    var(--bg);
+  --text-color:  var(--text-primary);
+  --card-bg:     var(--surface);
+  --card-text:   var(--text-secondary);
+  --card-border: var(--border);
+  --btn-bg:      var(--surface-hover);
+  --btn-hover:   var(--neutral-700);
+  --btn-text:    var(--text-primary);
 }
