@@ -1,4 +1,8 @@
-import { createQrMatrix, renderQrCodeToCanvas } from './qrCodeGenerator';
+import {
+  createQrCodeSvg,
+  createQrMatrix,
+  renderQrCodeToCanvas,
+} from './qrCodeGenerator';
 
 describe('qrCodeGenerator', () => {
   test('should generate matrix for URL text', () => {
@@ -24,5 +28,16 @@ describe('qrCodeGenerator', () => {
 
     const ctx = canvas.getContext('2d');
     expect(ctx.fillRect).toHaveBeenCalled();
+  });
+
+  test('should create a scalable SVG with custom colors and rounded modules', () => {
+    const svg = createQrCodeSvg('https://example.com', {
+      dark: '#123456',
+      light: '#ffffff',
+      rounded: true,
+    });
+    expect(svg).toContain('<svg');
+    expect(svg).toContain('fill="#123456"');
+    expect(svg).toContain('rx=');
   });
 });

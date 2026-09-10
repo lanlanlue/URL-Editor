@@ -4,9 +4,9 @@ name: CI
 
 on:
   push:
-    branches: [ "main" ]
+    branches: ['main']
   pull_request:
-    branches: [ "main" ]
+    branches: ['main']
 
 jobs:
   build-and-test:
@@ -23,16 +23,34 @@ jobs:
           cache: 'npm'
 
       - name: Install dependencies
-        run: npm install
+        run: npm ci
 
       - name: Run linter
         run: npm run lint
+
+      - name: Run tests
+        run: npm test
+
+      - name: Run Worker API tests
+        run: npm run test:worker
 
       - name: Run tests with coverage
         run: npm run test:coverage
 
       - name: Run build
+        run: npm run build
+
+      - name: Run GitHub Pages build
         run: npm run build:gh
+
+      - name: Check local bundle boundary
+        run: npm run security:check -- local
+
+      - name: Run Cloudflare build
+        run: npm run build:cloud
+
+      - name: Check cloud bundle boundary and secrets
+        run: npm run security:check -- cloud
 
       - name: Upload coverage report
         uses: actions/upload-artifact@v4

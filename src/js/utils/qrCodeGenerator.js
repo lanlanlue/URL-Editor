@@ -260,7 +260,14 @@ export function createQrMatrix(text) {
  */
 export function renderQrCodeToCanvas(canvas, text, options = {}) {
   if (!canvas || !text) return;
-  const { margin = 4, dark = '#000000', light = '#ffffff' } = options;
+  const {
+    margin = 4,
+    dark = options.foregroundColor || '#000000',
+    light = options.backgroundColor || '#ffffff',
+    rounded = false,
+    logo = null,
+    logoSize = 0.2,
+  } = options;
 
   const { modules, size } = createQrMatrix(text);
   const totalSize = size + margin * 2;
@@ -271,12 +278,12 @@ export function renderQrCodeToCanvas(canvas, text, options = {}) {
   canvas.height = height;
 
   const ctx = canvas.getContext('2d');
-  ctx.fillStyle = light;
+  ctx.fillStyle = sanitizeColor(light, '#ffffff');
   ctx.fillRect(0, 0, width, height);
 
   const cellSize = width / totalSize;
 
-  ctx.fillStyle = dark;
+  ctx.fillStyle = sanitizeColor(dark, '#000000');
   for (let r = 0; r < size; r++) {
     for (let c = 0; c < size; c++) {
       if (modules[r][c]) {
@@ -284,8 +291,143 @@ export function renderQrCodeToCanvas(canvas, text, options = {}) {
         const y = Math.round((r + margin) * cellSize);
         const w = Math.ceil(cellSize);
         const h = Math.ceil(cellSize);
-        ctx.fillRect(x, y, w, h);
+        if (rounded && typeof ctx.beginPath === 'function') {
+          drawRoundedModule(
+            ctx,
+            x,
+            y,
+            w,
+            h,
+            Math.max(1, Math.min(w, h) * 0.25)
+          );
+        } else {
+          ctx.fillRect(x, y, w, h);
+        }
       }
     }
   }
+
+  drawLogo(ctx, logo, width, height, light, logoSize);
+}
+
+/**
+ * Creates a scalable SVG QR code using the same matrix and visual options as
+ * the Canvas renderer. Logo data is accepted only as an image data URL.
+ * @param {string} text
+ * @param {object} [options]
+ * @returns {string}
+ */
+export function createQrCodeSvg(text, options = {}) {
+  if (!text) return '';
+  const { modules, size } = createQrMatrix(text);
+  const margin = Math.max(0, Math.floor(Number(options.margin ?? 4)));
+  const moduleSize = Math.max(1, Math.floor(Number(options.moduleSize ?? 16)));
+  const totalUnits = size + margin * 2;
+  const canvasSize = totalUnits * moduleSize;
+  const dark = sanitizeColor(
+    options.dark || options.foregroundColor,
+    '#000000'
+  );
+  const light = sanitizeColor(
+    options.light || options.backgroundColor,
+    '#ffffff'
+  );
+  const rounded = options.rounded === true;
+  const radius = rounded ? Math.max(1, moduleSize * 0.25) : 0;
+  const moduleRects = [];
+
+  for (let row = 0; row < size; row++) {
+    for (let column = 0; column < size; column++) {
+      if (!modules[row][column]) continue;
+      const x = (column + margin) * moduleSize;
+      const y = (row + margin) * moduleSize;
+      moduleRects.push(
+        `<rect x="${x}" y="${y}" width="${moduleSize}" height="${moduleSize}"${
+          radius ? ` rx="${radius}"` : ''
+        }/>`
+      );
+    }
+  }
+
+  const logoSource = getLogoSource(options.logo);
+  let logoMarkup = '';
+  if (logoSource) {
+    const boxSize = Math.round(canvasSize * 0.2);
+    const boxPosition = Math.round((canvasSize - boxSize) / 2);
+    const padding = Math.max(3, Math.round(boxSize * 0.08));
+    logoMarkup = [
+      `<rect x="${boxPosition - padding}" y="${boxPosition - padding}" width="${
+        boxSize + padding * 2
+      }" height="${boxSize + padding * 2}" fill="${light}"/>`,
+      `<image href="${escapeXml(logoSource)}" x="${boxPosition}" y="${boxPosition}" width="${boxSize}" height="${boxSize}" preserveAspectRatio="xMidYMid meet"/>`,
+    ].join('');
+  }
+
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${canvasSize} ${canvasSize}" width="${canvasSize}" height="${canvasSize}" role="img" aria-label="QR Code"><rect width="100%" height="100%" fill="${light}"/><g fill="${dark}">${moduleRects.join('')}</g>${logoMarkup}</svg>`;
+}
+
+export const renderQrCodeToSvg = createQrCodeSvg;
+
+function getLogoSource(logo) {
+  const source =
+    typeof logo === 'string' ? logo : logo?.currentSrc || logo?.src || '';
+  return /^data:image\/(png|jpeg);base64,/i.test(source) ? source : '';
+}
+
+function escapeXml(value) {
+  return String(value)
+    .replaceAll('&', '&amp;')
+    .replaceAll('"', '&quot;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;');
+}
+
+function sanitizeColor(value, fallback) {
+  if (typeof value !== 'string' || !value.trim()) return fallback;
+  const candidate = value.trim();
+  if (/^#[0-9a-f]{3,8}$/i.test(candidate)) return candidate;
+  if (/^(rgb|rgba|hsl|hsla)\([^)]{1,80}\)$/i.test(candidate)) return candidate;
+  return fallback;
+}
+
+function drawRoundedModule(ctx, x, y, width, height, radius) {
+  if (typeof ctx.roundRect === 'function') {
+    ctx.beginPath();
+    ctx.roundRect(x, y, width, height, radius);
+    ctx.fill();
+    return;
+  }
+  ctx.fillRect(x, y, width, height);
+}
+
+function drawLogo(ctx, logo, width, height, light, logoSize) {
+  if (!logo || typeof ctx.drawImage !== 'function') return;
+  const imageWidth = Number(logo.width || logo.naturalWidth || 0);
+  const imageHeight = Number(logo.height || logo.naturalHeight || 0);
+  if (!imageWidth || !imageHeight) return;
+
+  const clampedSize = Math.max(0.08, Math.min(Number(logoSize) || 0.2, 0.35));
+  const boxSize = Math.round(Math.min(width, height) * clampedSize);
+  const x = Math.round((width - boxSize) / 2);
+  const y = Math.round((height - boxSize) / 2);
+  const padding = Math.max(3, Math.round(boxSize * 0.08));
+
+  ctx.fillStyle = sanitizeColor(light, '#ffffff');
+  ctx.fillRect(
+    x - padding,
+    y - padding,
+    boxSize + padding * 2,
+    boxSize + padding * 2
+  );
+
+  const ratio = Math.min(boxSize / imageWidth, boxSize / imageHeight);
+  const drawWidth = Math.round(imageWidth * ratio);
+  const drawHeight = Math.round(imageHeight * ratio);
+  ctx.drawImage(
+    logo,
+    Math.round((width - drawWidth) / 2),
+    Math.round((height - drawHeight) / 2),
+    drawWidth,
+    drawHeight
+  );
 }

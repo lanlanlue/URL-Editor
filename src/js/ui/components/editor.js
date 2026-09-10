@@ -4,11 +4,16 @@ import { getSavedPresets, openPresetModal } from '../modals/presetModal';
 
 let urlInputElement;
 let parseButtonElement;
+let historyStorage = null;
 
 const REBUILD_HISTORY_KEY = 'rebuildHistory';
 const MAX_HISTORY = 10;
 
 function getRebuildHistory() {
+  if (historyStorage && typeof historyStorage.get === 'function') {
+    const configured = historyStorage.get();
+    return Array.isArray(configured) ? configured : [];
+  }
   const raw = localStorage.getItem(REBUILD_HISTORY_KEY);
   if (!raw) return [];
   try {
@@ -29,8 +34,16 @@ function pushRebuildHistory(url) {
   list.unshift({ url, timestamp: Date.now() });
 
   if (list.length > MAX_HISTORY) list = list.slice(0, MAX_HISTORY);
-  localStorage.setItem(REBUILD_HISTORY_KEY, JSON.stringify(list));
+  if (historyStorage && typeof historyStorage.set === 'function') {
+    historyStorage.set(list);
+  } else {
+    localStorage.setItem(REBUILD_HISTORY_KEY, JSON.stringify(list));
+  }
   updateHistoryDropdown();
+}
+
+export function configureEditorStorage(storage = null) {
+  historyStorage = storage;
 }
 
 function updateHistoryDropdown() {

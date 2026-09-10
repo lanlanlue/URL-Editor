@@ -1,0 +1,10 @@
+{
+  "manifest_version": 3,
+  "name": "URL Editor",
+  "version": "2.1.3",
+  "description": "Edit, compare, and test URLs from your browser toolbar.",
+  "action": {
+    "default_popup": "index.html"
+  },
+  "permissions": ["activeTab", "storage"]
+}

@@ -3,14 +3,70 @@
 
 # Build artifacts
 /dist
+/dist-extension
+/build
+/.output
 /.parcel-cache
+/.cache
 
 # Test reports
 /coverage
+/.nyc_output
+/test-results
+/playwright-report
+/junit*.xml
 
 # IDE & OS files
 .DS_Store
+Thumbs.db
+Desktop.ini
+*.swp
+*.swo
+*~
+/.vscode
+**/.idea/workspace.xml
+**/.idea/tasks.xml
+**/.idea/shelf/
+**/.idea/caches/
+**/.idea/deploymentTargetSelector.xml
+**/.idea/emulatorDisplays.xml
+
+# Logs & temporary files
 *.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+*.tmp
+*.temp
+/.tmp
 
 # Environment variables
 .env
+.env.*
+!.env.example
+.dev.vars
+.dev.vars.*
+!.dev.vars.example
+.wrangler/
+/.d1/
+/d1-dumps/
+*.dump
+*.sql.dump
+*.sql.gz
+*.sqlite
+*.sqlite3
+*.db
+*.db-*
+
+# Credentials and signing material
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+key.properties
+credentials.json
+service-account*.json

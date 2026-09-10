@@ -1,0 +1,17 @@
+/*
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: no-referrer
+  Permissions-Policy: accelerometer=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=()
+  X-Frame-Options: DENY
+
+/app
+  Content-Security-Policy: default-src 'self'; script-src 'self'; connect-src 'self' https: http:; style-src 'self' 'unsafe-inline'; img-src 'self' data:; frame-src 'self' https: http:; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'
+
+/app/*
+  Content-Security-Policy: default-src 'self'; script-src 'self'; connect-src 'self' https: http:; style-src 'self' 'unsafe-inline'; img-src 'self' data:; frame-src 'self' https: http:; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'
+
+/login
+  Content-Security-Policy: default-src 'self'; script-src 'self' https://accounts.google.com/gsi/client; connect-src 'self' https://accounts.google.com https://www.googleapis.com; style-src 'self'; img-src 'self' data: https://*.googleusercontent.com; frame-src https://accounts.google.com; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'
+
+/login/*
+  Content-Security-Policy: default-src 'self'; script-src 'self' https://accounts.google.com/gsi/client; connect-src 'self' https://accounts.google.com https://www.googleapis.com; style-src 'self'; img-src 'self' data: https://*.googleusercontent.com; frame-src https://accounts.google.com; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'

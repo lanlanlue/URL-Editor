@@ -1,18 +1,22 @@
 {
   "name": "url-editor",
-  "version": "2.1.2",
+  "version": "2.1.3",
   "description": "This is a small widget for editing URL",
   "author": "Darren Lan (梓恆)",
   "license": "MIT",
   "source": "src/index.html",
   "scripts": {
     "test": "jest --forceExit",
+    "test:worker": "jest --forceExit --runInBand src/server",
     "test:coverage": "jest --coverage",
     "start": "parcel",
-    "build": "parcel build",
-    "build:gh": "parcel build --public-url /URL-Editor/",
+    "build": "node scripts/build.mjs runtime",
+    "build:cloud": "node scripts/build.mjs cloud",
+    "build:gh": "node scripts/build.mjs local gh",
+    "security:check": "node scripts/security-check.mjs",
+    "build:extension": "parcel build src/index.html --dist-dir dist-extension && copyfiles -u 2 src/static/manifest.json dist-extension",
     "prepare": "husky install",
-    "lint": "eslint . --ext .js --fix",
+    "lint": "eslint . --ext .js",
     "audit": "npm audit --audit-level=high"
   },
   "dependencies": {

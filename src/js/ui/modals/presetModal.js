@@ -18,12 +18,59 @@ const DEFAULT_PRESETS = [
     params: [['token', 'bearer_test_token']],
   },
 ];
+const DEFAULT_PRESET_BY_ID = new Map(
+  DEFAULT_PRESETS.map((preset) => [preset.id, preset])
+);
+
+function clonePreset(preset) {
+  return { ...preset, params: preset.params.map((pair) => [...pair]) };
+}
+
+function isUnmodifiedDefault(preset) {
+  const defaultPreset = DEFAULT_PRESET_BY_ID.get(preset?.id);
+  if (!defaultPreset) return false;
+  return (
+    JSON.stringify({
+      id: preset.id,
+      name: preset.name,
+      params: preset.params,
+    }) ===
+    JSON.stringify({
+      id: defaultPreset.id,
+      name: defaultPreset.name,
+      params: defaultPreset.params,
+    })
+  );
+}
+
+function mergeConfiguredPresets(configured) {
+  const configuredById = new Map(
+    configured.filter(Boolean).map((preset) => [preset.id, preset])
+  );
+  const defaults = DEFAULT_PRESETS.map((preset) =>
+    clonePreset(configuredById.get(preset.id) || preset)
+  );
+  const custom = configured.filter(
+    (preset) => !DEFAULT_PRESET_BY_ID.has(preset.id)
+  );
+  return [...defaults, ...custom];
+}
 
 let presetApplyCallback = null;
 let presetsChangeCallback = null;
 let editingPresetId = null;
+let presetStorage = null;
+
+export function configurePresetStorage(storage = null) {
+  presetStorage = storage;
+}
 
 export function getSavedPresets() {
+  if (presetStorage && typeof presetStorage.get === 'function') {
+    const configured = presetStorage.get();
+    if (Array.isArray(configured)) return mergeConfiguredPresets(configured);
+    return DEFAULT_PRESETS.map(clonePreset);
+  }
   const raw = localStorage.getItem(PRESETS_STORAGE_KEY);
   if (!raw) {
     localStorage.setItem(PRESETS_STORAGE_KEY, JSON.stringify(DEFAULT_PRESETS));
@@ -36,8 +83,26 @@ export function getSavedPresets() {
   }
 }
 
+export function getPersistedPresets() {
+  if (presetStorage && typeof presetStorage.get === 'function') {
+    const configured = presetStorage.get();
+    return Array.isArray(configured)
+      ? configured.filter((preset) => !isUnmodifiedDefault(preset))
+      : [];
+  }
+  return getSavedPresets();
+}
+
 export function savePresets(presets) {
-  localStorage.setItem(PRESETS_STORAGE_KEY, JSON.stringify(presets));
+  if (presetStorage && typeof presetStorage.set === 'function') {
+    presetStorage.set(
+      Array.isArray(presets)
+        ? presets.filter((preset) => !isUnmodifiedDefault(preset))
+        : []
+    );
+  } else {
+    localStorage.setItem(PRESETS_STORAGE_KEY, JSON.stringify(presets));
+  }
   if (presetsChangeCallback) {
     presetsChangeCallback(presets);
   }

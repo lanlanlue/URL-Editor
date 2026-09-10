@@ -1,0 +1,74 @@
+:root {
+  color-scheme: dark;
+  font-family:
+    Inter,
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    sans-serif;
+  background: #12151b;
+  color: #f1f4f8;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  margin: 0;
+  padding: 1.5rem;
+  background: radial-gradient(circle at 50% 0%, #25344b, #12151b 58%);
+}
+
+.login-card {
+  width: min(100%, 430px);
+  padding: 2.2rem;
+  border: 1px solid #344052;
+  border-radius: 18px;
+  background: rgba(25, 30, 39, 0.94);
+  box-shadow: 0 22px 70px rgba(0, 0, 0, 0.35);
+  text-align: center;
+}
+
+.login-brand {
+  color: #82b6ff;
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+
+.login-brand span {
+  color: #9ba6b7;
+  font-size: 0.8rem;
+}
+
+h1 {
+  margin: 2rem 0 0.75rem;
+  font-size: 1.45rem;
+}
+p {
+  color: #aeb8c7;
+  line-height: 1.65;
+}
+.google-sign-in {
+  min-height: 44px;
+  margin: 1.5rem auto 0;
+  display: grid;
+  place-items: center;
+}
+.login-status {
+  min-height: 1.4rem;
+  margin: 1rem 0;
+  font-size: 0.85rem;
+}
+.login-status.error {
+  color: #ff9696;
+}
+.login-local-link {
+  color: #82b6ff;
+  font-size: 0.85rem;
+}

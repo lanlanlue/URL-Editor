@@ -1,0 +1,14 @@
+name = "url-editor"
+compatibility_date = "2026-09-08"
+pages_build_output_dir = "./dist"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "url-editor"
+database_id = "879bab3d-007f-4213-811f-951ee52cea81"
+migrations_dir = "migrations"
+
+[vars]
+# The Google OAuth Client ID is public configuration. Set the production value
+# in Cloudflare Pages environment variables; never put a client secret here.
+GOOGLE_CLIENT_ID = "369326172769-t9ne61in2g0ffqlqc01r0orpjtmm6vvt.apps.googleusercontent.com"

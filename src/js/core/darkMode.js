@@ -1,4 +1,4 @@
-export function initDarkMode() {
+export function initDarkMode(options = {}) {
   const toggleBtn = document.getElementById('toggle-dark');
   const htmlEl = document.documentElement;
 
@@ -36,6 +36,11 @@ export function initDarkMode() {
 
       if (savedTheme) {
         applyTheme(savedTheme);
+      } else if (
+        options.defaultTheme === 'dark' ||
+        options.defaultTheme === 'light'
+      ) {
+        applyTheme(options.defaultTheme);
       } else if (prefersDark) {
         applyTheme('dark');
       } else {
