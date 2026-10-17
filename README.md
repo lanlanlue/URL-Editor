@@ -99,23 +99,24 @@ GitHub Pages 版本是純本機模式。完整的 Google OAuth、端到端加密
 
 ### Cloudflare 同步部署
 
-雲端版本使用 Cloudflare Pages Functions 與 D1。先建立 D1 資料庫並將資料庫 ID
+雲端版本使用 Cloudflare Worker、Static Assets 與 D1。先建立 D1 資料庫並將資料庫 ID
 填入 `wrangler.toml`，再套用 migration：
 
 ```bash
 npx wrangler d1 migrations apply url-editor --remote
 ```
 
-在 Cloudflare Pages 的 production environment 設定 `GOOGLE_CLIENT_ID`，並將
+在 Cloudflare Worker 的 production environment 設定 `GOOGLE_CLIENT_ID`，並將
 `https://url-editor.ointw.com` 設為 Google OAuth Authorized JavaScript origin。
 Google Client ID 是公開設定；Google client secret、Cloudflare API token 與本機
-`.dev.vars` 不得提交至 repository。`npm run build:cloud` 產生 Pages 的靜態資產，
-Functions 會自動使用 `DB` D1 binding。
+`.dev.vars` 不得提交至 repository。`npm run build:cloud` 產生 `dist/` 靜態資產，
+`npx wrangler deploy` 會以 `src/worker.js` 部署 Worker，並使用 `ASSETS` 與 `DB` binding。
+也可以直接執行 `npm run deploy:cloud` 完成建置與部署。
 
 正式環境建置後可執行 `npm run security:check -- cloud`；GitHub Pages 建置後執行
-`npm run security:check -- local`。Pages preview 預設不公開 OAuth 設定，只有正式
-`url-editor.ointw.com` 會啟用雲端模式；本機 Pages Functions 若要測試雲端流程，使用
-獨立的 `.dev.vars` Client ID 並以 `?appMode=cloud` 啟動。
+`npm run security:check -- local`。Cloudflare preview deployment 預設不公開 OAuth 設定，只有正式
+`url-editor.ointw.com` 會啟用雲端模式；本機 Worker 若要測試雲端流程，使用
+獨立的 `.dev.vars` Client ID 並以 `npx wrangler dev` 啟動。
 
 登入後 URL、標籤、排序／檢視設定與自訂預設會在瀏覽器端加密後才上傳。Recovery
 Key 不會送到伺服器；遺失 Recovery Key 且沒有已解鎖裝置時，伺服器無法復原密文。

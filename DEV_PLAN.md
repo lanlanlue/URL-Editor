@@ -2,10 +2,10 @@
 
 本文件為 **URL-Editor** 專案的完整技術開發藍圖，涵蓋檔案路徑規範、核心資料合約、錯誤處理機制、Feature Flag 狀態管理以及 CI/CD 整合細節。
 
-> **狀態註記（2026-09）**：雲端同步部分已由 Google OAuth + Cloudflare Pages
-> Functions + D1 + 前端端到端加密方案取代。原本 Phase 2.2 的 GitHub Gist token
+> **狀態註記（2026-09）**：雲端同步部分已由 Google OAuth + Cloudflare Worker
+> Static Assets + D1 + 前端端到端加密方案取代。原本 Phase 2.2 的 GitHub Gist token
 > 同步不再是實作目標；目前以專案根目錄的 `wrangler.toml`、`migrations/`、
-> `functions/` 與 `src/server/` 為正式雲端架構。
+> `src/worker.js` 與 `src/server/` 為正式雲端架構。
 
 ---
 
