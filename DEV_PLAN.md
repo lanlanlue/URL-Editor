@@ -25,6 +25,7 @@ src/
 │   │   ├── components/
 │   │   └── modals/
 │   │       ├── urlDiffModal.js        # [New Phase 1]
+│   │       ├── dualEditorModal.js     # 雙網址對照與參數編輯工作台
 │   │       ├── redirectModal.js       # [New Phase 1]
 │   │       ├── cloudSyncModal.js      # [New Phase 2]
 │   │       ├── batchStripperModal.js  # [New Phase 3]
