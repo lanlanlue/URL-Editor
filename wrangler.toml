@@ -5,6 +5,7 @@ main = "src/worker.js"
 [assets]
 directory = "./dist"
 binding = "ASSETS"
+html_handling = "none"
 run_worker_first = ["/api", "/api/*", "/app", "/app/", "/login", "/login/"]
 
 [[d1_databases]]
