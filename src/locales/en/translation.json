@@ -395,5 +395,16 @@
       "offlineWarn": "⚠️ Unable to connect to this website! Please verify the URL format, network, or server status."
     },
     "emptySelection": "No URLs currently selected for live testing."
+  },
+  "login": {
+    "title": "Sign in to URL Editor",
+    "desc": "Sign in with Google to sync your client-side encrypted URL list across devices.",
+    "continueLocal": "Continue as Guest",
+    "statusLoading": "Loading…",
+    "statusVerifying": "Verifying Google account…",
+    "statusFailed": "Google sign-in failed.",
+    "statusStartFailed": "Failed to start Google sign-in.",
+    "statusNoClient": "Google OAuth Client ID is not configured.",
+    "statusScriptError": "Failed to load Google Sign-In component."
   }
 }

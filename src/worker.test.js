@@ -42,8 +42,9 @@ describe('Workers entry point', () => {
     expect(fetchAsset.mock.calls[0][0].url).toBe(
       'https://url-editor.ointw.com/login.html'
     );
-    expect(response.headers.get('Content-Security-Policy')).toContain(
-      'https://accounts.google.com/gsi/client'
-    );
+    const csp = response.headers.get('Content-Security-Policy');
+    expect(csp).toContain('https://accounts.google.com/gsi/client');
+    expect(csp).toContain('https://accounts.google.com/gsi/style');
+    expect(csp).toContain('https://static.cloudflareinsights.com');
   });
 });

@@ -30,20 +30,34 @@ function loadGoogleScript() {
     script.async = true;
     script.defer = true;
     script.onload = resolve;
-    script.onerror = () => reject(new Error('Google 登入元件載入失敗。'));
+    script.onerror = () =>
+      reject(
+        new Error(
+          i18next.t('login.statusScriptError', {
+            defaultValue: 'Google 登入元件載入失敗。',
+          })
+        )
+      );
     document.head.appendChild(script);
   });
 }
 
 async function initLogin() {
-  await i18next.init();
+  if (!i18next.isInitialized) {
+    await i18next.init();
+  }
   document.documentElement.lang = i18next.language;
   updateContent();
 
   const publicConfig = await getPublicConfig();
   const googleClientId = publicConfig?.googleClientId || '';
   if (!googleClientId || googleClientId.startsWith('REPLACE_')) {
-    setStatus('尚未設定 Google OAuth Client ID。', true);
+    setStatus(
+      i18next.t('login.statusNoClient', {
+        defaultValue: '尚未設定 Google OAuth Client ID。',
+      }),
+      true
+    );
     return;
   }
 
@@ -54,11 +68,21 @@ async function initLogin() {
       client_id: googleClientId,
       callback: async (response) => {
         try {
-          setStatus('正在驗證 Google 帳戶…');
+          setStatus(
+            i18next.t('login.statusVerifying', {
+              defaultValue: '正在驗證 Google 帳戶…',
+            })
+          );
           await authenticateGoogle(response.credential, oauthCsrfToken);
           window.location.href = getReturnPath();
         } catch (error) {
-          setStatus(error.message || 'Google 登入失敗。', true);
+          setStatus(
+            error.message ||
+              i18next.t('login.statusFailed', {
+                defaultValue: 'Google 登入失敗。',
+              }),
+            true
+          );
         }
       },
       auto_select: false,
@@ -76,7 +100,13 @@ async function initLogin() {
       }
     );
   } catch (error) {
-    setStatus(error.message || '無法啟動 Google 登入。', true);
+    setStatus(
+      error.message ||
+        i18next.t('login.statusStartFailed', {
+          defaultValue: '無法啟動 Google 登入。',
+        }),
+      true
+    );
   }
 }
 
