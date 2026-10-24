@@ -302,7 +302,9 @@
     "noRemoteData": "目前沒有雲端備份。",
     "restoreSuccess": "已下載並合併加密資料。",
     "rotationSuccess": "Recovery Key 已旋轉，請重新備份新 Key。",
-    "deletePrompt": "輸入 DELETE 確認刪除帳戶與雲端密文："
+    "deletePrompt": "輸入 DELETE 確認刪除帳戶與雲端密文：",
+    "recoveryPlaceholder": "貼上 Recovery Key (例如 URE1-...)",
+    "recoveryInputRequired": "請先在下方輸入框貼上 Recovery Key。"
   },
   "marketing": {
     "title": "行銷工具箱",

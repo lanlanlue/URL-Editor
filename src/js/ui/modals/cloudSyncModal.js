@@ -157,6 +157,10 @@ async function copyRecoveryKey() {
   if (!value) return;
   try {
     await navigator.clipboard.writeText(value);
+    const input = document.getElementById('cloud-sync-recovery-input');
+    if (input && pendingRecovery) {
+      input.value = value;
+    }
     setStatus(
       i18next.t('cloudSync.keyCopied', {
         defaultValue: 'Recovery Key 已複製。',
@@ -177,6 +181,10 @@ function downloadRecoveryKey() {
   link.download = 'url-editor-recovery-key.txt';
   link.click();
   URL.revokeObjectURL(link.href);
+  const input = document.getElementById('cloud-sync-recovery-input');
+  if (input && pendingRecovery) {
+    input.value = value;
+  }
 }
 
 function currentAccountId() {
@@ -428,6 +436,13 @@ async function handleUnlock() {
   try {
     const inputValue =
       document.getElementById('cloud-sync-recovery-input')?.value || '';
+    if (!inputValue.trim()) {
+      throw new Error(
+        i18next.t('cloudSync.recoveryInputRequired', {
+          defaultValue: '請先在下方輸入框貼上 Recovery Key。',
+        })
+      );
+    }
     if (
       pendingRecovery &&
       inputValue.trim().replace(/\s+/g, '') !== pendingRecovery.display

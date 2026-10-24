@@ -302,7 +302,9 @@
     "noRemoteData": "There is no cloud backup yet.",
     "restoreSuccess": "Encrypted data downloaded and merged.",
     "rotationSuccess": "Recovery Key rotated. Back up the new key.",
-    "deletePrompt": "Type DELETE to permanently delete the account and ciphertext:"
+    "deletePrompt": "Type DELETE to permanently delete the account and ciphertext:",
+    "recoveryPlaceholder": "Paste Recovery Key (e.g. URE1-...)",
+    "recoveryInputRequired": "Please paste the Recovery Key into the input field below."
   },
   "marketing": {
     "title": "Marketing Toolkit",
