@@ -395,5 +395,16 @@
       "offlineWarn": "⚠️ 無法連線至此網站！請確認網址格式、網路連線或伺服器運作狀態"
     },
     "emptySelection": "目前未選取任何 URL 進行測試。"
+  },
+  "login": {
+    "title": "登入 URL Editor",
+    "desc": "使用 Google 登入，跨裝置同步瀏覽器端加密的 URL 清單。",
+    "continueLocal": "繼續使用訪客模式",
+    "statusLoading": "正在載入…",
+    "statusVerifying": "正在驗證 Google 帳戶…",
+    "statusFailed": "Google 登入失敗。",
+    "statusStartFailed": "無法啟動 Google 登入。",
+    "statusNoClient": "尚未設定 Google OAuth Client ID。",
+    "statusScriptError": "Google 登入元件載入失敗。"
   }
 }
