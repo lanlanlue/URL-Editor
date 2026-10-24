@@ -1,13 +1,14 @@
-import { apiInternals, handleApiRequest } from './api.js';
+import { handleApiRequest, apiInternals } from './api.js';
 
 function base64Url(bytes) {
-  return btoa(String.fromCharCode(...bytes))
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_')
-    .replace(/=+$/g, '');
+  let binary = '';
+  for (let index = 0; index < bytes.byteLength; index += 1) {
+    binary += String.fromCharCode(bytes[index]);
+  }
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
-describe('Pages API boundary', () => {
+describe('Worker API router', () => {
   test('returns only public OAuth configuration without touching D1', async () => {
     const response = await handleApiRequest(
       new Request('https://url-editor.ointw.com/api/config'),
@@ -42,7 +43,10 @@ describe('Pages API boundary', () => {
       apiInternals.validateEnvelope({ ...valid, plaintext: 'secret' })
     ).toBe(false);
     expect(apiInternals.parseEtag('"rev-12"')).toBe(12);
-    expect(apiInternals.parseEtag('rev-12')).toBeNull();
+    expect(apiInternals.parseEtag('W/"rev-12"')).toBe(12);
+    expect(apiInternals.parseEtag('rev-12')).toBe(12);
+    expect(apiInternals.parseEtag('12')).toBe(12);
+    expect(apiInternals.parseEtag('invalid')).toBeNull();
   });
 
   test('rejects mutation requests without a same-origin Origin header', async () => {

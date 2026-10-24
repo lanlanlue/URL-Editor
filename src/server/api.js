@@ -319,7 +319,8 @@ async function requireCsrf(request, session) {
 }
 
 function parseEtag(value) {
-  const match = /^"rev-(\d+)"$/.exec(value || '');
+  if (value === null || value === undefined) return null;
+  const match = /^(?:W\/)?"?(?:rev-)?(\d+)"?$/i.exec(String(value).trim());
   return match ? Number(match[1]) : null;
 }
 
@@ -475,8 +476,9 @@ async function handleSyncGet(request, env) {
     .bind(session.account_id)
     .first();
   const envelope = documentEnvelope(document);
+  const revision = envelope?.revision || 0;
   return json(
-    { document: envelope, revision: envelope?.revision || 0 },
+    { document: envelope, revision, etag: `"rev-${revision}"` },
     200,
     responseHeaders(session, { ETag: `"rev-${envelope?.revision || 0}"` })
   );
@@ -514,7 +516,16 @@ async function handleSyncPut(request, env) {
       'INVALID_ENVELOPE',
       'Invalid encrypted envelope.'
     );
-  const expectedRevision = parseEtag(request.headers.get('If-Match'));
+  let expectedRevision = parseEtag(
+    request.headers.get('If-Match') || request.headers.get('X-If-Match')
+  );
+  if (
+    expectedRevision === null &&
+    Number.isInteger(body.revision) &&
+    body.revision >= 1
+  ) {
+    expectedRevision = body.revision - 1;
+  }
   if (expectedRevision === null)
     return errorResponse(
       422,
@@ -588,7 +599,11 @@ async function handleSyncPut(request, env) {
     );
   }
   return json(
-    { document: body, revision: body.revision },
+    {
+      document: body,
+      revision: body.revision,
+      etag: `"rev-${body.revision}"`,
+    },
     200,
     responseHeaders(session, { ETag: `"rev-${body.revision}"` })
   );
