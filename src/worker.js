@@ -18,7 +18,7 @@ export function isApiRequest(pathname) {
 }
 
 export function getSpaFallback(pathname) {
-  if (pathname === '/app' || pathname === '/app/') {
+  if (pathname === '/' || pathname === '/app' || pathname === '/app/') {
     return { assetPath: '/index.html', csp: APP_CSP };
   }
   if (pathname === '/login' || pathname === '/login/') {
