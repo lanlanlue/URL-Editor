@@ -828,3 +828,282 @@ dialog::backdrop,
 .batch-import-row:hover {
   border-color: var(--border-strong);
 }
+
+/* ==========================================================================
+   Dual URL Editor Modal — 雙網址對照編輯工作台
+   ========================================================================== */
+.dual-editor-modal {
+  max-width: 1200px;
+  width: 95vw;
+  height: 88vh;
+  max-height: 94vh;
+  resize: both;
+  overflow: hidden;
+  min-width: 680px;
+  min-height: 520px;
+}
+
+.dual-editor-modal.is-maximized {
+  width: 98vw !important;
+  height: 96vh !important;
+  max-width: 98vw !important;
+  max-height: 96vh !important;
+  resize: none;
+  border-radius: var(--radius-sm);
+}
+
+.modal-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.modal-maximize-btn {
+  font-size: 0.85rem;
+}
+
+.dual-editor-body {
+  padding: 1rem 1.25rem;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.dual-editor-top-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 0.85rem;
+  flex-wrap: wrap;
+  flex-shrink: 0;
+}
+
+.dual-editor-top-actions .panel-desc {
+  margin: 0;
+}
+
+.dual-editor-top-btns {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.dual-editor-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.25rem;
+  flex: 1;
+  min-height: 0;
+}
+
+.dual-editor-col {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 1rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-hover);
+  min-width: 0;
+  height: 100%;
+}
+
+.dual-col-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.dual-col-title {
+  font-weight: 600;
+  font-size: 0.95rem;
+  color: var(--accent);
+}
+
+.dual-col-quick-actions {
+  display: flex;
+  gap: 0.4rem;
+  align-items: center;
+}
+
+.dual-cards-select {
+  font-size: 0.78rem;
+  padding: 0.25rem 0.4rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text-primary);
+  max-width: 170px;
+}
+
+.dual-textarea {
+  min-height: 3.5rem;
+  height: 3.5rem;
+  font-size: 0.8rem;
+}
+
+.dual-parsed-details {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 0.5rem 0.65rem;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 0.78rem;
+}
+
+.dual-meta-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  overflow: hidden;
+}
+
+.dual-meta-label {
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.dual-meta-value {
+  color: var(--text-primary);
+  word-break: break-all;
+}
+
+.dual-params-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 0.25rem;
+}
+
+.dual-params-title {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.dual-params-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  flex: 1;
+  min-height: 180px;
+  max-height: 480px;
+  overflow-y: auto;
+  padding-right: 0.25rem;
+}
+
+.dual-editor-modal.is-maximized .dual-params-list {
+  max-height: calc(96vh - 430px);
+}
+
+.dual-param-row {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.25rem 0.35rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  transition: background 0.3s ease, border-color 0.3s ease;
+}
+
+.dual-param-row--highlight {
+  background: rgba(59, 130, 246, 0.2) !important;
+  border-color: var(--accent) !important;
+}
+
+.dual-param-key,
+.dual-param-val {
+  flex: 1;
+  min-width: 0;
+  padding: 0.3rem 0.45rem;
+  font-size: 0.78rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--text-primary);
+}
+
+.dual-param-eq {
+  color: var(--text-muted);
+  font-weight: bold;
+  flex-shrink: 0;
+}
+
+.dual-param-actions {
+  display: flex;
+  gap: 0.2rem;
+  flex-shrink: 0;
+}
+
+.dual-row-btn {
+  padding: 0.25rem 0.35rem;
+  font-size: 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-hover);
+  color: var(--text-primary);
+  cursor: pointer;
+  line-height: 1;
+}
+
+.dual-row-btn:hover {
+  background: var(--surface);
+  border-color: var(--border-strong);
+}
+
+.dual-empty-params {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  font-style: italic;
+  padding: 0.5rem;
+  text-align: center;
+}
+
+.dual-rebuilt-section {
+  margin-top: auto;
+  padding-top: 0.5rem;
+  border-top: 1px dashed var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.dual-rebuilt-label {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+.dual-rebuilt-box {
+  padding: 0.5rem;
+  font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+  font-size: 0.75rem;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  word-break: break-all;
+  min-height: 2.2rem;
+  max-height: 4rem;
+  overflow-y: auto;
+  color: var(--text-primary);
+}
+
+.dual-rebuilt-actions {
+  display: flex;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+  margin-top: 0.25rem;
+}
+
+@media (max-width: 820px) {
+  .dual-editor-grid {
+    grid-template-columns: 1fr;
+  }
+}
+

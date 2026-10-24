@@ -318,6 +318,13 @@
                 <span>⇄</span> URL 比對
               </button>
               <button
+                id="open-dual-editor-btn"
+                class="sidebar-tool-btn"
+                data-i18n="dualEditor.btn"
+              >
+                <span>⫽</span> 雙網址對照編輯
+              </button>
+              <button
                 id="open-redirect-btn"
                 class="sidebar-tool-btn"
                 data-i18n="redirect.btn"
@@ -1149,6 +1156,179 @@
           data-i18n="urlDiff.copyBtn"
         >
           複製差異 JSON
+        </button>
+      </div>
+    </dialog>
+
+    <!-- ================================================
+         Dual URL Editor Dialog
+         ================================================
+    -->
+    <dialog id="dual-editor-modal" class="maintenance-modal dual-editor-modal">
+      <div class="modal-header">
+        <h3 data-i18n="dualEditor.title">⫽ 雙網址對照編輯工作台</h3>
+        <div class="modal-header-actions">
+          <button
+            id="dual-editor-maximize-btn"
+            class="modal-close-btn modal-maximize-btn"
+            aria-label="最大化視窗"
+            data-i18n="[title]dualEditor.maximizeBtn"
+            title="最大化視窗"
+          >
+            🗖
+          </button>
+          <button
+            id="dual-editor-close-btn"
+            class="modal-close-btn"
+            aria-label="關閉"
+          >
+            ✕
+          </button>
+        </div>
+      </div>
+      <div class="modal-body dual-editor-body">
+        <div class="dual-editor-top-actions">
+          <p class="panel-desc" data-i18n="dualEditor.desc">
+            在同一個畫面拆解兩組 URL，直觀對照、自由複製貼上與微調參數。
+          </p>
+          <div class="dual-editor-top-btns">
+            <button id="dual-editor-swap-btn" class="btn-secondary" type="button" data-i18n="dualEditor.swapBtn">
+              ⇄ 互換 A / B
+            </button>
+            <button id="dual-editor-clear-all-btn" class="btn-secondary" type="button" data-i18n="dualEditor.clearAllBtn">
+              🔄 清空兩側
+            </button>
+          </div>
+        </div>
+
+        <div class="dual-editor-grid">
+          <!-- 欄位 A -->
+          <div class="dual-editor-col" id="dual-col-a">
+            <div class="dual-col-header">
+              <span class="dual-col-title" data-i18n="dualEditor.colATitle">網址 A</span>
+              <div class="dual-col-quick-actions">
+                <button type="button" class="btn-xs btn-secondary" id="dual-load-editor-a" data-i18n="dualEditor.loadFromEditor">
+                  載入主編輯器
+                </button>
+                <select class="dual-cards-select" id="dual-cards-select-a">
+                  <option value="" data-i18n="dualEditor.selectCardPlaceholder">選取已儲存卡片...</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="dual-input-wrapper">
+              <textarea
+                id="dual-input-a"
+                class="tool-textarea dual-textarea"
+                rows="2"
+                data-i18n="[placeholder]dualEditor.urlPlaceholder"
+                placeholder="輸入或貼上完整網址..."
+              ></textarea>
+            </div>
+
+            <div class="dual-parsed-details" id="dual-details-a">
+              <div class="dual-meta-row">
+                <span class="dual-meta-label" data-i18n="dualEditor.domain">網域:</span>
+                <code class="dual-meta-value" id="dual-domain-a">-</code>
+              </div>
+              <div class="dual-meta-row">
+                <span class="dual-meta-label" data-i18n="dualEditor.path">路徑:</span>
+                <code class="dual-meta-value" id="dual-path-a">-</code>
+              </div>
+            </div>
+
+            <div class="dual-params-header">
+              <span class="dual-params-title" data-i18n="dualEditor.paramsTitle">Query 參數清單</span>
+              <button type="button" class="btn-xs btn-secondary" id="dual-add-param-a" data-i18n="dualEditor.addParam">
+                ＋ 新增參數
+              </button>
+            </div>
+
+            <div class="dual-params-list" id="dual-params-a">
+              <!-- 動態生成的參數列表 -->
+            </div>
+
+            <div class="dual-rebuilt-section">
+              <label class="dual-rebuilt-label" data-i18n="dualEditor.rebuiltLabel">即時重組網址：</label>
+              <div class="dual-rebuilt-box" id="dual-rebuilt-a"></div>
+              <div class="dual-rebuilt-actions">
+                <button type="button" class="btn-secondary btn-xs" id="dual-copy-a" data-i18n="dualEditor.copyUrl">
+                  📋 複製網址
+                </button>
+                <button type="button" class="btn-secondary btn-xs" id="dual-apply-a" data-i18n="dualEditor.applyToEditor">
+                  ⬇️ 套用至主編輯器
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- 欄位 B -->
+          <div class="dual-editor-col" id="dual-col-b">
+            <div class="dual-col-header">
+              <span class="dual-col-title" data-i18n="dualEditor.colBTitle">網址 B</span>
+              <div class="dual-col-quick-actions">
+                <button type="button" class="btn-xs btn-secondary" id="dual-load-editor-b" data-i18n="dualEditor.loadFromEditor">
+                  載入主編輯器
+                </button>
+                <select class="dual-cards-select" id="dual-cards-select-b">
+                  <option value="" data-i18n="dualEditor.selectCardPlaceholder">選取已儲存卡片...</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="dual-input-wrapper">
+              <textarea
+                id="dual-input-b"
+                class="tool-textarea dual-textarea"
+                rows="2"
+                data-i18n="[placeholder]dualEditor.urlPlaceholder"
+                placeholder="輸入或貼上完整網址..."
+              ></textarea>
+            </div>
+
+            <div class="dual-parsed-details" id="dual-details-b">
+              <div class="dual-meta-row">
+                <span class="dual-meta-label" data-i18n="dualEditor.domain">網域:</span>
+                <code class="dual-meta-value" id="dual-domain-b">-</code>
+              </div>
+              <div class="dual-meta-row">
+                <span class="dual-meta-label" data-i18n="dualEditor.path">路徑:</span>
+                <code class="dual-meta-value" id="dual-path-b">-</code>
+              </div>
+            </div>
+
+            <div class="dual-params-header">
+              <span class="dual-params-title" data-i18n="dualEditor.paramsTitle">Query 參數清單</span>
+              <button type="button" class="btn-xs btn-secondary" id="dual-add-param-b" data-i18n="dualEditor.addParam">
+                ＋ 新增參數
+              </button>
+            </div>
+
+            <div class="dual-params-list" id="dual-params-b">
+              <!-- 動態生成的參數列表 -->
+            </div>
+
+            <div class="dual-rebuilt-section">
+              <label class="dual-rebuilt-label" data-i18n="dualEditor.rebuiltLabel">即時重組網址：</label>
+              <div class="dual-rebuilt-box" id="dual-rebuilt-b"></div>
+              <div class="dual-rebuilt-actions">
+                <button type="button" class="btn-secondary btn-xs" id="dual-copy-b" data-i18n="dualEditor.copyUrl">
+                  📋 複製網址
+                </button>
+                <button type="button" class="btn-secondary btn-xs" id="dual-apply-b" data-i18n="dualEditor.applyToEditor">
+                  ⬇️ 套用至主編輯器
+                </button>
+                <button type="button" class="btn-secondary btn-xs" id="dual-save-b" data-i18n="dualEditor.saveAsCard">
+                  ⭐ 存為卡片
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer dual-editor-footer">
+        <button type="button" id="dual-editor-done-btn" class="btn-primary" data-i18n="dualEditor.doneBtn">
+          完成
         </button>
       </div>
     </dialog>

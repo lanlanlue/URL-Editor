@@ -41,6 +41,10 @@ import {
   openUrlDiffModal,
 } from './ui/modals/urlDiffModal.js';
 import {
+  initDualEditorModal,
+  openDualEditorModal,
+} from './ui/modals/dualEditorModal.js';
+import {
   initRedirectModal,
   openRedirectModal,
 } from './ui/modals/redirectModal.js';
@@ -68,6 +72,7 @@ const editorBatchImportBtn = document.getElementById('editor-batch-import-btn');
 const openTagManagerBtn = document.getElementById('open-tag-manager-btn');
 const openSettingsBtn = document.getElementById('open-settings-btn');
 const openUrlDiffBtn = document.getElementById('open-url-diff-btn');
+const openDualEditorBtn = document.getElementById('open-dual-editor-btn');
 const openRedirectBtn = document.getElementById('open-redirect-btn');
 let openCloudSyncBtn = document.getElementById('open-cloud-sync-btn');
 const openBatchStripperBtn = document.getElementById('open-batch-stripper-btn');
@@ -1059,6 +1064,14 @@ async function bootstrap() {
   initTagManagerModal();
   initLiveTestModal();
   initUrlDiffModal();
+  initDualEditorModal({
+    onApplyToEditor: (url) => {
+      const input = document.getElementById('url-main-input');
+      if (input) input.value = url;
+      document.getElementById('parse-btn')?.click();
+    },
+    onSaveUrl: saveUrlToHistory,
+  });
   initRedirectModal();
   if (initCloudSyncModal) {
     initCloudSyncModal({
@@ -1145,6 +1158,23 @@ async function bootstrap() {
       const rebuiltValue =
         document.getElementById('rebuilt-url')?.textContent || '';
       openUrlDiffModal(editorValue, rebuiltValue);
+    });
+  }
+
+  if (openDualEditorBtn) {
+    openDualEditorBtn.addEventListener('click', () => {
+      const editorValue =
+        document.getElementById('url-main-input')?.value || '';
+      openDualEditorModal({
+        urls: appState.urls,
+        initialUrlA: editorValue,
+        onApplyToEditor: (url) => {
+          const input = document.getElementById('url-main-input');
+          if (input) input.value = url;
+          document.getElementById('parse-btn')?.click();
+        },
+        onSaveUrl: saveUrlToHistory,
+      });
     });
   }
 
