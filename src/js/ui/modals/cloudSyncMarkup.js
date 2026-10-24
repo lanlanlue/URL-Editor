@@ -25,9 +25,16 @@ const CLOUD_SYNC_MARKUP = `
           <button id="cloud-sync-download-key-btn" class="btn-ghost btn-sm" data-i18n="cloudSync.downloadKeyBtn">下載 Key</button>
         </div>
       </div>
-      <div class="form-group">
+      <div class="form-group cloud-sync-recovery-group">
         <label for="cloud-sync-recovery-input" data-i18n="cloudSync.recoveryInputLabel">貼上 Recovery Key 確認／解鎖</label>
-        <input id="cloud-sync-recovery-input" class="tool-input" autocomplete="off" spellcheck="false" />
+        <input
+          id="cloud-sync-recovery-input"
+          class="tool-input cloud-sync-recovery-input"
+          placeholder="貼上 Recovery Key (例如 URE1-...)"
+          data-i18n="[placeholder]cloudSync.recoveryPlaceholder"
+          autocomplete="off"
+          spellcheck="false"
+        />
       </div>
       <button id="cloud-sync-unlock-btn" class="btn-primary" data-i18n="cloudSync.unlockBtn">確認並解鎖</button>
     </section>
