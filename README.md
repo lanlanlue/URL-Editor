@@ -35,7 +35,28 @@ GitHub Pages 版本是純本機模式。完整的 Google OAuth、端到端加密
   - 參數列提供「一鍵複製值」、「➡️/⬅️ 跨欄傳送參數」與即時重組預覽。
   - 視窗支援自由拖曳縮放（Resize）與全螢幕最大化（`🗖`），並具備草稿防誤觸保留機制。
 
-### 📋 2. 智慧 URL 清單與多重視圖
+### 🔍 2. 開發者進階工具 (Developer Advanced Tools)
+
+- **🔍 語意化網址比對分析 (URL Diff)**：
+  - 雙欄即時語意化解析兩組 URL，以色彩標記（綠色新增、紅色刪除、黃色修改）精確比對 Domain、Path 與 Query 差異。
+  - 支援從既有網址清單下拉快速載入對照。
+- **🔄 伺服器重新導向規則產生器 (Redirect Rules & Regex)**：
+  - 自動生成 **Nginx** (`rewrite`)、**Apache** (`Redirect 301`)、**Cloudflare Workers** (`Response.redirect`) 與 **Vercel** (`vercel.json`) 規則。
+  - 支援萬用字元 (`*`) 與 Regex 正規表達式語法自動轉換，並自動保持 Query 參數轉發。
+
+### 📢 3. 行銷與隱私工具箱 (Marketing Toolkit - Feature Flagged)
+
+*(可在「設定」中一鍵啟用或關閉，維持工程師簡潔首頁體驗)*
+- **🧹 批次追蹤參數清理器 (Batch Tracker Stripper)**：
+  - 智慧辨識並批次剝離 `fbclid`、`gclid`、`msclkid`、`utm_*`、`_hsenc` 等數十種廣告追蹤參數，還原乾淨原始網址。
+  - 嚴格保留合法的業務 Query 參數。
+- **🎯 智慧型 UTM 標籤產生器 (Advanced UTM Builder)**：
+  - 標準化建構 `utm_source`、`utm_medium`、`utm_campaign`、`utm_term`、`utm_content`。
+  - 內建 Google Ads、Facebook、電子報 (EDM) 常用行銷範本，支援自動編碼與一鍵套用。
+- **🎨 進階品牌化 QR Code (Brandable QR Code)**：
+  - 支援前景/背景色彩客製化、高解析度 Canvas 繪製，無須呼叫外部 API，離線極速產生。
+
+### 📋 4. 智慧 URL 清單與多重視圖
 
 - **多維排序與星號釘選**：
   - **排序方式**：使用頻率 (🔥)、最近使用 (🕒)、建立時間 (🆕)、名稱 A-Z (🔤)。
@@ -50,7 +71,7 @@ GitHub Pages 版本是純本機模式。完整的 Google OAuth、端到端加密
 - **🏷️ 標籤集中管理器 (Tag Manager Modal)**：全域檢視標籤使用筆數，支援一鍵全域「重命名」或「刪除標籤」。
 - **🎨 離線安全 Favicon**：使用本地 SVG 佔位圖，不會為每個 URL 探測 `/favicon.ico` 或呼叫第三方代理。
 
-### 🛠️ 3. 大量維護與匯入/匯出工具
+### 🛠️ 5. 大量維護與資料備份中心
 
 - **🛠️ 批次維護工具 Modal**：
   - 批次替換 Domain（自動比對舊 Domain 並更換）。
@@ -59,14 +80,21 @@ GitHub Pages 版本是純本機模式。完整的 Google OAuth、端到端加密
 - **📥 智慧批次貼上匯入 Modal**：
   - 支援一次貼上多列 URL、Markdown 連結 `[標籤](網址)` 或 CSV 內容。
   - 自動分析建議名稱與分類環境標籤，提供動態勾選與表格編輯預覽。
-- **📄 格式匯入與匯出**：
-  - 支援 **JSON** 備份匯入與匯出。
-  - 支援 RFC 4180 標準 **CSV** 表格格式匯入與匯出（相容 Excel / Google Sheets）。
+- **⚙️ 設定與資料備份中心 (Settings & Data Backup Center)**：
+  - 為了保持主操作列高頻工具的專注與俐落，JSON 與 CSV 匯入/匯出功能獨立整合於設定面板中的「資料備份中心」。
+  - **JSON 備份與還原**：完整保留 URL 清單、自訂標籤、自訂參數包與使用者偏好設定。
+  - **RFC 4180 CSV 匯出與匯入**：完美相容 Microsoft Excel、Numbers 與 Google Sheets，便於報表整理與大量維護。
 
-### 🌍 4. 多語系與介面
+### 🖥️ 6. 現代化介面、HiDPI 適配與多語系
 
-- **多國語言 (i18n)**：繁體中文 (`zh-TW`) 與英文 (`en`) 無縫切換。
-- **深色模式 (Dark Mode)**：提供舒適夜間與暗色主題切換。
+- **🖥️ 2K / 4K HiDPI 螢幕自適應排版 (HiDPI Rem Typography)**：
+  - 以 `16px = 1rem` 現代高解析度標準為基準，介面文字清晰舒適。
+  - 提供 **小 (Small / 14px)**、**標準 (Medium / 16px)**、**大 (Large / 18px)**、**特大 (Extra Large / 20px)** 4 級字體大小無級縮放切換。
+  - 彈性排版（Flex-wrap、Min-width 與溢出安全省略），即使在特大字體下操作按鈕與清單亦保持完美不跑版。
+- **🎨 亮色與深色主題優化 (Dark & Light Mode)**：
+  - 全新高對比度分段控制按鈕（Segmented Controls），確保亮色主題被選取項（主色調藍底白字）與未選取項清晰分明。
+  - 完全符合 WCAG AA 視覺對比度標準。
+- **多國語言 (i18n)**：繁體中文 (`zh-TW`) 與英文 (`en`) 完整無縫切換。
 
 ---
 
