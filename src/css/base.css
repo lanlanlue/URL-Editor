@@ -464,7 +464,7 @@ button:focus-visible {
 }
 
 .btn-secondary:hover, .btn-highlight:hover {
-  background: var(--neutral-700);
+  background: var(--btn-hover);
   color: var(--text-primary);
 }
 
@@ -513,7 +513,7 @@ button:focus-visible {
 }
 
 .sidebar-tool-btn:hover {
-  background: var(--neutral-700);
+  background: var(--btn-hover);
   border-color: var(--border-strong);
   color: var(--text-primary);
 }
@@ -669,20 +669,38 @@ label {
   gap: 2px;
 }
 
+.view-mode-container {
+  display: inline-flex;
+  align-items: center;
+  background: var(--surface-hover);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 2px;
+  gap: 2px;
+}
+
 .view-btn {
-  border: none;
+  border: 1px solid transparent;
   background: transparent;
   color: var(--text-muted);
-  padding: 0.28rem 0.6rem;
-  font-size: 0.73rem;
-  border-radius: 4px;
+  padding: 0.28rem 0.65rem;
+  font-size: 0.76rem;
+  border-radius: var(--radius-sm);
   cursor: pointer;
-  transition: background 0.1s, color 0.1s;
+  transition: all 0.12s ease;
+  white-space: nowrap;
+}
+
+.view-btn:hover {
+  color: var(--text-primary);
 }
 
 .view-btn.active {
-  background: var(--neutral-700);
+  background: var(--surface);
   color: var(--text-primary);
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow-sm);
+  font-weight: 600;
 }
 
 .sort-select {
@@ -720,3 +738,14 @@ kbd {
 .mb-1 { margin-bottom: 1rem; }
 .ml-0-5 { margin-left: 0.5rem; }
 .gap-4 { gap: 0.25rem; }
+
+/* Global disabled styles */
+button:disabled,
+.btn:disabled,
+.batch-btn:disabled,
+.sidebar-tool-btn:disabled {
+  opacity: 0.42 !important;
+  cursor: not-allowed !important;
+  pointer-events: none !important;
+  box-shadow: none !important;
+}

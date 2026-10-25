@@ -88,6 +88,10 @@ body.light,
   --card-border: var(--border);
   --btn-bg:      var(--surface-hover);
   --btn-hover:   #e2e8f0;
+  --neutral-700: #e2e8f0;
+  --neutral-800: #f1f5f9;
+  --neutral-900: #f8fafc;
+  --neutral-950: #ffffff;
   --btn-text:    var(--text-primary);
 }
 

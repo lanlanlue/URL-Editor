@@ -75,30 +75,6 @@
   width: 12rem;
   max-width: 100%;
 }
-
-.view-mode-container {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-}
-
-/* View mode toggle — already defined in base.css, keep override minimal */
-.view-btn {
-  border: none;
-  background: transparent;
-  color: var(--text-muted);
-  padding: 0.28rem 0.6rem;
-  font-size: 0.73rem;
-  border-radius: 4px;
-  cursor: pointer;
-  transition: background 0.1s, color 0.1s;
-}
-
-.view-btn.active {
-  background: var(--neutral-700);
-  color: var(--text-primary);
-}
-
 /* ——————————————————————
    URL Card（保留卡片模式）
    —————————————————————— */

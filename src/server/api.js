@@ -489,12 +489,26 @@ async function handleSyncGet(request, env) {
 }
 
 async function cleanupHistory(env, userId) {
-  const cutoff = nowSeconds() - HISTORY_RETENTION_DAYS * 86400;
-  await env.DB.prepare(
-    `DELETE FROM sync_revisions WHERE user_id = ? AND (created_at < ? OR revision NOT IN (SELECT revision FROM sync_revisions WHERE user_id = ? ORDER BY revision DESC LIMIT ${HISTORY_LIMIT}))`
-  )
-    .bind(userId, cutoff, userId)
-    .run();
+  try {
+    const cutoff = nowSeconds() - HISTORY_RETENTION_DAYS * 86400;
+    const rows = await env.DB.prepare(
+      'SELECT revision FROM sync_revisions WHERE user_id = ? ORDER BY revision DESC LIMIT ?'
+    )
+      .bind(userId, HISTORY_LIMIT)
+      .all();
+
+    const revisions = (rows?.results || []).map((r) => r.revision);
+    if (revisions.length >= HISTORY_LIMIT) {
+      const minKeptRevision = Math.min(...revisions);
+      await env.DB.prepare(
+        'DELETE FROM sync_revisions WHERE user_id = ? AND revision < ? AND created_at < ?'
+      )
+        .bind(userId, minKeptRevision, cutoff)
+        .run();
+    }
+  } catch (err) {
+    console.warn('[cleanupHistory warning]:', err?.message || err);
+  }
 }
 
 async function handleSyncPut(request, env) {
@@ -556,7 +570,7 @@ async function handleSyncPut(request, env) {
     if (current) {
       const results = await env.DB.batch([
         env.DB.prepare(
-          'INSERT INTO sync_revisions (user_id, revision, payload_schema_version, key_version, kdf_salt, iv, ciphertext, created_at) SELECT user_id, revision, payload_schema_version, key_version, kdf_salt, iv, ciphertext, updated_at FROM sync_documents WHERE user_id = ? AND revision = ?'
+          'INSERT OR REPLACE INTO sync_revisions (user_id, revision, payload_schema_version, key_version, kdf_salt, iv, ciphertext, created_at) SELECT user_id, revision, payload_schema_version, key_version, kdf_salt, iv, ciphertext, updated_at FROM sync_documents WHERE user_id = ? AND revision = ?'
         ).bind(session.account_id, currentRevision),
         env.DB.prepare(
           'UPDATE sync_documents SET revision = ?, payload_schema_version = ?, key_version = ?, kdf_salt = ?, iv = ?, ciphertext = ?, updated_at = ? WHERE user_id = ? AND revision = ?'

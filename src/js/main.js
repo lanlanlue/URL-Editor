@@ -542,12 +542,14 @@ function updateBatchActionBar(urlsToRender = []) {
   }
 
   const hasSelection = count > 0;
-  if (batchLiveTestBtn) batchLiveTestBtn.disabled = !hasSelection;
-  if (batchReplaceDomainBtn) batchReplaceDomainBtn.disabled = !hasSelection;
+  const filtered = getFilteredUrls();
+  const hasUrls = filtered.length > 0;
+  if (batchLiveTestBtn) batchLiveTestBtn.disabled = !hasUrls;
+  if (batchReplaceDomainBtn) batchReplaceDomainBtn.disabled = !hasUrls;
   if (batchAddTagBtn) batchAddTagBtn.disabled = !hasSelection;
-  if (batchExportBtn) batchExportBtn.disabled = !hasSelection;
+  if (batchExportBtn) batchExportBtn.disabled = !hasUrls;
   if (batchDeleteBtn) batchDeleteBtn.disabled = !hasSelection;
-  if (batchCheckHealthBtn) batchCheckHealthBtn.disabled = !hasSelection;
+  if (batchCheckHealthBtn) batchCheckHealthBtn.disabled = !hasUrls;
 }
 
 function getFilteredUrls() {
@@ -1355,21 +1357,31 @@ async function bootstrap() {
 
   if (batchLiveTestBtn) {
     batchLiveTestBtn.addEventListener('click', () => {
-      if (appState.selectedIds.size === 0) return;
-      const selected = appState.urls.filter((u) =>
-        appState.selectedIds.has(u.id)
-      );
-      openLiveTestModal({ urls: selected });
+      const filtered = getFilteredUrls();
+      const targets =
+        appState.selectedIds.size > 0
+          ? appState.urls.filter((u) => appState.selectedIds.has(u.id))
+          : filtered;
+      if (targets.length === 0) {
+        alert(i18next.t('urlList.noUrls') || '清單中沒有網址可進行即時測試。');
+        return;
+      }
+      openLiveTestModal({ urls: targets });
     });
   }
 
   if (batchCheckHealthBtn) {
     batchCheckHealthBtn.addEventListener('click', () => {
-      if (appState.selectedIds.size === 0) return;
-      const selected = appState.urls.filter((u) =>
-        appState.selectedIds.has(u.id)
-      );
-      selected.forEach((entry) => {
+      const filtered = getFilteredUrls();
+      const targets =
+        appState.selectedIds.size > 0
+          ? appState.urls.filter((u) => appState.selectedIds.has(u.id))
+          : filtered;
+      if (targets.length === 0) {
+        alert(i18next.t('urlList.noUrls') || '清單中沒有網址可進行連線檢查。');
+        return;
+      }
+      targets.forEach((entry) => {
         runSingleHealthCheck(entry.url, entry.id);
       });
     });
@@ -1377,12 +1389,19 @@ async function bootstrap() {
 
   if (batchReplaceDomainBtn) {
     batchReplaceDomainBtn.addEventListener('click', () => {
-      if (appState.selectedIds.size === 0) return;
       const filtered = getFilteredUrls();
+      const targetIds =
+        appState.selectedIds.size > 0
+          ? appState.selectedIds
+          : new Set(filtered.map((u) => u.id));
+      if (targetIds.size === 0) {
+        alert(i18next.t('urlList.noUrls') || '清單中沒有網址可進行替換。');
+        return;
+      }
       openMaintenanceModal({
         urls: appState.urls,
         filteredIds: new Set(filtered.map((u) => u.id)),
-        selectedIds: appState.selectedIds,
+        selectedIds: targetIds,
         initialTab: 'domain',
         callbacks: {
           onBatchUpdate: (updatedUrls) => {
@@ -1403,7 +1422,10 @@ async function bootstrap() {
 
   if (batchAddTagBtn) {
     batchAddTagBtn.addEventListener('click', () => {
-      if (appState.selectedIds.size === 0) return;
+      if (appState.selectedIds.size === 0) {
+        alert(i18next.t('urlList.batch.noSelection') || '請先勾選要新增標籤的網址項目。');
+        return;
+      }
       const newTag = prompt(i18next.t('urlList.batch.promptAddTag'));
       if (!newTag || !newTag.trim()) return;
 
@@ -1425,11 +1447,19 @@ async function bootstrap() {
 
   if (batchExportBtn) {
     batchExportBtn.addEventListener('click', () => {
-      if (appState.selectedIds.size === 0) return;
-      const selectedEntries = appState.urls.filter((entry) =>
-        appState.selectedIds.has(entry.id)
+      const filtered = getFilteredUrls();
+      const targets =
+        appState.selectedIds.size > 0
+          ? appState.urls.filter((entry) => appState.selectedIds.has(entry.id))
+          : filtered;
+      if (targets.length === 0) {
+        alert(i18next.t('urlList.noUrls') || '清單中沒有網址可供匯出。');
+        return;
+      }
+      exportUrlJson(
+        targets,
+        appState.selectedIds.size > 0 ? 'selected-urls.json' : 'urls-export.json'
       );
-      exportUrlJson(selectedEntries, 'selected-urls.json');
     });
   }
 
