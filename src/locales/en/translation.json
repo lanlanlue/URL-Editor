@@ -207,7 +207,9 @@
     "backupTitle": "Data Backup & Restore",
     "backupDesc": "Export or import your saved URLs for cross-device migration or offline backup.",
     "jsonBackupLabel": "JSON Format",
-    "csvBackupLabel": "CSV Format"
+    "csvBackupLabel": "CSV Format",
+    "exportBtn": "↑ Export",
+    "importBtn": "↓ Import"
   },
   "urlDiff": {
     "btn": "⇄ URL Diff",
