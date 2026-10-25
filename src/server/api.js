@@ -427,38 +427,24 @@ async function authenticateGoogle(request, env) {
     );
   }
   const currentTime = nowSeconds();
-  let user = await env.DB.prepare(
+  const newUserId = crypto.randomUUID();
+  await env.DB.prepare(
+    'INSERT INTO users (id, google_sub, email, display_name, created_at, last_login_at) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(google_sub) DO UPDATE SET email = excluded.email, display_name = excluded.display_name, last_login_at = excluded.last_login_at'
+  )
+    .bind(
+      newUserId,
+      claims.sub,
+      String(claims.email || '').slice(0, 320),
+      String(claims.name || '').slice(0, 200),
+      currentTime,
+      currentTime
+    )
+    .run();
+  const user = await env.DB.prepare(
     'SELECT id FROM users WHERE google_sub = ? LIMIT 1'
   )
     .bind(claims.sub)
     .first();
-  if (!user) {
-    const id = crypto.randomUUID();
-    await env.DB.prepare(
-      'INSERT INTO users (id, google_sub, email, display_name, created_at, last_login_at) VALUES (?, ?, ?, ?, ?, ?)'
-    )
-      .bind(
-        id,
-        claims.sub,
-        String(claims.email || '').slice(0, 320),
-        String(claims.name || '').slice(0, 200),
-        currentTime,
-        currentTime
-      )
-      .run();
-    user = { id };
-  } else {
-    await env.DB.prepare(
-      'UPDATE users SET email = ?, display_name = ?, last_login_at = ? WHERE id = ?'
-    )
-      .bind(
-        String(claims.email || '').slice(0, 320),
-        String(claims.name || '').slice(0, 200),
-        currentTime,
-        user.id
-      )
-      .run();
-  }
   const created = await createSession(env, user.id);
   return json(
     {
@@ -594,7 +580,7 @@ async function handleSyncPut(request, env) {
         );
     } else {
       await env.DB.prepare(
-        'INSERT INTO sync_documents (user_id, revision, payload_schema_version, key_version, kdf_salt, iv, ciphertext, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+        'INSERT OR REPLACE INTO sync_documents (user_id, revision, payload_schema_version, key_version, kdf_salt, iv, ciphertext, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
       )
         .bind(
           session.account_id,

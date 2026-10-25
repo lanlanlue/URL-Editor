@@ -285,7 +285,7 @@
 }
 
 .url-card__button:hover {
-  background: var(--neutral-700);
+  background: var(--btn-hover);
   border-color: var(--border-strong);
   color: var(--text-primary);
 }
@@ -309,7 +309,7 @@
 }
 
 .url-card__button--open:hover {
-  background: var(--neutral-700);
+  background: var(--btn-hover);
   color: var(--text-primary);
 }
 

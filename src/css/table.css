@@ -415,7 +415,7 @@
 }
 
 .url-table__action-btn:hover {
-  background: var(--neutral-700);
+  background: var(--btn-hover);
   border-color: var(--border-strong);
   color: var(--text-primary);
   transform: translateY(-1px);

@@ -134,7 +134,7 @@
 }
 
 .chip-btn:hover {
-  background: var(--neutral-700);
+  background: var(--btn-hover);
   border-color: var(--border-strong);
   color: var(--text-primary);
 }
@@ -313,7 +313,7 @@
 
 #add-param-btn:hover {
   color: var(--text-primary);
-  background: var(--neutral-700);
+  background: var(--btn-hover);
   border-color: var(--border-strong);
 }
 

@@ -513,6 +513,17 @@ async function uploadCurrentData({ force = false, retry = true } = {}) {
       await refreshHistory();
       return;
     }
+    if (
+      error instanceof CloudApiError &&
+      (error.status === 401 || error.status === 403) &&
+      retry
+    ) {
+      await refreshSession();
+      if (session && csrfToken) {
+        await uploadCurrentData({ force, retry: false });
+        return;
+      }
+    }
     throw error;
   }
 }
