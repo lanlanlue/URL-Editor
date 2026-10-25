@@ -202,7 +202,12 @@
       "cloudflare": "Cloudflare 端到端加密同步",
       "webdav": "WebDAV (預留)"
     },
-    "doneBtn": "完成"
+    "doneBtn": "完成",
+    "featuresTitle": "功能偏好",
+    "backupTitle": "資料備份與還原",
+    "backupDesc": "匯出或匯入已儲存的 URL 清單，適合用於跨裝置遷移或本機離線備份。",
+    "jsonBackupLabel": "JSON 格式",
+    "csvBackupLabel": "CSV 格式"
   },
   "urlDiff": {
     "btn": "⇄ URL 比對",

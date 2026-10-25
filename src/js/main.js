@@ -815,6 +815,10 @@ function importUrlJson(file) {
             count: appState.urls.length,
           })
         );
+        const settingsDialog = document.getElementById('settings-modal');
+        if (settingsDialog && typeof settingsDialog.close === 'function' && settingsDialog.open) {
+          settingsDialog.close();
+        }
       } else {
         throw new Error(i18next.t('urlList.importError'));
       }
@@ -872,6 +876,10 @@ function importUrlCsv(file) {
         saveState();
         renderUrlList();
         alert(i18next.t('urlList.importSuccess', { count }));
+        const settingsDialog = document.getElementById('settings-modal');
+        if (settingsDialog && typeof settingsDialog.close === 'function' && settingsDialog.open) {
+          settingsDialog.close();
+        }
       } else {
         alert(i18next.t('urlList.importError'));
       }

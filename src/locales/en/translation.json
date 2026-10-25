@@ -202,7 +202,12 @@
       "cloudflare": "Cloudflare end-to-end encrypted sync",
       "webdav": "WebDAV (reserved)"
     },
-    "doneBtn": "Done"
+    "doneBtn": "Done",
+    "featuresTitle": "Preferences",
+    "backupTitle": "Data Backup & Restore",
+    "backupDesc": "Export or import your saved URLs for cross-device migration or offline backup.",
+    "jsonBackupLabel": "JSON Format",
+    "csvBackupLabel": "CSV Format"
   },
   "urlDiff": {
     "btn": "⇄ URL Diff",
