@@ -99,7 +99,7 @@ body {
 
 .topnav-search {
   flex: 1;
-  max-width: 480px;
+  max-width: 30rem;
   position: relative;
   display: flex;
   align-items: center;
@@ -241,7 +241,7 @@ body.is-resizing .panel-resizer {
    —————————————————————— */
 .sidebar {
   flex: var(--editor-width-ratio, 1.15);
-  min-width: var(--sidebar-min-width, 360px);
+  min-width: var(--sidebar-min-width, min(100%, 22rem));
   max-width: var(--sidebar-max-width, 75vw);
   flex-shrink: 0;
   background: var(--surface);
@@ -338,6 +338,7 @@ body.is-resizing .panel-resizer {
 }
 
 .workspace-toolbar {
+  flex-wrap: wrap;
   display: flex;
   align-items: center;
   gap: 0.75rem;
@@ -364,6 +365,7 @@ body.is-resizing .panel-resizer {
 }
 
 .workspace-toolbar-right {
+  flex-wrap: wrap;
   display: flex;
   align-items: center;
   gap: 0.5rem;
@@ -489,7 +491,7 @@ button:focus-visible {
 /* Sidebar tools grid */
 .tools-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 8.5rem), 1fr));
   gap: 4px;
 }
 

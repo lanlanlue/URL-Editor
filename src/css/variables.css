@@ -51,8 +51,8 @@
   /* Layout dimensions */
   --topnav-height: 3.25rem;
   --editor-width-ratio: 1.15;
-  --sidebar-min-width: 360px;
-  --sidebar-max-width: 680px;
+  --sidebar-min-width: min(100%, 22rem);
+  --sidebar-max-width: 44rem;
 
   /* Legacy aliases (used by JS-generated cards/modals) */
   --bg-color:    var(--bg);

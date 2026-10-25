@@ -6,7 +6,7 @@
   /* Hidden by default – only shown when the browser sets [open] via dialog.showModal() */
   display: none;
   width: 95vw;
-  max-width: 1600px;
+  max-width: min(96vw, 100rem);
   height: 92vh;
   max-height: 92vh;
   background: var(--surface);
@@ -326,7 +326,7 @@
   text-overflow: ellipsis;
   cursor: pointer;
   display: inline-block;
-  max-width: 280px;
+  max-width: 18rem;
 }
 
 .live-test-card__url:hover {
@@ -506,14 +506,14 @@
 .live-overlay-text {
   font-size: 0.82rem;
   color: var(--text-primary);
-  max-width: 340px;
+  max-width: 22rem;
   line-height: 1.4;
 }
 
 .live-overlay-subtext {
   font-size: 0.72rem;
   color: var(--text-muted);
-  max-width: 320px;
+  max-width: 20rem;
   line-height: 1.35;
 }
 
