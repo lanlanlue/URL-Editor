@@ -24,9 +24,22 @@ function openDialog(dialog) {
   else dialog.setAttribute('open', 'true');
 }
 
-function copyText(value) {
+function copyText(value, buttonEl) {
   if (!value || !navigator.clipboard?.writeText) return;
-  navigator.clipboard.writeText(value).catch(() => {});
+  navigator.clipboard
+    .writeText(value)
+    .then(() => {
+      if (buttonEl) {
+        const originalText = buttonEl.textContent;
+        buttonEl.textContent = i18next.t('urlList.card.copied') || '已複製';
+        setTimeout(() => {
+          buttonEl.textContent = originalText;
+        }, 1000);
+      }
+    })
+    .catch((err) => {
+      console.warn('[UTM Clipboard Copy Failed]:', err);
+    });
 }
 
 function getParams() {
@@ -93,8 +106,11 @@ export function initUtmModal() {
   document.querySelectorAll('[data-utm-key]').forEach((input) => {
     input.addEventListener('input', renderUtm);
   });
-  document.getElementById('utm-copy-btn')?.addEventListener('click', () => {
-    copyText(document.getElementById('utm-output')?.value || '');
+  document.getElementById('utm-copy-btn')?.addEventListener('click', (event) => {
+    copyText(
+      document.getElementById('utm-output')?.value || '',
+      event.currentTarget
+    );
   });
   initialized = true;
   if (presetSelect)

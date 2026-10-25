@@ -819,6 +819,7 @@ function importUrlJson(file) {
         throw new Error(i18next.t('urlList.importError'));
       }
     } catch (err) {
+      console.warn('[Import JSON Failed]:', err);
       alert(i18next.t('urlList.importError'));
     }
   };
@@ -875,6 +876,7 @@ function importUrlCsv(file) {
         alert(i18next.t('urlList.importError'));
       }
     } catch (err) {
+      console.warn('[Import CSV Failed]:', err);
       alert(i18next.t('urlList.importError'));
     }
   };

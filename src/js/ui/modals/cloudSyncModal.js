@@ -403,6 +403,7 @@ async function unlockWithSecret(secret, generated = false) {
     await refreshHistory();
     updateControls();
   } catch (error) {
+    console.error('[CloudSync Unlock Secret Failed]:', error);
     encryptionContext = previousContext;
     firstUploadRequired = previousFirstUploadRequired;
     guestMigrationPending = previousGuestMigrationPending;
@@ -462,6 +463,7 @@ async function handleUnlock() {
       })
     );
   } catch (error) {
+    console.warn('[CloudSync Unlock Failed]:', error);
     setStatus(error.message || 'Recovery Key 無效。', true);
   } finally {
     setBusy(false);
@@ -521,6 +523,7 @@ async function handleManualUpload() {
   try {
     await uploadCurrentData({ force: true });
   } catch (error) {
+    console.error('[CloudSync Manual Upload Failed]:', error);
     setStatus(error.message || '同步失敗。', true);
   } finally {
     setBusy(false);
@@ -552,6 +555,7 @@ async function handleDownload() {
       })
     );
   } catch (error) {
+    console.error('[CloudSync Download Failed]:', error);
     setStatus(error.message || '下載失敗。', true);
   } finally {
     setBusy(false);
@@ -605,6 +609,7 @@ async function handleRotate() {
       })
     );
   } catch (error) {
+    console.error('[CloudSync Recovery Key Rotate Failed]:', error);
     encryptionContext = previousContext;
     pendingRecovery = previousRecovery;
     if (previousContext) {
@@ -641,6 +646,7 @@ async function handleHistoryRestore() {
       })
     );
   } catch (error) {
+    console.error('[CloudSync History Restore Failed]:', error);
     setStatus(
       error.message ||
         i18next.t('cloudSync.historyRestoreError', {
@@ -677,6 +683,7 @@ function scheduleAutomaticSync({ retry = false } = {}) {
     try {
       await uploadCurrentData({ force: false });
     } catch (error) {
+      console.warn('[CloudSync Auto Sync Failed (will retry)]:', error);
       syncRetryAttempt += 1;
       setStatus(error.message || '自動同步失敗，稍後會重試。', true);
       scheduleAutomaticSync({ retry: true });
@@ -693,6 +700,7 @@ async function handleLogout() {
     await deleteCurrentAccountLocalState(accountId);
     window.location.href = '/';
   } catch (error) {
+    console.error('[CloudSync Logout Failed]:', error);
     setStatus(error.message || '登出失敗。', true);
     setBusy(false);
   }
@@ -713,6 +721,7 @@ async function handleDeleteAccount() {
     await deleteCurrentAccountLocalState(accountId);
     window.location.href = '/';
   } catch (error) {
+    console.error('[CloudSync Delete Account Failed]:', error);
     setStatus(error.message || '刪除帳戶失敗。', true);
     setBusy(false);
   }

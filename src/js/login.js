@@ -76,6 +76,7 @@ async function initLogin() {
           await authenticateGoogle(response.credential, oauthCsrfToken);
           window.location.href = getReturnPath();
         } catch (error) {
+          console.error('[Google Login Authentication Failed]:', error);
           setStatus(
             error.message ||
               i18next.t('login.statusFailed', {
@@ -100,6 +101,7 @@ async function initLogin() {
       }
     );
   } catch (error) {
+    console.error('[Google Login Initialization Failed]:', error);
     setStatus(
       error.message ||
         i18next.t('login.statusStartFailed', {

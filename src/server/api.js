@@ -415,7 +415,11 @@ async function authenticateGoogle(request, env) {
   let claims;
   try {
     claims = await verifyGoogleCredential(body.credential, env);
-  } catch {
+  } catch (error) {
+    console.warn(
+      '[Google Credential Verification Failed]:',
+      error?.message || error
+    );
     return errorResponse(
       401,
       'GOOGLE_TOKEN_INVALID',
@@ -761,6 +765,7 @@ export async function handleApiRequest(request, env) {
         'INVALID_JSON',
         'Request body must be valid JSON.'
       );
+    console.error('[API Router Unhandled Error]:', error);
     return errorResponse(500, 'INTERNAL_ERROR', 'An internal error occurred.');
   }
 }
