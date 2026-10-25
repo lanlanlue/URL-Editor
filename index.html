@@ -1,4 +1,4 @@
-<!DOCTYPE html><html lang=zh-TW><script type=importmap>{"imports":{"k2mZx":"/URL-Editor/utmModal.766e0d57.js","lr6uZ":"/URL-Editor/batchStripperModal.8742b664.js"}}</script><meta charset=UTF-8><meta name=referrer content=no-referrer><meta http-equiv=Permissions-Policy content="accelerometer=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=()"><meta name=viewport content="width=device-width, initial-scale=1.0"><title>URL Editor</title><link rel=stylesheet href=/URL-Editor/URL-Editor.6864acab.css><link rel=icon href=/URL-Editor/icon.b850ebbb.svg type=image/svg+xml><script src=/URL-Editor/URL-Editor.5cf9e66e.js></script><link rel=stylesheet href=/URL-Editor/URL-Editor.07a499e2.css><body>
+<!DOCTYPE html><html lang=zh-TW><script type=importmap>{"imports":{"k2mZx":"/URL-Editor/utmModal.766e0d57.js","lr6uZ":"/URL-Editor/batchStripperModal.8742b664.js"}}</script><meta charset=UTF-8><meta name=referrer content=no-referrer><meta http-equiv=Permissions-Policy content="accelerometer=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=()"><meta name=viewport content="width=device-width, initial-scale=1.0"><title>URL Editor</title><link rel=stylesheet href=/URL-Editor/URL-Editor.6864acab.css><link rel=icon href=/URL-Editor/icon.b850ebbb.svg type=image/svg+xml><script src=/URL-Editor/URL-Editor.5cf9e66e.js></script><link rel=stylesheet href=/URL-Editor/URL-Editor.d306c0e7.css><body>
     
     <nav class=topnav>
       
@@ -207,21 +207,7 @@
                   <span>🎯</span> UTM 產生器
                 </button>
               </div>
-              <button id=export-json-btn class=sidebar-tool-btn data-i18n=urlList.exportBtn>
-                <span>↑</span> 匯出 JSON
-              </button>
-              <button id=import-json-btn class=sidebar-tool-btn data-i18n=urlList.importBtn>
-                <span>↓</span> 匯入 JSON
-              </button>
-              <button id=export-csv-btn class=sidebar-tool-btn data-i18n=urlList.exportCsvBtn>
-                <span>↑</span> 匯出 CSV
-              </button>
-              <button id=import-csv-btn class=sidebar-tool-btn data-i18n=urlList.importCsvBtn>
-                <span>↓</span> 匯入 CSV
-              </button>
             </div>
-            <input id=import-json-file type=file accept=.json class=hidden>
-            <input id=import-csv-file type=file accept=.csv class=hidden>
           </div>
         </section>
 
@@ -636,13 +622,53 @@
         </button>
       </div>
       <div class=modal-body>
-        <p class=panel-desc data-i18n=settings.desc>
-          管理介面偏好與選用工具。
-        </p>
-        <label class=setting-item for=marketing-toolkit-toggle>
-          <span data-i18n=settings.marketingToggle>啟用行銷工具箱 (UTM, Tracker Stripper)</span>
-          <input type=checkbox id=marketing-toolkit-toggle>
-        </label>
+        <div class=settings-section>
+          <h4 class=settings-section-title data-i18n=settings.featuresTitle>
+            功能偏好
+          </h4>
+          <p class=panel-desc data-i18n=settings.desc>
+            管理介面偏好與選用工具。
+          </p>
+          <label class=setting-item for=marketing-toolkit-toggle>
+            <span data-i18n=settings.marketingToggle>啟用行銷工具箱 (UTM, Tracker Stripper)</span>
+            <input type=checkbox id=marketing-toolkit-toggle>
+          </label>
+        </div>
+
+        <div class=settings-section>
+          <h4 class=settings-section-title data-i18n=settings.backupTitle>
+            資料備份與還原
+          </h4>
+          <p class=panel-desc data-i18n=settings.backupDesc>
+            匯出或匯入已儲存的 URL 清單，適合用於跨裝置遷移或本機離線備份。
+          </p>
+          <div class=settings-backup-grid>
+            <div class=settings-backup-card>
+              <span class=settings-backup-card__header data-i18n=settings.jsonBackupLabel>JSON 格式</span>
+              <div class=settings-backup-card__actions>
+                <button id=export-json-btn class="btn-ghost btn-sm" data-i18n=urlList.exportBtn>
+                  <span>↑</span> 匯出 JSON
+                </button>
+                <button id=import-json-btn class="btn-ghost btn-sm" data-i18n=urlList.importBtn>
+                  <span>↓</span> 匯入 JSON
+                </button>
+              </div>
+            </div>
+            <div class=settings-backup-card>
+              <span class=settings-backup-card__header data-i18n=settings.csvBackupLabel>CSV 格式</span>
+              <div class=settings-backup-card__actions>
+                <button id=export-csv-btn class="btn-ghost btn-sm" data-i18n=urlList.exportCsvBtn>
+                  <span>↑</span> 匯出 CSV
+                </button>
+                <button id=import-csv-btn class="btn-ghost btn-sm" data-i18n=urlList.importCsvBtn>
+                  <span>↓</span> 匯入 CSV
+                </button>
+              </div>
+            </div>
+          </div>
+          <input id=import-json-file type=file accept=.json class=hidden>
+          <input id=import-csv-file type=file accept=.csv class=hidden>
+        </div>
       </div>
       <div class=modal-footer>
         <button id=settings-done-btn class=btn-primary data-i18n=settings.doneBtn>
@@ -1039,6 +1065,6 @@
       </div>
     </dialog>
 
-    <script type=module src=/URL-Editor/URL-Editor.7d8f2c10.js></script>
+    <script type=module src=/URL-Editor/URL-Editor.ce0c67f5.js></script>
   
 
