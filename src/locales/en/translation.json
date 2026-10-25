@@ -408,5 +408,14 @@
     "statusStartFailed": "Failed to start Google sign-in.",
     "statusNoClient": "Google OAuth Client ID is not configured.",
     "statusScriptError": "Failed to load Google Sign-In component."
+  },
+  "scale": {
+    "title": "UI & Font Scale",
+    "compact": "Font: Compact (13px)",
+    "small": "Font: Small (14.5px)",
+    "normal": "Font: Standard (16px Base)",
+    "medium": "Font: Medium (17.5px)",
+    "large": "Font: Large (19px / 2K)",
+    "xlarge": "Font: Extra Large (21px / 4K)"
   }
 }

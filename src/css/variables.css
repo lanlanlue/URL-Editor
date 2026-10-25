@@ -49,7 +49,7 @@
   --shadow-lg: 0 8px 20px rgba(0, 0, 0, 0.6);
 
   /* Layout dimensions */
-  --topnav-height: 48px;
+  --topnav-height: 3.25rem;
   --editor-width-ratio: 1.15;
   --sidebar-min-width: 360px;
   --sidebar-max-width: 680px;

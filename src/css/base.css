@@ -9,16 +9,38 @@
 }
 
 html {
-  font-size: 14px;
+  font-size: 16px;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
-html.scale-compact { font-size: 12.5px; }
-html.scale-normal  { font-size: 14px; }
-html.scale-medium  { font-size: 15.5px; }
-html.scale-large   { font-size: 17px; }
-html.scale-xlarge  { font-size: 18.5px; }
+html.scale-compact { font-size: 13px; }
+html.scale-small   { font-size: 14.5px; }
+html.scale-normal  { font-size: 16px; }
+html.scale-medium  { font-size: 17.5px; }
+html.scale-large   { font-size: 19px; }
+html.scale-xlarge  { font-size: 21px; }
+
+/* 2K / 4K / QHD 高解析度寬螢幕自適應提升 (大螢幕下各級距適度提升以保持極佳易讀性) */
+@media (min-width: 2000px) {
+  html:not([class*="scale-"]) { font-size: 17.5px; }
+  html.scale-compact { font-size: 14px; }
+  html.scale-small   { font-size: 15.5px; }
+  html.scale-normal  { font-size: 17.5px; }
+  html.scale-medium  { font-size: 19px; }
+  html.scale-large   { font-size: 21px; }
+  html.scale-xlarge  { font-size: 23px; }
+}
+
+@media (min-width: 2800px) {
+  html:not([class*="scale-"]) { font-size: 19.5px; }
+  html.scale-compact { font-size: 15px; }
+  html.scale-small   { font-size: 17px; }
+  html.scale-normal  { font-size: 19.5px; }
+  html.scale-medium  { font-size: 21.5px; }
+  html.scale-large   { font-size: 24px; }
+  html.scale-xlarge  { font-size: 26.5px; }
+}
 
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans-serif;

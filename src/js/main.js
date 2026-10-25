@@ -910,6 +910,7 @@ function initUiScale() {
   const applyScale = (scale) => {
     document.documentElement.classList.remove(
       'scale-compact',
+      'scale-small',
       'scale-normal',
       'scale-medium',
       'scale-large',

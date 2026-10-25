@@ -408,5 +408,14 @@
     "statusStartFailed": "無法啟動 Google 登入。",
     "statusNoClient": "尚未設定 Google OAuth Client ID。",
     "statusScriptError": "Google 登入元件載入失敗。"
+  },
+  "scale": {
+    "title": "介面與字體大小",
+    "compact": "字體: 極小 (13px)",
+    "small": "字體: 較小 (14.5px)",
+    "normal": "字體: 標準 (16px 基準)",
+    "medium": "字體: 適中 (17.5px)",
+    "large": "字體: 放大 (19px / 2K推薦)",
+    "xlarge": "字體: 特大 (21px / 4K推薦)"
   }
 }

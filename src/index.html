@@ -50,13 +50,15 @@
         <select
           id="ui-scale-select"
           class="scale-switcher"
+          data-i18n="[title]scale.title"
           title="介面與字體大小"
         >
-          <option value="compact">字體: 小 (90%)</option>
-          <option value="normal" selected>字體: 標準 (100%)</option>
-          <option value="medium">字體: 適中 (110%)</option>
-          <option value="large">字體: 放大 (120%)</option>
-          <option value="xlarge">字體: 特大 (130%)</option>
+          <option value="compact" data-i18n="scale.compact">字體: 極小 (13px)</option>
+          <option value="small" data-i18n="scale.small">字體: 較小 (14.5px)</option>
+          <option value="normal" selected data-i18n="scale.normal">字體: 標準 (16px 基準)</option>
+          <option value="medium" data-i18n="scale.medium">字體: 適中 (17.5px)</option>
+          <option value="large" data-i18n="scale.large">字體: 放大 (19px / 2K推薦)</option>
+          <option value="xlarge" data-i18n="scale.xlarge">字體: 特大 (21px / 4K推薦)</option>
         </select>
         <select id="language-switcher" class="language-switcher">
           <option value="en">EN</option>
