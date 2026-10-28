@@ -120,6 +120,7 @@ function isOAuthOriginAllowed(request, env) {
     hostname === 'url-editor.ointw.com' ||
     hostname === 'localhost' ||
     hostname === '127.0.0.1' ||
+    hostname === '[::1]' ||
     hostname === '::1'
   );
 }

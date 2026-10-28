@@ -33,6 +33,19 @@ describe('Pages API boundary', () => {
     expect(await response.json()).toEqual({ googleClientId: '' });
   });
 
+  test.each([
+    'http://localhost/api/config',
+    'http://127.0.0.1/api/config',
+    'http://[::1]/api/config',
+  ])('exposes OAuth configuration on loopback dev host %s', async (url) => {
+    const response = await handleApiRequest(new Request(url), {
+      GOOGLE_CLIENT_ID: 'public-client-id',
+    });
+    expect(await response.json()).toEqual({
+      googleClientId: 'public-client-id',
+    });
+  });
+
   test('accepts the documented envelope and rejects unknown fields', () => {
     const valid = {
       revision: 1,
