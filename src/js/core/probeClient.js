@@ -43,14 +43,16 @@ export async function probeViaServer(url, keyword) {
       disableFor(10 * 1000);
       return null;
     }
-    if (!response.ok) {
-      disableFor(60 * 1000); // 401 signed out, 404 no backend, 5xx
+    if (response.status === 401 || response.status === 404) {
+      disableFor(60 * 1000); // signed out / no backend: every URL would fail
       return null;
     }
+    if (!response.ok) return null; // 5xx etc.: this request only
     const data = await response.json();
     return toHealthResult(data);
   } catch {
-    disableFor(60 * 1000);
+    // A timeout or network error for one URL says nothing about the backend,
+    // so fall back for this URL only instead of disabling probing globally.
     return null;
   } finally {
     clearTimeout(timer);

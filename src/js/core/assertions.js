@@ -51,12 +51,16 @@ export function matchesStatus(code, spec) {
  * Checks that cannot be evaluated in the current mode (e.g. status in limited
  * mode, keyword without a response body) are reported as `skipped`, never as
  * passed or failed.
- * @returns {{passed: boolean, failures: Array<object>, skipped: string[]}}
+ * `state` is 'failed' when any check failed, 'skipped' when checks were
+ * configured but every one was skipped (nothing was verified), else 'passed'.
+ * `passed` is true only for state 'passed', so a UI tick never appears for an
+ * assertion that verified nothing.
+ * @returns {{passed: boolean, state: 'passed'|'failed'|'skipped', failures: Array<object>, skipped: string[]}}
  */
 export function evaluateAssertions(result, assertions) {
   const failures = [];
   const skipped = [];
-  if (!assertions) return { passed: true, failures, skipped };
+  if (!assertions) return { passed: true, state: 'passed', failures, skipped };
 
   if (assertions.expectedStatus) {
     if (result.code != null) {
@@ -112,7 +116,16 @@ export function evaluateAssertions(result, assertions) {
     }
   }
 
-  return { passed: failures.length === 0, failures, skipped };
+  const configured =
+    (assertions.expectedStatus ? 1 : 0) +
+    (assertions.keyword ? 1 : 0) +
+    (assertions.maxTimeMs !== null && assertions.maxTimeMs !== undefined
+      ? 1
+      : 0);
+  let state = 'passed';
+  if (failures.length > 0) state = 'failed';
+  else if (configured > 0 && skipped.length === configured) state = 'skipped';
+  return { passed: state === 'passed', state, failures, skipped };
 }
 
 function describeFailure(failure) {
@@ -134,7 +147,7 @@ export function applyAssertions(result, rawAssertions) {
 
   const assertion = evaluateAssertions(result, assertions);
   const next = { ...result, assertion };
-  if (!assertion.passed) {
+  if (assertion.state === 'failed') {
     next.status = 'offline';
     next.error = assertion.failures.map(describeFailure).join('; ');
   } else if (

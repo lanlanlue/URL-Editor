@@ -85,4 +85,44 @@ describe('probeViaServer', () => {
     global.fetch.mockRejectedValueOnce(new TypeError('Failed to fetch'));
     expect(await probeViaServer('https://e.com/')).toBeNull();
   });
+
+  test('a 5xx from the probe endpoint does not disable later probes', async () => {
+    global.fetch.mockResolvedValueOnce(reply(502, {}));
+    expect(await probeViaServer('https://slow.example/')).toBeNull();
+    global.fetch.mockResolvedValueOnce(
+      reply(200, { reachable: true, code: 200 })
+    );
+    expect(await probeViaServer('https://e.com/')).toMatchObject({
+      mode: 'server',
+    });
+    expect(global.fetch).toHaveBeenCalledTimes(2);
+  });
+
+  test('a single URL timing out does not disable later probes', async () => {
+    const abort = new Error('aborted');
+    abort.name = 'AbortError';
+    global.fetch.mockRejectedValueOnce(abort);
+    expect(await probeViaServer('https://slow.example/')).toBeNull();
+    global.fetch.mockResolvedValueOnce(
+      reply(200, { reachable: true, code: 200 })
+    );
+    expect(await probeViaServer('https://e.com/')).not.toBeNull();
+    expect(global.fetch).toHaveBeenCalledTimes(2);
+  });
+
+  test('a network failure does not disable later probes', async () => {
+    global.fetch.mockRejectedValueOnce(new TypeError('Failed to fetch'));
+    expect(await probeViaServer('https://e.com/')).toBeNull();
+    global.fetch.mockResolvedValueOnce(
+      reply(200, { reachable: true, code: 200 })
+    );
+    expect(await probeViaServer('https://e.com/')).not.toBeNull();
+  });
+
+  test('no backend (404) disables further attempts for a while', async () => {
+    global.fetch.mockResolvedValueOnce(reply(404, {}));
+    expect(await probeViaServer('https://e.com/')).toBeNull();
+    expect(await probeViaServer('https://e.com/')).toBeNull();
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+  });
 });
