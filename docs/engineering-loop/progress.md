@@ -15,3 +15,5 @@
 - Worker D found pre-existing bug B23 (missing await in api.js dispatch), verified by reading. Worker E launched (B23, B24, B15).
 
 - Round 2 / Worker E: B23, B24, B15 merged as 6524874 (one rework on B15). Verified in main: 30 suites / 543 tests pass, eslint exit 0, api.js coverage 98.17% lines / 95.12% branches, overall lines 68.5% (denominator now includes src/server; was 54.2% without it).
+
+- Round 3: B12 (Worker F) fast-forwarded to 9317dec. Verified in main: 31 suites / 554 tests pass, eslint exit 0, overall lines 69.1% / branches 59.5% (src/js + src/server). final-report.md written. Status PARTIAL (B13 and low-priority items open; no staging verification).

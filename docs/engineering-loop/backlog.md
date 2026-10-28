@@ -15,7 +15,7 @@ Base Commit: ab46b3f. All items are HYPOTHESES from read-only audits until a fai
 | B9 | P1 | exp missing not rejected; JWKS fetch no timeout (api.js) | Worker A | INTEGRATED (ef0705e) |
 | B10 | P1 | Malformed % aborts whole batch import (urlParser.js) | Worker B | INTEGRATED (fd33099) |
 | B11 | P1 | isEmbeddable ignores comma-combined CSP (frameHeaders.js) | Worker A | INTEGRATED (ef0705e) |
-| B12 | P2 | Auto-sync fetches fresh ETag before PUT, overwriting remote changes | Orchestrator design first | pending decision |
+| B12 | P2 | Auto-sync fetches fresh ETag before PUT, overwriting remote changes | Worker F | INTEGRATED (9317dec) |
 | B13 | P2 | checkHistory O(n^2) I/O; liveTestModal races | round 2 | pending |
 | B14 | P3 | Missing tests: api.js, secureStorage, cryptoVault, cloudApi; jest.config does not collect src/server | Worker D | INTEGRATED (b248f44) |
 
@@ -47,3 +47,8 @@ Cross-isolate rate limiting, expired-session purge and storage caps (Cloudflare 
 - B15 INTEGRATED after one rework: the first lookup keyed on csrf_hash (mutable) and could 401 the loser of the rotation race when the winner re-issued CSRF; final lookup uses immutable columns (user_id, created_at, last_authenticated_at, expires_at) plus last_rotated_at newer than the stale row. Verified by grep that no UPDATE changes those columns.
 - Residual (B26, low): logout vs rotation delete race; sibling session of the same user created in the same second that also rotated could be adopted (needs a surrogate session id in the schema).
 - Still open: B12 (awaiting user decision, see b12-design.md), B13 (checkHistory perf, liveTestModal races), B16, B17, B20, B21, B22, B25, B26. Out of scope: infra-level rate limiting/session purge/storage caps, npm audit (dev tooling only).
+
+## Round 3 (final)
+- B12 INTEGRATED (a29a0de..9317dec) after Critic/Challenger review and a test-strengthening pass.
+- B27 (P3): 409-driven auto-sync retries have no attempt cap.
+- See final-report.md for the consolidated status.
