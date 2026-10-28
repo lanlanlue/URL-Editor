@@ -162,6 +162,17 @@ async function readJson(request) {
   }
 }
 
+// Only these sentinels thrown by readJson may reach the client as a code; any
+// other error (e.g. a stream failure) is reported as INVALID_BODY so internal
+// messages are never echoed.
+function bodyErrorResponse(error, message) {
+  if (error?.message === 'PAYLOAD_TOO_LARGE')
+    return errorResponse(413, 'PAYLOAD_TOO_LARGE', message);
+  if (error?.message === 'INVALID_JSON')
+    return errorResponse(422, 'INVALID_JSON', message);
+  return errorResponse(422, 'INVALID_BODY', message);
+}
+
 function exactKeys(object, allowed) {
   return (
     object &&
@@ -402,11 +413,7 @@ async function authenticateGoogle(request, env) {
   try {
     body = await readJson(request);
   } catch (error) {
-    return errorResponse(
-      error.message === 'PAYLOAD_TOO_LARGE' ? 413 : 422,
-      error.message,
-      'Invalid request body.'
-    );
+    return bodyErrorResponse(error, 'Invalid request body.');
   }
   if (
     !exactKeys(body, new Set(['credential', 'csrfToken'])) ||
@@ -510,11 +517,7 @@ async function handleSyncPut(request, env) {
   try {
     body = await readJson(request);
   } catch (error) {
-    return errorResponse(
-      error.message === 'PAYLOAD_TOO_LARGE' ? 413 : 422,
-      error.message,
-      'Invalid sync body.'
-    );
+    return bodyErrorResponse(error, 'Invalid sync body.');
   }
   if (!validateEnvelope(body))
     return errorResponse(

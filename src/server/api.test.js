@@ -239,5 +239,85 @@ describe('Pages API boundary', () => {
       expect(response.status).toBe(409);
       expect((await response.json()).code).toBe('SYNC_CONFLICT');
     });
+
+    describe('B8: body read errors map to a fixed code set', () => {
+      const failingBody = (message) => ({
+        arrayBuffer: async () => {
+          throw new Error(message);
+        },
+      });
+      const login = (overrides) =>
+        handleApiRequest(
+          {
+            ...req('/api/auth/google', {
+              method: 'POST',
+              headers: { Origin: ORIGIN, 'CF-Connecting-IP': 'b8-login' },
+            }),
+            ...overrides,
+          },
+          {}
+        );
+
+      test.each([
+        ['PAYLOAD_TOO_LARGE', 413],
+        ['INVALID_JSON', 422],
+      ])('login keeps sentinel %s', async (code, status) => {
+        const response = await login(failingBody(code));
+        expect(response.status).toBe(status);
+        expect((await response.json()).code).toBe(code);
+      });
+
+      test('login does not echo an arbitrary error message as the code', async () => {
+        const response = await login(failingBody('D1_ERROR: secret detail'));
+        const body = await response.json();
+        expect(response.status).toBe(422);
+        expect(body.code).toBe('INVALID_BODY');
+        expect(JSON.stringify(body)).not.toContain('secret detail');
+      });
+
+      test('sync PUT does not echo an arbitrary error message as the code', async () => {
+        const handlers = await syncHandlers(() => ({ meta: { changes: 0 } }));
+        const response = await handleApiRequest(
+          {
+            ...req('/api/sync', {
+              method: 'PUT',
+              headers: {
+                Origin: ORIGIN,
+                Cookie: '__Host-ue_session=tok',
+                'X-CSRF-Token': 'csrf-token',
+                'If-Match': '"rev-1"',
+              },
+            }),
+            ...failingBody('stream exploded at /internal/path'),
+          },
+          { DB: makeDb(handlers) }
+        );
+        const body = await response.json();
+        expect(response.status).toBe(422);
+        expect(body.code).toBe('INVALID_BODY');
+        expect(JSON.stringify(body)).not.toContain('/internal/path');
+      });
+
+      test('sync PUT keeps the PAYLOAD_TOO_LARGE sentinel', async () => {
+        const handlers = await syncHandlers(() => ({ meta: { changes: 0 } }));
+        const response = await handleApiRequest(
+          {
+            ...req('/api/sync', {
+              method: 'PUT',
+              headers: {
+                Origin: ORIGIN,
+                Cookie: '__Host-ue_session=tok',
+                'X-CSRF-Token': 'csrf-token',
+                'If-Match': '"rev-1"',
+              },
+            }),
+            ...failingBody('PAYLOAD_TOO_LARGE'),
+          },
+          { DB: makeDb(handlers) }
+        );
+        expect(response.status).toBe(413);
+        expect((await response.json()).code).toBe('PAYLOAD_TOO_LARGE');
+      });
+    });
   });
 });
