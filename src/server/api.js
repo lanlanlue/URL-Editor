@@ -587,13 +587,19 @@ async function handleSyncPut(request, env) {
         )
         .run();
     }
-    await cleanupHistory(env, session.account_id);
   } catch {
     return errorResponse(
       409,
       'SYNC_CONFLICT',
       'The encrypted document has changed.'
     );
+  }
+  // The write is committed; a failed history cleanup must not be reported as a
+  // conflict. It is retried on the next successful write.
+  try {
+    await cleanupHistory(env, session.account_id);
+  } catch {
+    // best effort
   }
   return json(
     { document: body, revision: body.revision },

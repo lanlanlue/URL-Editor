@@ -183,5 +183,61 @@ describe('Pages API boundary', () => {
         '__Host-ue_session='
       );
     });
+
+    const putSync = (db) =>
+      handleApiRequest(
+        req('/api/sync', {
+          method: 'PUT',
+          headers: {
+            Origin: ORIGIN,
+            Cookie: '__Host-ue_session=tok',
+            'X-CSRF-Token': 'csrf-token',
+            'If-Match': '"rev-1"',
+          },
+          body: JSON.stringify(envelope(2)),
+        }),
+        { DB: db }
+      );
+    const syncHandlers = async (cleanup) => {
+      const row = await sessionRow('tok', { last_rotated_at: nowS() });
+      return [
+        ['SELECT s.*', () => row],
+        ['SELECT * FROM sync_documents', () => ({ revision: 1 })],
+        ['INSERT INTO sync_revisions', () => ({ meta: { changes: 1 } })],
+        ['UPDATE sync_documents', () => ({ meta: { changes: 1 } })],
+        ['DELETE FROM sync_revisions', cleanup],
+      ];
+    };
+
+    test('B4: reports success when history cleanup throws after a committed write', async () => {
+      const db = makeDb(
+        await syncHandlers(() => {
+          throw new Error('cleanup failed');
+        })
+      );
+      const response = await putSync(db);
+      expect(response.status).toBe(200);
+      expect((await response.json()).revision).toBe(2);
+    });
+
+    test('B4: still returns SYNC_CONFLICT when the write itself matches 0 rows', async () => {
+      const handlers = await syncHandlers(() => ({ meta: { changes: 0 } }));
+      handlers.find(([n]) => n === 'UPDATE sync_documents')[1] = () => ({
+        meta: { changes: 0 },
+      });
+      const response = await putSync(makeDb(handlers));
+      expect(response.status).toBe(409);
+      expect((await response.json()).code).toBe('SYNC_CONFLICT');
+    });
+
+    test('B4: still returns SYNC_CONFLICT when the write throws', async () => {
+      const handlers = await syncHandlers(() => ({ meta: { changes: 0 } }));
+      handlers.find(([n]) => n === 'UPDATE sync_documents')[1] = () => {
+        throw new Error('constraint');
+      };
+      const response = await putSync(makeDb(handlers));
+      expect(response.status).toBe(409);
+      expect((await response.json()).code).toBe('SYNC_CONFLICT');
+    });
   });
 });
