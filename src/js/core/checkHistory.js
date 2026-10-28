@@ -19,13 +19,19 @@ function getStorage(storage) {
 }
 
 /**
- * In-memory cache per storage object. Parsing and re-serialising the whole
- * blob on every call made a run of N checks O(N^2), so the parsed blob is kept
- * here, writes are coalesced into one debounced setItem, and a cheap raw-string
- * comparison (no JSON.parse) picks up changes made by other tabs.
+ * Per storage object we keep:
+ *  - `raw` / `data`: the last parsed copy of the stored blob. A cheap raw
+ *    string comparison (no JSON.parse) detects writes by other tabs, so reads
+ *    always reflect fresh storage.
+ *  - `pending`: records appended locally and not yet written.
+ *
+ * Writes are additive. A flush re-reads the CURRENT storage string, appends the
+ * pending records per id (de-duplicated by record key, capped), and writes
+ * once. Another tab's records are therefore never overwritten by a stale blob,
+ * and a run of N checks costs O(1) parses and writes instead of O(N).
  */
 const FLUSH_DELAY_MS = 300;
-const cache = new WeakMap(); // storage -> { raw, data, dirty, timer }
+const cache = new WeakMap(); // storage -> { raw, data, pending: Map, timer, warned }
 const dirtyTargets = new Set();
 let lifecycleHooked = false;
 
@@ -43,20 +49,91 @@ function sanitize(parsed) {
   return clean;
 }
 
+function recordKey(record) {
+  return [
+    record.t,
+    record.ok,
+    record.code,
+    record.ms,
+    record.err,
+    record.mode,
+  ].join('|');
+}
+
+/** Appends `extra` after `base`, skipping duplicates, keeping the newest. */
+function mergeRecords(base = [], extra = []) {
+  if (!extra.length) return base.slice(-HISTORY_LIMIT);
+  const seen = new Set(base.map(recordKey));
+  const merged = [...base];
+  extra.forEach((record) => {
+    const key = recordKey(record);
+    if (!seen.has(key)) {
+      seen.add(key);
+      merged.push(record);
+    }
+  });
+  return merged.slice(-HISTORY_LIMIT);
+}
+
+function getEntry(target) {
+  let entry = cache.get(target);
+  if (!entry) {
+    entry = {
+      raw: undefined,
+      data: {},
+      pending: new Map(),
+      timer: null,
+      warned: false,
+    };
+    cache.set(target, entry);
+  }
+  return entry;
+}
+
+/** Fresh stored blob; parses only when the raw string changed. */
+function loadFresh(target) {
+  const entry = getEntry(target);
+  let raw;
+  try {
+    raw = target.getItem(STORAGE_KEY);
+  } catch {
+    return entry.data;
+  }
+  if (entry.raw === raw) return entry.data;
+  let data = {};
+  try {
+    data = sanitize(JSON.parse(raw || '{}'));
+  } catch {
+    data = {};
+  }
+  entry.raw = raw;
+  entry.data = data;
+  return data;
+}
+
 function flushTarget(target) {
   const entry = cache.get(target);
-  if (!entry || !entry.dirty) return;
+  if (!entry) return;
   if (entry.timer) clearTimeout(entry.timer);
   entry.timer = null;
-  entry.dirty = false;
-  dirtyTargets.delete(target);
+  if (!entry.pending.size) {
+    dirtyTargets.delete(target);
+    return;
+  }
+  const next = { ...loadFresh(target) };
+  entry.pending.forEach((records, id) => {
+    next[id] = mergeRecords(next[id], records);
+  });
   try {
-    const raw = JSON.stringify(entry.data);
+    const raw = JSON.stringify(next);
     target.setItem(STORAGE_KEY, raw);
     entry.raw = raw;
+    entry.data = next;
+    entry.pending.clear();
     entry.warned = false;
+    dirtyTargets.delete(target);
   } catch (err) {
-    // Quota or privacy mode: history stays in memory for this session.
+    // Quota or privacy mode: records stay pending in memory for this session.
     if (!entry.warned) {
       entry.warned = true;
       console.warn('[checkHistory] could not persist history:', err);
@@ -79,43 +156,23 @@ function hookLifecycle() {
   });
 }
 
-function load(storage) {
-  const target = getStorage(storage);
-  if (!target) return {};
-  const entry = cache.get(target);
-  if (entry?.dirty) return entry.data;
-  let raw = null;
-  try {
-    raw = target.getItem(STORAGE_KEY);
-  } catch {
-    return entry ? entry.data : {};
-  }
-  if (entry && entry.raw === raw) return entry.data;
-  let data = {};
-  try {
-    data = sanitize(JSON.parse(raw || '{}'));
-  } catch {
-    data = {};
-  }
-  cache.set(target, { raw, data, dirty: false, timer: null });
-  return data;
-}
-
-function save(data, storage) {
-  const target = getStorage(storage);
-  if (!target) return;
-  let entry = cache.get(target);
-  if (!entry) {
-    entry = { raw: null, data, dirty: false, timer: null };
-    cache.set(target, entry);
-  }
-  entry.data = data;
-  entry.dirty = true;
+function scheduleFlush(target, entry) {
   dirtyTargets.add(target);
   hookLifecycle();
   if (!entry.timer) {
     entry.timer = setTimeout(() => flushTarget(target), FLUSH_DELAY_MS);
   }
+}
+
+function readRecords(id, storage) {
+  const target = getStorage(storage);
+  if (!target) return [];
+  const entry = getEntry(target);
+  const fresh = loadFresh(target)[id];
+  return mergeRecords(
+    Array.isArray(fresh) ? fresh : [],
+    entry.pending.get(id) || []
+  );
 }
 
 /** Forgets the in-memory copy (tests, explicit reset). Pending writes flush first. */
@@ -128,8 +185,7 @@ export function resetHistoryCache(storage) {
 
 /** @returns {Array<{t: number, ok: boolean, code?: number, ms?: number, err?: string, mode?: string}>} */
 export function getHistory(id, storage) {
-  const records = load(storage)[id];
-  return Array.isArray(records) ? records : [];
+  return readRecords(id, storage);
 }
 
 /**
@@ -137,8 +193,7 @@ export function getHistory(id, storage) {
  * @returns {{record: object, previous: object|null, regression: boolean, recovered: boolean}}
  */
 export function recordCheck(id, result, storage, now = Date.now()) {
-  const data = load(storage);
-  const records = Array.isArray(data[id]) ? data[id] : [];
+  const records = readRecords(id, storage);
   const previous = records[records.length - 1] || null;
   const record = {
     t: now,
@@ -148,8 +203,15 @@ export function recordCheck(id, result, storage, now = Date.now()) {
     ...(result.error ? { err: String(result.error).slice(0, 120) } : {}),
     ...(result.mode ? { mode: result.mode } : {}),
   };
-  data[id] = [...records, record].slice(-HISTORY_LIMIT);
-  save(data, storage);
+  const target = getStorage(storage);
+  if (target) {
+    const entry = getEntry(target);
+    entry.pending.set(
+      id,
+      [...(entry.pending.get(id) || []), record].slice(-HISTORY_LIMIT)
+    );
+    scheduleFlush(target, entry);
+  }
   return {
     record,
     previous,
@@ -158,18 +220,28 @@ export function recordCheck(id, result, storage, now = Date.now()) {
   };
 }
 
-/** Drops history for entries that no longer exist. */
+/** Drops history for entries that no longer exist (stored and pending). */
 export function pruneHistory(validIds, storage) {
+  const target = getStorage(storage);
+  if (!target) return;
   const keep = new Set(validIds);
-  const data = load(storage);
-  let changed = false;
-  Object.keys(data).forEach((id) => {
-    if (!keep.has(id)) {
-      delete data[id];
-      changed = true;
-    }
+  const entry = getEntry(target);
+  entry.pending.forEach((_records, id) => {
+    if (!keep.has(id)) entry.pending.delete(id);
   });
-  if (changed) save(data, storage);
+  const fresh = loadFresh(target);
+  const stale = Object.keys(fresh).filter((id) => !keep.has(id));
+  if (!stale.length) return;
+  const next = { ...fresh };
+  stale.forEach((id) => delete next[id]);
+  try {
+    const raw = JSON.stringify(next);
+    target.setItem(STORAGE_KEY, raw);
+    entry.raw = raw;
+    entry.data = next;
+  } catch {
+    // Best-effort: the blob keeps the stale ids until the next successful write.
+  }
 }
 
 /**

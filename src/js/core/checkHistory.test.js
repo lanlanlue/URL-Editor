@@ -217,3 +217,130 @@ describe('buildResultsCsv', () => {
     expect(out.regression).toBe(false);
   });
 });
+
+describe('checkHistory with two tabs on one storage', () => {
+  function loadInstance() {
+    let mod;
+    jest.isolateModules(() => {
+      mod = require('./checkHistory');
+    });
+    return mod;
+  }
+  const idsOf = (store) =>
+    Object.keys(JSON.parse(store.getItem('urlEditorCheckHistory') || '{}'));
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  test('records from both tabs survive after both flush', () => {
+    const store = memoryStorage();
+    const A = loadInstance();
+    const B = loadInstance();
+    A.recordCheck('x', { status: 'online' }, store, 1);
+    B.recordCheck('y', { status: 'online' }, store, 2);
+    A.recordCheck('x', { status: 'offline' }, store, 3);
+    A.flushHistory();
+    B.flushHistory();
+    const persisted = JSON.parse(store.getItem('urlEditorCheckHistory'));
+    expect(persisted.x).toHaveLength(2);
+    expect(persisted.y).toHaveLength(1);
+    // A fresh reader sees everything.
+    const C = loadInstance();
+    expect(C.getHistory('x', store)).toHaveLength(2);
+    expect(C.getHistory('y', store)).toHaveLength(1);
+  });
+
+  test('two tabs recording 50 distinct ids interleaved lose nothing', () => {
+    jest.useFakeTimers();
+    const store = memoryStorage();
+    const A = loadInstance();
+    const B = loadInstance();
+    for (let i = 0; i < 50; i += 1) {
+      A.recordCheck(`a${i}`, { status: 'online' }, store, i);
+      jest.advanceTimersByTime(12);
+      B.recordCheck(`b${i}`, { status: 'online' }, store, i);
+      jest.advanceTimersByTime(13);
+    }
+    A.flushHistory();
+    B.flushHistory();
+    expect(idsOf(store)).toHaveLength(100);
+  });
+
+  test('reads return fresh storage records plus local pending ones', () => {
+    const store = memoryStorage();
+    const A = loadInstance();
+    const B = loadInstance();
+    A.recordCheck('x', { status: 'online' }, store, 1);
+    A.flushHistory();
+    B.recordCheck('x', { status: 'offline' }, store, 2); // pending in B
+    expect(B.getHistory('x', store).map((r) => r.t)).toEqual([1, 2]);
+    A.recordCheck('x', { status: 'online' }, store, 3);
+    A.flushHistory();
+    expect(B.getHistory('x', store).map((r) => r.t)).toEqual([1, 3, 2]);
+  });
+
+  test('a repeated flush never duplicates records and the cap holds', () => {
+    const store = memoryStorage();
+    const A = loadInstance();
+    const B = loadInstance();
+    for (let i = 0; i < A.HISTORY_LIMIT + 5; i += 1) {
+      A.recordCheck('x', { status: 'online' }, store, i);
+    }
+    A.flushHistory();
+    A.flushHistory();
+    B.recordCheck('x', { status: 'online' }, store, 1000);
+    B.flushHistory();
+    B.flushHistory();
+    const persisted = JSON.parse(store.getItem('urlEditorCheckHistory')).x;
+    expect(persisted).toHaveLength(A.HISTORY_LIMIT);
+    expect(persisted.filter((r) => r.t === 1000)).toHaveLength(1);
+  });
+
+  test('prune neither resurrects nor loses the other tab records', () => {
+    const store = memoryStorage();
+    const A = loadInstance();
+    const B = loadInstance();
+    A.recordCheck('keep', { status: 'online' }, store, 1);
+    A.recordCheck('gone', { status: 'online' }, store, 2);
+    A.flushHistory();
+    B.recordCheck('keepB', { status: 'online' }, store, 3);
+    B.flushHistory();
+    // A prunes: only 'keep' and 'keepB' are valid.
+    A.pruneHistory(['keep', 'keepB'], store);
+    expect(idsOf(store).sort()).toEqual(['keep', 'keepB']);
+    // A records again and flushes; B's record and the prune both stick.
+    A.recordCheck('keep', { status: 'offline' }, store, 4);
+    A.flushHistory();
+    const persisted = JSON.parse(store.getItem('urlEditorCheckHistory'));
+    expect(Object.keys(persisted).sort()).toEqual(['keep', 'keepB']);
+    expect(persisted.keep).toHaveLength(2);
+    expect(persisted.keepB).toHaveLength(1);
+  });
+
+  test('prune drops pending records of pruned ids', () => {
+    const store = memoryStorage();
+    const A = loadInstance();
+    A.recordCheck('gone', { status: 'online' }, store, 1);
+    A.recordCheck('keep', { status: 'online' }, store, 2);
+    A.pruneHistory(['keep'], store);
+    A.flushHistory();
+    expect(idsOf(store)).toEqual(['keep']);
+    expect(A.getHistory('gone', store)).toEqual([]);
+  });
+
+  test('100 record+get calls still parse O(1) and write once', () => {
+    const store = memoryStorage();
+    const A = loadInstance();
+    const setSpy = jest.spyOn(store, 'setItem');
+    const parseSpy = jest.spyOn(JSON, 'parse');
+    for (let i = 0; i < 100; i += 1) {
+      A.recordCheck(`id${i % 20}`, { status: 'online' }, store, i);
+      A.getHistory(`id${i % 20}`, store);
+    }
+    A.flushHistory();
+    expect(parseSpy.mock.calls.length).toBeLessThanOrEqual(3);
+    expect(setSpy).toHaveBeenCalledTimes(1);
+    parseSpy.mockRestore();
+  });
+});
