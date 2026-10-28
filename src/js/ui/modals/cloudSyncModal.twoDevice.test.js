@@ -18,6 +18,7 @@ function makeServer() {
     gets: 0,
     puts: [], // { ifMatch, revision, accepted }
     afterGet: null,
+    gate: null, // one-shot promise that delays the next GET
     // Writes a document as another device would (no If-Match involved).
     write(data) {
       server.revision += 1;
@@ -39,7 +40,10 @@ function makeServer() {
   return server;
 }
 
-async function makeDevice(server, { local, unreadableGuest = false }) {
+async function makeDevice(
+  server,
+  { local, unreadableGuest = false, storedKey = false }
+) {
   jest.resetModules();
   document.body.innerHTML = '';
   class CloudApiError extends Error {
@@ -51,7 +55,11 @@ async function makeDevice(server, { local, unreadableGuest = false }) {
   const secure = {
     clearGuestState: jest.fn().mockResolvedValue(undefined),
     deleteCurrentAccountLocalState: jest.fn(),
-    getAccountEncryptionKey: jest.fn().mockResolvedValue(null),
+    getAccountEncryptionKey: jest
+      .fn()
+      .mockResolvedValue(
+        storedKey ? { key: 'stored-key', salt: 'salt', keyVersion: 1 } : null
+      ),
     getStorageMode: jest.fn(() => 'indexeddb'),
     loadAccountState: jest.fn().mockResolvedValue(null),
     useAccountEncryptionKey: jest.fn().mockResolvedValue(undefined),
@@ -68,6 +76,11 @@ async function makeDevice(server, { local, unreadableGuest = false }) {
     getSyncRevision: jest.fn(),
     getSyncDocument: jest.fn(async () => {
       server.gets += 1;
+      if (server.gate) {
+        const gate = server.gate;
+        server.gate = null;
+        await gate;
+      }
       const result = {
         document: server.envelope,
         etag: `"rev-${server.revision}"`,
@@ -133,9 +146,11 @@ async function makeDevice(server, { local, unreadableGuest = false }) {
   device.nodes = Array.from(document.body.childNodes);
   device.activate = () => document.body.replaceChildren(...device.nodes);
   device.activate();
-  document.getElementById('cloud-sync-recovery-input').value = 'KEY';
-  document.getElementById('cloud-sync-unlock-btn').click();
-  await flush();
+  if (!storedKey) {
+    document.getElementById('cloud-sync-recovery-input').value = 'KEY';
+    document.getElementById('cloud-sync-unlock-btn').click();
+    await flush();
+  }
   device.upload = async () => {
     device.activate();
     document.getElementById('cloud-sync-upload-btn').click();
@@ -201,19 +216,20 @@ describe('B12 stale device must merge instead of overwrite', () => {
     expect(b.ids()).toEqual(['e1']);
   });
 
-  test('(2b) B deleted an entry that A edited earlier: the delete wins', async () => {
+  test("(2b) B deleted an entry that A edited earlier: the delete wins and A's new entry survives", async () => {
     const server = makeServer();
     server.write(data([url('e1', 100)]));
     const a = await makeDevice(server, { local: data([]) });
     const b = await makeDevice(server, { local: data([]) });
 
-    a.state = data([url('e1', 200)]);
+    a.state = data([url('e1', 200), url('a2', 250)]);
     await a.upload(); // rev 2
     b.state = data([], [{ id: 'e1', deletedAt: 300 }]);
     await b.upload();
 
     expect(server.revision).toBe(3);
-    expect(server.ids()).toEqual([]);
+    // a2 was only ever uploaded by A; a stale overwrite by B would drop it.
+    expect(server.ids()).toEqual(['a2']);
     expect(server.data().tombstones).toEqual([
       expect.objectContaining({ id: 'e1', deletedAt: 300 }),
     ]);
@@ -251,10 +267,20 @@ describe('B12 stale device must merge instead of overwrite', () => {
       server.write(data([url(`c${n}`, 1)]));
     };
     const putsBefore = server.puts.length;
+    const getsBefore = server.gets;
+    server.getsAtFirstPut = null;
+    const originalPut = b.api.putSyncDocument.getMockImplementation();
+    b.api.putSyncDocument.mockImplementation(async (...args) => {
+      if (server.getsAtFirstPut === null) server.getsAtFirstPut = server.gets;
+      return originalPut(...args);
+    });
     await b.upload();
 
+    // The first PUT is sent without any GET before it (synced etag is used).
+    expect(server.getsAtFirstPut).toBe(getsBefore);
     const attempts = server.puts.slice(putsBefore);
     expect(attempts).toHaveLength(2); // original + exactly one retry
+    expect(attempts[0].ifMatch).not.toBe(attempts[1].ifMatch);
     expect(attempts.every((p) => p.accepted === false)).toBe(true);
     expect(server.ids().includes('b1')).toBe(false); // nothing of B was written
     expect(b.status().isError).toBe(true);
@@ -283,6 +309,39 @@ describe('B12 stale device must merge instead of overwrite', () => {
   });
 });
 
+describe('B12 never-synced fallback', () => {
+  test('(7) an auto-upload that fires before the session refresh finished merges the remote first', async () => {
+    const server = makeServer();
+    server.write(data([url('r1', 5)]));
+    let release;
+    server.gate = new Promise((resolve) => {
+      release = resolve;
+    });
+    // Stored key: encryptionContext is set while the refresh GET is pending.
+    const a = await makeDevice(server, {
+      local: data([url('a1', 10)]),
+      storedKey: true,
+    });
+    a.activate();
+    jest.useFakeTimers();
+    try {
+      window.dispatchEvent(
+        new CustomEvent('url-editor-data-change', { detail: a.state })
+      );
+      await jest.advanceTimersByTimeAsync(2000);
+      expect(server.puts).toEqual([
+        { ifMatch: '"rev-1"', revision: 2, accepted: true },
+      ]);
+      expect(server.ids()).toEqual(['a1', 'r1']);
+    } finally {
+      jest.useRealTimers();
+      release();
+      await flush();
+    }
+    expect(server.ids()).toEqual(['a1', 'r1']);
+  });
+});
+
 describe('B12 interactions that must keep working', () => {
   test('(5a) guest migration is cleared once, only after the retried upload succeeds', async () => {
     const server = makeServer();
@@ -303,7 +362,12 @@ describe('B12 interactions that must keep working', () => {
       server.write(data([url(`c${n}`, 1)]));
     };
     server.write(data([url('c0', 1)]));
+    const staleEtag = `"rev-${server.revision}"`;
+    // Device synced when the remote was empty ("rev-0"); the remote has since
+    // moved on, so a synced-etag PUT must differ from the fresh etag.
     await a.upload();
+    expect(server.puts[0].ifMatch).toBe('"rev-0"');
+    expect(server.puts[0].ifMatch).not.toBe(staleEtag);
     expect(a.secure.clearGuestState).not.toHaveBeenCalled();
     expect(a.status().isError).toBe(true);
   });
