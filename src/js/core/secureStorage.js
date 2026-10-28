@@ -190,12 +190,15 @@ export function initializeSecureStorage() {
         return await decryptLocalState(record);
       } catch {
         // Do not overwrite an unreadable encrypted record with legacy data.
+        // `unreadable` tells the caller this empty state is a placeholder and
+        // must not be persisted over the stored record.
         return {
           schemaVersion: 1,
           urls: [],
           presets: undefined,
           rebuildHistory: [],
           tombstones: [],
+          unreadable: true,
         };
       }
     } catch {

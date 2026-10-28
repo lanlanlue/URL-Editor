@@ -118,6 +118,9 @@ let appState = {
 let appSettings = loadSettings();
 let marketingToolkitModulesPromise = null;
 let lastPersistedEntities = new Map();
+// True when the stored encrypted record could not be decrypted. The in-memory
+// state is then an empty placeholder and must never be written over it.
+let storageUnreadable = false;
 let lastPersistedPresetIds = new Set();
 let lastPersistedPresetSnapshots = new Map();
 const syncDeviceId = getDeviceId();
@@ -245,6 +248,7 @@ function migrateDataToV3() {
 function applyLoadedState(data) {
   let nextData = data || { urls: [] };
   if (Array.isArray(nextData)) nextData = { urls: nextData };
+  storageUnreadable = nextData.unreadable === true;
   appState.urls = normalizeUrlEntries(nextData.urls);
   appState.sortMode = nextData.sortMode || 'created';
   appState.viewMode = nextData.viewMode || 'cards';
@@ -326,6 +330,12 @@ function markDeletedEntries(ids = []) {
 }
 
 function saveState() {
+  if (storageUnreadable) {
+    // Persisting now would overwrite the unreadable record with placeholder
+    // data (and broadcast it to sync listeners). Keep the session read-only.
+    console.warn('Skipped saving: the stored data could not be decrypted.');
+    return;
+  }
   stampChangedEntities();
   const now = Date.now();
   const rawPresets = getPersistedPresets();
@@ -1022,7 +1032,18 @@ function getCurrentState() {
 async function bootstrap() {
   const stateLoading = loadState();
   if (stateLoading) await stateLoading;
-  pruneHistory(appState.urls.map((entry) => entry.id));
+  if (storageUnreadable) {
+    // An empty id list would wipe every check history, and a bootstrap save
+    // would replace the unreadable record. Leave both untouched and warn.
+    alert(
+      i18next.t('storage.unreadableWarning', {
+        defaultValue:
+          'Your saved data could not be decrypted. It has not been modified, and changes made in this session will not be saved. Reload to retry, or restore from a backup or cloud sync.',
+      })
+    );
+  } else {
+    pruneHistory(appState.urls.map((entry) => entry.id));
+  }
   if (CLOUD_ENABLED) {
     const cloudSync = await loadCloudSyncModule();
     initCloudSyncModal = cloudSync.initCloudSyncModal;
@@ -1048,7 +1069,7 @@ async function bootstrap() {
     },
   });
   // Persist a freshly encrypted record before removing any legacy plaintext.
-  saveState();
+  if (!storageUnreadable) saveState();
   migrateDataToV3();
   initSettingsModal({
     settings: appSettings,
