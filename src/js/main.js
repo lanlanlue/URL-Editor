@@ -263,6 +263,14 @@ function applyLoadedState(data) {
     : [];
   appState.syncMetadata =
     nextData.syncMetadata || createSyncMetadata(syncDeviceId);
+  refreshPersistedSnapshots();
+}
+
+/**
+ * Marks the current entities and presets as already persisted, so the next
+ * saveState() stamps only genuine local edits (and keeps remote stamps).
+ */
+function refreshPersistedSnapshots() {
   lastPersistedEntities = new Map(
     appState.urls.map((entry) => [entry.id, JSON.stringify(entry)])
   );
@@ -1011,6 +1019,9 @@ function restoreCloudData(data) {
   if (['cards', 'table', 'grouped'].includes(data.viewMode)) {
     appState.viewMode = data.viewMode;
   }
+  // The restored data already carries the stamps of the device that wrote it.
+  // Treat it as persisted so saveState() does not re-stamp it as a local edit.
+  refreshPersistedSnapshots();
   saveState();
   renderUrlList();
 }

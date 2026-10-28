@@ -116,3 +116,83 @@ describe('B1: unreadable encrypted record', () => {
     expect(pruneHistory).toHaveBeenCalledWith(['a']);
   });
 });
+
+describe('B2: restoreCloudData keeps remote sync stamps', () => {
+  test('remote entries are not re-stamped as local edits', async () => {
+    const { saveSecureState, cloudOptions } = await loadMain({
+      initialState: {
+        schemaVersion: 1,
+        urls: [{ id: 'local', url: 'https://local.example/' }],
+      },
+    });
+    saveSecureState.mockClear();
+
+    cloudOptions.onRestore({
+      urls: [
+        {
+          id: 'remote',
+          url: 'https://remote.example/',
+          syncUpdatedAt: 1111,
+          syncDeviceId: 'other-device',
+        },
+      ],
+      tombstones: [
+        {
+          id: 'gone',
+          deletedAt: 5,
+          syncUpdatedAt: 2222,
+          syncDeviceId: 'other-device',
+        },
+      ],
+      presets: [
+        {
+          id: 'p1',
+          name: 'P',
+          syncUpdatedAt: 3333,
+          syncDeviceId: 'other-device',
+        },
+      ],
+    });
+
+    const saved = lastSavedState(saveSecureState);
+    const remote = saved.urls.find((entry) => entry.id === 'remote');
+    expect(remote.syncUpdatedAt).toBe(1111);
+    expect(remote.syncDeviceId).toBe('other-device');
+    expect(saved.tombstones[0]).toMatchObject({
+      id: 'gone',
+      syncUpdatedAt: 2222,
+    });
+    const preset = saved.presets.find((item) => item.id === 'p1');
+    expect(preset.syncUpdatedAt).toBe(3333);
+    expect(preset.syncDeviceId).toBe('other-device');
+  });
+
+  test('a later local edit of a restored entry is still stamped locally', async () => {
+    const { saveSecureState, cloudOptions } = await loadMain({
+      initialState: { schemaVersion: 1, urls: [] },
+    });
+    cloudOptions.onRestore({
+      urls: [
+        {
+          id: 'remote',
+          url: 'https://remote.example/',
+          label: 'Old',
+          syncUpdatedAt: 1111,
+          syncDeviceId: 'other-device',
+        },
+      ],
+    });
+    saveSecureState.mockClear();
+
+    const input = document.querySelector('.url-card__label');
+    expect(input).toBeTruthy();
+    input.value = 'Edited';
+    fireEvent.change(input);
+
+    const saved = lastSavedState(saveSecureState);
+    const remote = saved.urls.find((entry) => entry.id === 'remote');
+    expect(remote.label).toBe('Edited');
+    expect(remote.syncUpdatedAt).toBeGreaterThan(1111);
+    expect(remote.syncDeviceId).not.toBe('other-device');
+  });
+});
