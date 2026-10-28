@@ -13,3 +13,5 @@
 
 - Round 2: B19 (Worker C, 1 critic rework) integrated ff to 75df3d8; B14 (Worker D) merged as b248f44. Verified in main with plain `npx jest`: 30 suites / 530 tests pass, eslint exit 0.
 - Worker D found pre-existing bug B23 (missing await in api.js dispatch), verified by reading. Worker E launched (B23, B24, B15).
+
+- Round 2 / Worker E: B23, B24, B15 merged as 6524874 (one rework on B15). Verified in main: 30 suites / 543 tests pass, eslint exit 0, api.js coverage 98.17% lines / 95.12% branches, overall lines 68.5% (denominator now includes src/server; was 54.2% without it).

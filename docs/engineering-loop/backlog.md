@@ -40,3 +40,10 @@ Cross-isolate rate limiting, expired-session purge and storage caps (Cloudflare 
 - B18: RESOLVED by jest.config.js testPathIgnorePatterns ['<rootDir>/.claude/'] and src/server in collectCoverageFrom.
 - B23 (P0/P1, found by Worker D): api.js route dispatch lacks `await` for logout/sync GET/PUT/revisions/delete-account, so thrown 401/403 Responses and DB errors make handleApiRequest reject (Worker throws) instead of returning JSON. Pre-existing. Assigned to Worker E with B24 (`[::1]` hostname) and B15.
 - B25 (P3): cryptoVault.js:13-16 TextDecoder fallback spreads an ArrayBuffer (breaks only where TextDecoder is missing, e.g. jsdom).
+
+## Round 2 / Worker E (integrated 6524874)
+- B23 INTEGRATED: awaited all route handlers (also authenticateGoogle); 18 tests failed before the fix.
+- B24 INTEGRATED: bracketed IPv6 loopback accepted for OAuth config.
+- B15 INTEGRATED after one rework: the first lookup keyed on csrf_hash (mutable) and could 401 the loser of the rotation race when the winner re-issued CSRF; final lookup uses immutable columns (user_id, created_at, last_authenticated_at, expires_at) plus last_rotated_at newer than the stale row. Verified by grep that no UPDATE changes those columns.
+- Residual (B26, low): logout vs rotation delete race; sibling session of the same user created in the same second that also rotated could be adopted (needs a surrogate session id in the schema).
+- Still open: B12 (awaiting user decision, see b12-design.md), B13 (checkHistory perf, liveTestModal races), B16, B17, B20, B21, B22, B25, B26. Out of scope: infra-level rate limiting/session purge/storage caps, npm audit (dev tooling only).
