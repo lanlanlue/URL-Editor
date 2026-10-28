@@ -39,6 +39,11 @@ let syncRetryAttempt = 0;
 let session = null;
 let csrfToken = '';
 let remoteDocument = { envelope: null, etag: '"rev-0"', revision: 0 };
+// The remote state this device last merged or uploaded (B12). Uploads send
+// syncedEtag as If-Match so the server answers 409 when another device has
+// written since; null means this page session has not synced yet.
+let syncedEtag = null;
+let syncedRevision = 0;
 let encryptionContext = null;
 let pendingRecovery = null;
 let firstUploadRequired = false;
@@ -281,6 +286,26 @@ async function refreshRemoteDocument() {
   };
 }
 
+// Call only after the current remote document has been merged into local data
+// (or this device just uploaded it).
+function markRemoteSynced() {
+  syncedEtag = remoteDocument.etag;
+  syncedRevision = Number(remoteDocument.revision || 0);
+}
+
+function clearSyncedRemote() {
+  syncedEtag = null;
+  syncedRevision = 0;
+}
+
+async function mergeRemoteIntoLocal() {
+  if (remoteDocument.envelope) {
+    const remoteData = await decryptCloudEnvelope(remoteDocument.envelope);
+    restoreData(mergeSyncData(callbacks.getData(), remoteData));
+  }
+  markRemoteSynced();
+}
+
 async function refreshHistory() {
   if (!session) return;
   const select = document.getElementById('cloud-sync-history-select');
@@ -322,6 +347,7 @@ async function refreshSession() {
     if (!session) {
       encryptionContext = null;
       remoteDocument = { envelope: null, etag: '"rev-0"', revision: 0 };
+      clearSyncedRemote();
       firstUploadRequired = false;
       guestMigrationPending = false;
       placeholderOnly = false;
@@ -347,16 +373,14 @@ async function refreshSession() {
         restoreData(mergeSyncData(callbacks.getData(), localAccountState));
       }
       await refreshRemoteDocument();
-      if (remoteDocument.envelope) {
-        const remoteData = await decryptCloudEnvelope(remoteDocument.envelope);
-        restoreData(mergeSyncData(callbacks.getData(), remoteData));
-      }
+      await mergeRemoteIntoLocal();
       await refreshHistory();
     }
     updateControls();
   } catch (error) {
     session = null;
     encryptionContext = null;
+    clearSyncedRemote();
     updateControls();
     setStatus(error.message || 'Unable to load cloud session.', true);
   }
@@ -380,6 +404,8 @@ async function unlockWithSecret(secret, generated = false) {
   const previousGuestMigrationPending = guestMigrationPending;
   const previousPlaceholderOnly = placeholderOnly;
   const previousRecovery = pendingRecovery;
+  const previousSyncedEtag = syncedEtag;
+  const previousSyncedRevision = syncedRevision;
   encryptionContext = { key, salt, keyVersion };
   try {
     // An unreadable guest record is represented by an empty placeholder: it is
@@ -405,6 +431,8 @@ async function unlockWithSecret(secret, generated = false) {
     if (input) input.value = '';
     if (restoredData) restoreData(restoredData);
     else placeholderOnly = true;
+    // The remote read above is now merged (or known to be empty).
+    markRemoteSynced();
     await refreshHistory();
     updateControls();
   } catch (error) {
@@ -413,6 +441,8 @@ async function unlockWithSecret(secret, generated = false) {
     guestMigrationPending = previousGuestMigrationPending;
     placeholderOnly = previousPlaceholderOnly;
     pendingRecovery = previousRecovery;
+    syncedEtag = previousSyncedEtag;
+    syncedRevision = previousSyncedRevision;
     throw error;
   }
 }
@@ -484,23 +514,27 @@ async function uploadCurrentData({ force = false, retry = true } = {}) {
       );
     return;
   }
-  await refreshRemoteDocument();
-  const nextRevision = Number(remoteDocument.revision || 0) + 1;
+  if (syncedEtag === null) {
+    // Never synced in this page session: merge the remote first, never
+    // overwrite it with local-only data.
+    await refreshRemoteDocument();
+    await mergeRemoteIntoLocal();
+  }
+  // No fresh etag here: the server compares If-Match with its current
+  // revision and answers 409 when another device has written since.
+  const nextRevision = syncedRevision + 1;
   const envelope = await encryptCloudPayload(
     buildCloudPayload(callbacks.getData()),
     nextRevision
   );
   try {
-    const result = await putSyncDocument(
-      envelope,
-      csrfToken,
-      remoteDocument.etag
-    );
+    const result = await putSyncDocument(envelope, csrfToken, syncedEtag);
     remoteDocument = {
       envelope: result.document || result.envelope || envelope,
       etag: result.etag || `"rev-${nextRevision}"`,
       revision: result.revision || nextRevision,
     };
+    markRemoteSynced();
     firstUploadRequired = false;
     syncRetryAttempt = 0;
     if (guestMigrationPending) {
@@ -512,11 +546,10 @@ async function uploadCurrentData({ force = false, retry = true } = {}) {
     );
   } catch (error) {
     if (error instanceof CloudApiError && error.status === 409 && retry) {
+      // Another device wrote first: merge its data, then retry exactly once.
+      // A second conflict throws (retry: false) instead of overwriting.
       await refreshRemoteDocument();
-      if (remoteDocument.envelope) {
-        const remoteData = await decryptCloudEnvelope(remoteDocument.envelope);
-        restoreData(mergeSyncData(callbacks.getData(), remoteData));
-      }
+      await mergeRemoteIntoLocal();
       await uploadCurrentData({ force: true, retry: false });
       await refreshHistory();
       return;
@@ -550,12 +583,7 @@ async function handleDownload() {
           defaultValue: '目前沒有雲端備份。',
         })
       );
-    restoreData(
-      mergeSyncData(
-        callbacks.getData(),
-        await decryptCloudEnvelope(remoteDocument.envelope)
-      )
-    );
+    await mergeRemoteIntoLocal();
     setStatus(
       i18next.t('cloudSync.restoreSuccess', {
         defaultValue: '已下載並合併加密資料。',
@@ -583,12 +611,7 @@ async function handleRotate() {
           defaultValue: '目前沒有雲端備份。',
         })
       );
-    restoreData(
-      mergeSyncData(
-        callbacks.getData(),
-        await decryptCloudEnvelope(remoteDocument.envelope)
-      )
-    );
+    await mergeRemoteIntoLocal();
     const generated = await createRecoveryKey();
     const salt = randomBytes(16);
     const keyVersion = currentKeyVersion() + 1;
