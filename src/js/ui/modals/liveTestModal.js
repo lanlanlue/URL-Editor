@@ -85,7 +85,6 @@ export function initLiveTestModal() {
   });
 
   dialog.addEventListener('cancel', stopAndClear);
-  dialog.addEventListener('close', stopAndClear);
 
   // Filter Buttons
   const filterBtns = dialog.querySelectorAll(
@@ -419,7 +418,15 @@ async function _reloadSingleCard(card, entry) {
   // Update badge to checking
   const token = _claimCheck(id);
   _updateCardStatus(id, 'checking');
-  const res = await runEntryCheck(entry, (u, t, o) => checkUrlHealth(u, t, o));
+  let res;
+  try {
+    res = await runEntryCheck(entry, (u, t, o) => checkUrlHealth(u, t, o), {
+      isCurrent: () => _isCurrentCheck(id, token),
+    });
+  } catch (err) {
+    // Never leave the card on 'checking' when the check itself rejects.
+    res = { status: 'offline', error: err?.message || String(err) };
+  }
   if (!_isCurrentCheck(id, token)) return;
   healthResults.set(id, res);
   _updateCardStatus(id, res.status);
@@ -471,8 +478,10 @@ async function checkAllHealth() {
       if (!_isCurrentCheck(entry.id, tokens.get(entry.id))) {
         return Promise.resolve({ status: 'checking', stale: true });
       }
-      return runEntryCheck(entry, (url, timeoutMs, options) =>
-        checkUrlHealth(url, timeoutMs, options)
+      return runEntryCheck(
+        entry,
+        (url, timeoutMs, options) => checkUrlHealth(url, timeoutMs, options),
+        { isCurrent: () => _isCurrentCheck(entry.id, tokens.get(entry.id)) }
       );
     },
     onResult: (entry, res) => {

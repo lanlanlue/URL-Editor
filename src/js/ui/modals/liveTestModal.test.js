@@ -1,5 +1,6 @@
 import { initLiveTestModal, openLiveTestModal } from './liveTestModal';
 import * as healthCheckModule from '../../utils/healthCheck';
+import { flushHistory, getHistory } from '../../core/checkHistory';
 
 const MODAL_HTML = `
       <dialog id="live-test-modal" class="live-test-modal">
@@ -322,5 +323,104 @@ describe('liveTestModal races and caching', () => {
     );
     document.getElementById('live-filter-offline').click();
     expect(document.querySelectorAll('.live-test-card')).toHaveLength(0);
+  });
+});
+
+describe('liveTestModal rework (G2)', () => {
+  const flushAsync = async () => {
+    for (let i = 0; i < 20; i += 1) await Promise.resolve();
+  };
+  function deferredChecks() {
+    const calls = [];
+    jest.spyOn(healthCheckModule, 'checkUrlHealth').mockImplementation(
+      (url) =>
+        new Promise((resolve, reject) => {
+          calls.push({ url, resolve, reject });
+        })
+    );
+    return calls;
+  }
+  const makeUrls = (n, prefix = 'g') =>
+    Array.from({ length: n }, (_, i) => ({
+      id: `${prefix}${i}`,
+      url: `https://${prefix}${i}.example.com/`,
+      label: `Site ${i}`,
+    }));
+  const cardCount = () => document.querySelectorAll('.live-test-card').length;
+
+  beforeEach(() => {
+    localStorage.clear();
+    document.body.innerHTML = MODAL_HTML;
+    initLiveTestModal();
+    document.getElementById('live-filter-all').click();
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+    jest.restoreAllMocks();
+  });
+
+  test('a late async close event does not wipe a run reopened right after closing', async () => {
+    deferredChecks();
+    const dialog = document.getElementById('live-test-modal');
+    openLiveTestModal({ urls: makeUrls(1) });
+    document.getElementById('live-test-close-btn').click();
+    openLiveTestModal({ urls: makeUrls(2) });
+    dialog.dispatchEvent(new Event('close')); // browsers fire it asynchronously
+    await flushAsync();
+    expect(cardCount()).toBe(2);
+  });
+
+  test('superseded runs record no history; the current run records once', async () => {
+    const calls = deferredChecks();
+    const urls = makeUrls(2);
+    openLiveTestModal({ urls });
+    openLiveTestModal({ urls });
+    document.getElementById('live-recheck-health-btn').click();
+    await flushAsync();
+    expect(calls).toHaveLength(6); // 3 runs x 2 entries, all in flight
+    calls.forEach((c) => c.resolve({ status: 'online', code: 200 }));
+    await flushAsync();
+    flushHistory();
+    urls.forEach((u) => expect(getHistory(u.id)).toHaveLength(1));
+  });
+
+  test('opening a new list cancels the previous run for ids no longer shown', async () => {
+    const calls = deferredChecks();
+    openLiveTestModal({ urls: makeUrls(1, 'old') });
+    openLiveTestModal({ urls: makeUrls(1, 'new') });
+    await flushAsync();
+    const oldCall = calls.find((c) => c.url.includes('old0'));
+    oldCall.resolve({ status: 'online', code: 200 });
+    await flushAsync();
+    flushHistory();
+    expect(getHistory('old0')).toEqual([]);
+  });
+
+  test('entry.healthStatus never seeds the first render', () => {
+    deferredChecks();
+    document.getElementById('live-filter-online').click();
+    openLiveTestModal({
+      urls: [
+        { id: 'p1', url: 'https://p.example.com/', healthStatus: 'online' },
+      ],
+    });
+    // A persisted-looking healthStatus must not make the card appear as online.
+    expect(cardCount()).toBe(0);
+  });
+
+  test('a rejected single-card check does not leave the card on checking', async () => {
+    const calls = deferredChecks();
+    openLiveTestModal({ urls: makeUrls(1) });
+    await flushAsync();
+    calls.forEach((c) => c.resolve({ status: 'online', code: 200 }));
+    await flushAsync();
+    document.querySelectorAll('.live-card-btn')[1].click(); // reload card
+    await flushAsync();
+    calls[calls.length - 1].reject(new Error('network down'));
+    await flushAsync();
+    const badge = document.getElementById('live-badge-g0');
+    expect(badge.className).toContain('live-badge--offline');
+    expect(badge.className).not.toContain('checking');
   });
 });
