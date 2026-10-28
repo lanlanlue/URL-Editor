@@ -219,7 +219,8 @@ export function initializeSecureStorage() {
         // Keep the migration marker until the next verified encrypted write
         // removes every legacy plaintext key.
         return await decryptLocalState(record);
-      } catch {
+      } catch (err) {
+        console.warn('[SecureStorage Decrypt Local State Failed]:', err);
         // Do not overwrite an unreadable encrypted record with legacy data.
         // `unreadable` tells the caller this empty state is a placeholder and
         // must not be persisted over the stored record.
@@ -234,7 +235,8 @@ export function initializeSecureStorage() {
           unreadable: true,
         };
       }
-    } catch {
+    } catch (err) {
+      console.warn('[SecureStorage IndexedDB Init Failed, falling back to legacy]:', err);
       database = null;
       backend = 'legacy';
       return legacyState;
@@ -265,7 +267,8 @@ export async function saveSecureState(state) {
           JSON.stringify(safeState.rebuildHistory)
         );
       }
-    } catch {
+    } catch (err) {
+      console.warn('[SecureStorage LocalStorage Write Failed]:', err);
       // Storage quota failures leave the in-memory application state usable.
     }
     return;

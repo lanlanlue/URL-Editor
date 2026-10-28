@@ -26,7 +26,10 @@ function copyText(value) {
   return navigator.clipboard
     .writeText(value)
     .then(() => true)
-    .catch(() => false);
+    .catch((err) => {
+      console.warn('[UrlDiff Clipboard Copy Failed]:', err);
+      return false;
+    });
 }
 
 function displayValue(value) {

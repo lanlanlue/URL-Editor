@@ -601,7 +601,7 @@ async function handleSyncPut(request, env) {
     if (current) {
       const results = await env.DB.batch([
         env.DB.prepare(
-          'INSERT INTO sync_revisions (user_id, revision, payload_schema_version, key_version, kdf_salt, iv, ciphertext, created_at) SELECT user_id, revision, payload_schema_version, key_version, kdf_salt, iv, ciphertext, created_at FROM sync_documents WHERE user_id = ? AND revision = ?'
+          'INSERT INTO sync_revisions (user_id, revision, payload_schema_version, key_version, kdf_salt, iv, ciphertext, created_at) SELECT user_id, revision, payload_schema_version, key_version, kdf_salt, iv, ciphertext, updated_at FROM sync_documents WHERE user_id = ? AND revision = ?'
         ).bind(session.account_id, currentRevision),
         env.DB.prepare(
           'UPDATE sync_documents SET revision = ?, payload_schema_version = ?, key_version = ?, kdf_salt = ?, iv = ?, ciphertext = ?, updated_at = ? WHERE user_id = ? AND revision = ?'

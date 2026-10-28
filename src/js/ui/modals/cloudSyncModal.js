@@ -171,6 +171,10 @@ async function copyRecoveryKey() {
   if (!value) return;
   try {
     await navigator.clipboard.writeText(value);
+    const input = document.getElementById('cloud-sync-recovery-input');
+    if (input && pendingRecovery) {
+      input.value = value;
+    }
     setStatus(
       i18next.t('cloudSync.keyCopied', {
         defaultValue: 'Recovery Key 已複製。',
@@ -191,6 +195,10 @@ function downloadRecoveryKey() {
   link.download = 'url-editor-recovery-key.txt';
   link.click();
   URL.revokeObjectURL(link.href);
+  const input = document.getElementById('cloud-sync-recovery-input');
+  if (input && pendingRecovery) {
+    input.value = value;
+  }
 }
 
 function currentAccountId() {
@@ -440,6 +448,7 @@ async function unlockWithSecret(secret, generated = false) {
     await refreshHistory();
     updateControls();
   } catch (error) {
+    console.error('[CloudSync Unlock Secret Failed]:', error);
     encryptionContext = previousContext;
     firstUploadRequired = previousFirstUploadRequired;
     guestMigrationPending = previousGuestMigrationPending;
@@ -476,6 +485,13 @@ async function handleUnlock() {
   try {
     const inputValue =
       document.getElementById('cloud-sync-recovery-input')?.value || '';
+    if (!inputValue.trim()) {
+      throw new Error(
+        i18next.t('cloudSync.recoveryInputRequired', {
+          defaultValue: '請先在下方輸入框貼上 Recovery Key。',
+        })
+      );
+    }
     if (
       pendingRecovery &&
       inputValue.trim().replace(/\s+/g, '') !== pendingRecovery.display
@@ -495,6 +511,7 @@ async function handleUnlock() {
       })
     );
   } catch (error) {
+    console.warn('[CloudSync Unlock Failed]:', error);
     setStatus(error.message || 'Recovery Key 無效。', true);
   } finally {
     setBusy(false);
@@ -559,6 +576,17 @@ async function uploadCurrentData({ force = false, retry = true } = {}) {
       await refreshHistory();
       return;
     }
+    if (
+      error instanceof CloudApiError &&
+      (error.status === 401 || error.status === 403) &&
+      retry
+    ) {
+      await refreshSession();
+      if (session && csrfToken) {
+        await uploadCurrentData({ force, retry: false });
+        return;
+      }
+    }
     throw error;
   }
 }
@@ -569,6 +597,7 @@ async function handleManualUpload() {
   try {
     await uploadCurrentData({ force: true });
   } catch (error) {
+    console.error('[CloudSync Manual Upload Failed]:', error);
     setStatus(error.message || '同步失敗。', true);
   } finally {
     setBusy(false);
@@ -595,6 +624,7 @@ async function handleDownload() {
       })
     );
   } catch (error) {
+    console.error('[CloudSync Download Failed]:', error);
     setStatus(error.message || '下載失敗。', true);
   } finally {
     setBusy(false);
@@ -643,6 +673,7 @@ async function handleRotate() {
       })
     );
   } catch (error) {
+    console.error('[CloudSync Recovery Key Rotate Failed]:', error);
     encryptionContext = previousContext;
     pendingRecovery = previousRecovery;
     if (previousContext) {
@@ -679,6 +710,7 @@ async function handleHistoryRestore() {
       })
     );
   } catch (error) {
+    console.error('[CloudSync History Restore Failed]:', error);
     setStatus(
       error.message ||
         i18next.t('cloudSync.historyRestoreError', {
@@ -718,6 +750,7 @@ function scheduleAutomaticSync({ retry = false } = {}) {
     try {
       await uploadCurrentData({ force: false });
     } catch (error) {
+      console.warn('[CloudSync Auto Sync Failed (will retry)]:', error);
       syncRetryAttempt += 1;
       if (error instanceof CloudApiError && error.status === 409) {
         conflictFailures += 1;
@@ -750,6 +783,7 @@ async function handleLogout() {
     await deleteCurrentAccountLocalState(accountId);
     window.location.href = '/';
   } catch (error) {
+    console.error('[CloudSync Logout Failed]:', error);
     setStatus(error.message || '登出失敗。', true);
     setBusy(false);
   }
@@ -770,6 +804,7 @@ async function handleDeleteAccount() {
     await deleteCurrentAccountLocalState(accountId);
     window.location.href = '/';
   } catch (error) {
+    console.error('[CloudSync Delete Account Failed]:', error);
     setStatus(error.message || '刪除帳戶失敗。', true);
     setBusy(false);
   }

@@ -27,14 +27,15 @@ async function request(path, options = {}) {
     payload = null;
   }
   if (!response.ok) {
-    throw new CloudApiError(
-      payload?.error || `Cloud API request failed (${response.status}).`,
-      {
-        status: response.status,
-        code: payload?.code || 'CLOUD_API_ERROR',
-        details: payload,
-      }
-    );
+    const errorMsg =
+      payload?.error ||
+      payload?.message ||
+      `Cloud API request failed (${response.status}).`;
+    throw new CloudApiError(errorMsg, {
+      status: response.status,
+      code: payload?.code || 'CLOUD_API_ERROR',
+      details: payload,
+    });
   }
   return { payload, response };
 }
@@ -79,24 +80,37 @@ export async function getSyncDocument(csrfToken) {
   const { payload, response } = await request('/sync', {
     headers: csrfToken ? { 'X-CSRF-Token': csrfToken } : {},
   });
+  const rawEtag = response.headers.get('ETag') || payload.etag;
+  const cleanEtag = rawEtag
+    ? rawEtag.replace(/^W\//i, '')
+    : `"rev-${payload.revision || 0}"`;
   return {
     ...payload,
-    etag: response.headers.get('ETag') || payload.etag || '"rev-0"',
+    etag: cleanEtag,
   };
 }
 
 export async function putSyncDocument(envelope, csrfToken, etag = '"rev-0"') {
+  const cleanEtag =
+    typeof etag === 'string' && etag.trim()
+      ? etag.replace(/^W\//i, '')
+      : `"rev-${(envelope?.revision || 1) - 1}"`;
   const { payload, response } = await request('/sync', {
     method: 'PUT',
     headers: {
       'X-CSRF-Token': csrfToken,
-      'If-Match': etag,
+      'If-Match': cleanEtag,
+      'X-If-Match': cleanEtag,
     },
     body: JSON.stringify(envelope),
   });
+  const rawEtag = response.headers.get('ETag') || payload.etag;
+  const cleanResponseEtag = rawEtag
+    ? rawEtag.replace(/^W\//i, '')
+    : `"rev-${payload.revision || envelope?.revision || 1}"`;
   return {
     ...payload,
-    etag: response.headers.get('ETag') || payload.etag,
+    etag: cleanResponseEtag,
   };
 }
 

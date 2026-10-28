@@ -57,7 +57,7 @@
 .col-tags, .url-table__col-tags       { width: 14%; min-width: 90px; }
 .col-health, .url-table__col-health   { width: 68px; }
 .col-usage, .url-table__col-usage     { width: 72px; min-width: 68px; }
-.col-actions, .url-table__col-actions { width: 175px; min-width: 175px; }
+.col-actions, .url-table__col-actions { width: 13rem; min-width: 12rem; }
 
 .url-table__head th.col-pin,
 .url-table__head th.url-table__col-pin {
@@ -401,8 +401,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
+  width: 1.85rem;
+  height: 1.85rem;
   padding: 0;
   background: var(--surface-hover);
   border: 1px solid var(--border);
@@ -415,7 +415,7 @@
 }
 
 .url-table__action-btn:hover {
-  background: var(--neutral-700);
+  background: var(--btn-hover);
   border-color: var(--border-strong);
   color: var(--text-primary);
   transform: translateY(-1px);
@@ -558,7 +558,8 @@
 .filter-bar__search {
   position: relative;
   flex-shrink: 0;
-  width: 200px;
+  width: 14rem;
+  max-width: 100%;
 }
 
 .filter-bar__search-icon {
