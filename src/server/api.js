@@ -272,16 +272,22 @@ async function getSession(request, env, { rotate = true } = {}) {
       SESSION_ROTATION_DAYS * 86400
   ) {
     const rotatedToken = randomToken(32);
-    await env.DB.prepare(
+    const rotatedHash = await sha256(rotatedToken);
+    const result = await env.DB.prepare(
       'UPDATE sessions SET token_hash = ?, last_rotated_at = ? WHERE token_hash = ?'
     )
-      .bind(await sha256(rotatedToken), nowSeconds(), session.token_hash)
+      .bind(rotatedHash, nowSeconds(), session.token_hash)
       .run();
-    session.token_hash = await sha256(rotatedToken);
-    session.setCookie = sessionCookie(
-      rotatedToken,
-      Math.max(0, Number(session.expires_at) - nowSeconds())
-    );
+    // A concurrent request with the same old token may have rotated first; its
+    // UPDATE then matches 0 rows. Only the winner may hand out the new cookie,
+    // otherwise the browser would hold a token that is not in the DB.
+    if (result?.meta?.changes === 1) {
+      session.token_hash = rotatedHash;
+      session.setCookie = sessionCookie(
+        rotatedToken,
+        Math.max(0, Number(session.expires_at) - nowSeconds())
+      );
+    }
   }
   return session;
 }

@@ -1,4 +1,9 @@
+import { TextDecoder, TextEncoder } from 'util';
 import { apiInternals, handleApiRequest } from './api.js';
+
+// jsdom does not expose these; the Workers runtime does.
+global.TextEncoder = global.TextEncoder || TextEncoder;
+global.TextDecoder = global.TextDecoder || TextDecoder;
 
 function base64Url(bytes) {
   return btoa(String.fromCharCode(...bytes))
@@ -75,6 +80,108 @@ describe('Pages API boundary', () => {
     test('requires a session', async () => {
       const response = await post({ Origin: 'https://url-editor.ointw.com' });
       expect(response.status).toBe(401);
+    });
+  });
+
+  describe('session and sync D1 behaviour (fake DB)', () => {
+    const ORIGIN = 'https://url-editor.ointw.com';
+    const sha = async (value) =>
+      [
+        ...new Uint8Array(
+          await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value))
+        ),
+      ]
+        .map((b) => b.toString(16).padStart(2, '0'))
+        .join('');
+    const req = (path, { method = 'GET', headers = {}, body } = {}) => {
+      const bytes = new TextEncoder().encode(body ?? '');
+      return {
+        url: `${ORIGIN}${path}`,
+        method,
+        headers: new Headers(headers),
+        arrayBuffer: async () =>
+          bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.length),
+      };
+    };
+    const nowS = () => Math.floor(Date.now() / 1000);
+    const envelope = (revision) => ({
+      revision,
+      payloadSchemaVersion: 1,
+      keyVersion: 1,
+      kdfSalt: base64Url(new Uint8Array(16)),
+      iv: base64Url(new Uint8Array(12)),
+      ciphertext: base64Url(new Uint8Array(16)),
+    });
+    let accountCounter = 0;
+    // handlers: [sqlSubstring, (sql, args) => result]
+    const makeDb = (handlers) => {
+      const find = (sql) => handlers.find(([needle]) => sql.includes(needle));
+      const exec = (sql, args) => {
+        const h = find(sql);
+        if (!h) throw new Error(`unexpected SQL: ${sql}`);
+        return h[1](sql, args);
+      };
+      return {
+        prepare: (sql) => ({
+          bind: (...args) => ({
+            sql,
+            args,
+            first: async () => exec(sql, args),
+            run: async () => exec(sql, args),
+            all: async () => exec(sql, args),
+          }),
+        }),
+        batch: async (statements) =>
+          Promise.all(statements.map((s) => s.run())),
+      };
+    };
+    const sessionRow = async (token, extra = {}) => ({
+      token_hash: await sha(token),
+      csrf_hash: await sha('csrf-token'),
+      user_id: 1,
+      account_id: `acct-${++accountCounter}`,
+      email: 'a@example.com',
+      display_name: 'A',
+      expires_at: nowS() + 86400,
+      last_rotated_at: nowS() - 30 * 86400,
+      last_authenticated_at: nowS(),
+      ...extra,
+    });
+
+    test('B3: does not set a rotated cookie when the rotation UPDATE changed 0 rows (lost race)', async () => {
+      const row = await sessionRow('old-token');
+      const db = makeDb([
+        ['SELECT s.*', () => row],
+        ['UPDATE sessions SET token_hash', () => ({ meta: { changes: 0 } })],
+        ['UPDATE sessions SET csrf_hash', () => ({ meta: { changes: 0 } })],
+      ]);
+      const response = await handleApiRequest(
+        req('/api/session', {
+          headers: { Cookie: '__Host-ue_session=old-token' },
+        }),
+        { DB: db }
+      );
+      expect(response.status).toBe(200);
+      expect(response.headers.get('Set-Cookie')).toBeNull();
+    });
+
+    test('B3: sets the rotated cookie when the rotation UPDATE changed exactly 1 row', async () => {
+      const row = await sessionRow('old-token');
+      const db = makeDb([
+        ['SELECT s.*', () => row],
+        ['UPDATE sessions SET token_hash', () => ({ meta: { changes: 1 } })],
+        ['UPDATE sessions SET csrf_hash', () => ({ meta: { changes: 1 } })],
+      ]);
+      const response = await handleApiRequest(
+        req('/api/session', {
+          headers: { Cookie: '__Host-ue_session=old-token' },
+        }),
+        { DB: db }
+      );
+      expect(response.status).toBe(200);
+      expect(response.headers.get('Set-Cookie')).toContain(
+        '__Host-ue_session='
+      );
     });
   });
 });
