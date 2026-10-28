@@ -1,23 +1,23 @@
 # Final Report: autonomous engineering loop on URL-Editor
 
-Status: **PARTIAL**. Every item taken into the loop is integrated and verified, but the planned scope is not finished (B13 and several low-priority items are open) and nothing was exercised against a real browser or staging deployment.
+Status: **PARTIAL**. Every item taken into the loop is integrated and verified (rounds 1-4), but a few low-priority items remain open and nothing was exercised against a real browser or staging deployment.
 
-Original HEAD: d4511c0. Final main: 9317dec (after the local WIP base commit ab46b3f). All commits are local; nothing was pushed; production, D1 data, keys and permissions were not touched.
+Original HEAD: d4511c0. Final main: 957ded6 (after the local WIP base commit ab46b3f). All commits are local; nothing was pushed; production, D1 data, keys and permissions were not touched.
 
 ## 1. Verified results (measured on integrated main)
 
 | Metric | Before (d4511c0 + uncommitted work) | After (9317dec) |
 |---|---|---|
 | Test suites | 23 | 31 |
-| Tests | 184 | 554 |
+| Tests | 184 | 620 |
 | `npx jest` | pass | pass (plain run; worktree copies no longer collected) |
 | ESLint | clean | exit 0, 9 `jest/expect-expect` warnings, all in `src/server/api.test.js` |
 | Coverage lines / branches, `src/js` only | 54.2% / 41.1% | not re-measured on this basis |
-| Coverage lines / branches, `src/js` + `src/server` | not measured (server was not collected) | 69.1% / 59.5% |
+| Coverage lines / branches, `src/js` + `src/server` | not measured (server was not collected) | 71.1% / 60.7% |
 
 Per-file coverage (Worker D's measured runs, lines / branches): api.js 70.4/62.0 -> 98.0/95.1 (98.17/95.12 after later fixes); secureStorage.js 71.8/50.4 -> 96.6/92.9; cryptoVault.js 63.0/41.7 -> 98.6/96.7; cloudApi.js 0/0 -> 100/100; entryCheck.js 100/50 -> 100/100; redirectGenerator.js 74.0/35.2 -> 100/98.9; trackerStripper.js 76.5/56.3 -> 100/100; settings.js 95.7/52.4 -> 100/95.2.
 
-Diff since d4511c0: 44 files, +7829/-169; non-test source under `src/`: 19 files, +1861/-156 (includes the WIP base commit).
+Diff stats were measured at round 3 (44 files, +7829/-169) and not re-measured after round 4.
 
 Not measured: build time and bundle size (`npm run build` rewrites tracked files in the repo, so it was not run). This loop targeted correctness, so there are no performance before/after numbers.
 
@@ -40,6 +40,15 @@ Backend correctness and security
 - B11: comma-combined CSP headers are parsed correctly in `isEmbeddable`.
 - B24: bracketed IPv6 loopback accepted for OAuth config.
 
+Round 4 (history, live test, hardening)
+- B13a: check history keeps a read cache and writes additively (pending list merged into the CURRENT storage at flush), so concurrent tabs do not lose records; 500 entries x 20 records: getHistory x500 428 ms -> 1.7 ms, recordCheck x500 708 ms -> 0.4 ms (reviewer's real-timer probe). The first version of this fix lost other tabs' records and was rejected in review (FAIL), then reworked.
+- B13b: stale live-test runs are cancelled by tokens and no longer record history (optional `isCurrent` on `runEntryCheck`); rapid iframe reloads keep the original source; results are re-applied after re-render; a rejected single-card check shows an offline status.
+- B27: automatic sync stops after 5 consecutive 409s (about 10 PUTs instead of 124/hour) and a new edit re-arms it; new bilingual status key.
+- B16: IPv6 validation rewritten to expand literals; 3fff::/20, 2001:2::/48, 2001:10::/28, 2001:20::/28 blocked (reviewer compared ~75 literals plus 300,000 random addresses against an independent predicate: 0 mismatches, no private address newly allowed, no ordinary public address newly blocked).
+- B17: string `exp` rejected; cleanup failures logged; probe/delete-account body errors mapped consistently (delete-account oversize 422 -> 413; no client depends on it).
+- B26: logout retries a 0-row delete after a rotation race (bounded to 3).
+- B22, B25, B20: back-off never shortened; TextDecoder fallback fixed and chunk-safe; runtime health map pruned.
+
 Reliability of checks
 - B6: probe back-off now needs 3 consecutive failures (30 s); all-skipped assertions report `skipped`, not pass (UI tick and CSV fixed); a 300-URL failing run makes 3 calls instead of 300.
 - B7: the keyword body read has a timeout and unused bodies are cancelled.
@@ -57,34 +66,31 @@ Every behaviour-changing commit was reviewed by an independent Critic/Challenger
 Spot mutation checks on Worker D's tests (CSRF check off: 6 fail; expiry check off: 1 fails) showed the new tests are not coverage padding.
 
 ## 4. Residual risks and open backlog
-- **Not verified end to end.** All sync, storage and crypto tests use mocks (fake server/D1, in-memory IndexedDB, transparent crypto codec). Run the sign-in, restore, unreadable-record and two-device flows on a staging deployment with real IndexedDB/WebCrypto before any release.
-- B13 (P2): checkHistory O(n^2) localStorage I/O; liveTestModal races (stale runs, iframe reload race).
-- B16 (P3): IPv6 reserved ranges 3fff::/20, 2001:2::/48, 2001:10::/28, 2001:20::/28 not blocked (not an SSRF vector).
-- B17 (P3): stricter `exp` typing; log cleanupHistory failures; probe/delete 500 on stream errors.
-- B20 (P3): liveTestModal reads `entry.healthStatus` (now always undefined); runtimeHealthStatus not cleaned on delete.
-- B21 (P3): unreadable detection is guest-record only; `unreadable-backup:*` has no pruning or restore UI; banner uses inline styles and is not re-translated.
-- B22 (P3): in-flight 401/404/429 can shorten an active 30 s probe back-off.
-- B25 (P3): cryptoVault TextDecoder fallback spreads an ArrayBuffer (only where TextDecoder is missing).
-- B26 (P3): logout vs rotation delete race; a sibling session created the same second that also rotated could be adopted (needs a surrogate session id).
-- B27 (P3): 409-driven auto-sync retries have no attempt cap (about 2 PUT/min at the 60 s ceiling vs a 120 PUT/h server limit; requires another device writing continuously).
-- Rotation that hits a concurrent write fails with a misleading decrypt error and must be rerun (safe, but poor UX).
+- **Not verified end to end.** All sync, storage, crypto and live-test tests use mocks (fake server/D1, in-memory IndexedDB, transparent crypto codec, jsdom). Run the sign-in, restore, unreadable-record, two-device, multi-tab history and live-test flows on staging in real browsers before any release.
+- B21 (P3): unreadable-notice banner uses inline styles and is not re-translated on language switch; `unreadable-backup:*` has no pruning or restore UI; unreadable detection covers the guest record only.
+- B28 (P3): check history records are ordered by flush/append order, not by time; with two tabs the cap can drop an older-by-append record that is newer by time (cosmetic, no data loss).
+- B29 (P3): after one tab prunes an id, another tab's still-pending records for that id are written back (orphan id until the next prune).
+- B30 (P3): closing the live-test dialog by any path other than the close button, backdrop click or the native `cancel` event (for example a programmatic `dialog.close()`, or a browser that skips `cancel` on a second Escape, unverified) leaves checks and grid active until the next open. Nothing in src/js calls `dialog.close()` elsewhere today.
+- B26 residual (low): a sibling session of the same user with identical created_at/last_authenticated_at/expires_at that also rotated could be adopted; for logout the action is a DELETE. Needs a surrogate session id in the schema.
+- Rotation that hits a concurrent write fails with a misleading decrypt error and must be rerun (safe, poor UX). Delete-account still returns INVALID_BODY for malformed JSON while the other routes return INVALID_JSON (an existing test requires it). Filter clicks in the live-test dialog still reload the visible iframes (an existing test pins the DOM structure).
 - Out of authorization, needs a human decision: cross-isolate rate limiting, expired-session purge and storage caps (Cloudflare infrastructure), IP pinning for SSRF, CSRF rotation semantics. `npm audit` reports 209 findings, all in dev/build tooling (`--omit=dev` reports 0).
-- Tombstones are never pruned.
+- Tombstones are never pruned. The `r` field adds about 8 bytes per stored history record.
 
 ## 5. Reproduce
 ```bash
 npm ci
 npm run lint
-npm test                      # plain run, 31 suites / 554 tests
+npm test                      # plain run, 31 suites / 620 tests
 npm run test:coverage         # now includes src/server
 ```
 Run the build in a throwaway worktree (it rewrites tracked files): `npm run build`.
 
 ## 6. Production readiness (assessment only, no deployment performed)
-Server-side fixes are unit tested at 98% line coverage and are low risk. Client storage and sync changes (B1, B2, B12, B19) are the highest-value and highest-risk: unit and mock-integration tests pass, but they have not run against real browsers or staging. Recommendation: do not release before a manual staging pass of (a) sign-in with an unreadable local record, (b) two devices editing concurrently, (c) key rotation during a concurrent write.
+Server-side fixes are unit tested at 98% line coverage and are low risk. Client storage, sync and history changes (B1, B2, B12, B13, B19) are the highest-value and highest-risk: unit and mock-integration tests pass, but they have not run against real browsers or staging. Recommendation: do not release before a manual staging pass of (a) sign-in with an unreadable local record, (b) two devices editing concurrently, (c) key rotation during a concurrent write, (d) two browser tabs running live tests at the same time.
 
 ## 7. Process notes and limits
 - The environment has no native Sentinel/Teamwork machinery and no timer, so roles were emulated with sub-agents and git worktrees, wall-clock budget was not enforced or tracked in minutes, and progress was recorded in `progress.md` instead of every 30 minutes.
 - The user paused the loop once; it was resumed on request.
+- Four rounds, eight workers (A-H), each followed by independent review; four fixes were rejected or reworked after review (B1 three times, B6, B19, B15, B13/checkHistory, B12 tests).
 - Each worker's worktree started on a stale commit (d753546) and had to be reset to the intended base; this was caught from their reports and verified.
 - Nothing was deleted or disabled to get a pass; changed existing assertions were reported (B3 mock for B15, auto-recovery test for B1c).

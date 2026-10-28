@@ -52,3 +52,8 @@ Cross-isolate rate limiting, expired-session purge and storage caps (Cloudflare 
 - B12 INTEGRATED (a29a0de..9317dec) after Critic/Challenger review and a test-strengthening pass.
 - B27 (P3): 409-driven auto-sync retries have no attempt cap.
 - See final-report.md for the consolidated status.
+
+## Round 4 (integrated)
+- Worker H (ff to d033857): B16, B17, B22, B25, B26, B20(map cleanup). Worker G (merge 957ded6): B13a/b, B20(liveTestModal), B27, after one rework (checkHistory two-tab loss).
+- New low-priority items: B28 (history ordering by flush order), B29 (prune vs another tab's pending records), B30 (dialog close paths unverified in a real browser).
+- Still open: B21, B28, B29, B30 and the infra items. See final-report.md.
