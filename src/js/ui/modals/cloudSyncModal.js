@@ -36,6 +36,10 @@ let initialized = false;
 let busy = false;
 let syncTimer = null;
 let syncRetryAttempt = 0;
+// Consecutive automatic syncs that ended in a 409 conflict. Each one costs two
+// PUTs against the server's 120/h limit, so automatic retries stop at the cap.
+const MAX_CONFLICT_RETRIES = 5;
+let conflictFailures = 0;
 let session = null;
 let csrfToken = '';
 let remoteDocument = { envelope: null, etag: '"rev-0"', revision: 0 };
@@ -537,6 +541,7 @@ async function uploadCurrentData({ force = false, retry = true } = {}) {
     markRemoteSynced();
     firstUploadRequired = false;
     syncRetryAttempt = 0;
+    conflictFailures = 0;
     if (guestMigrationPending) {
       await clearGuestState();
       guestMigrationPending = false;
@@ -696,7 +701,10 @@ function scheduleAutomaticSync({ retry = false } = {}) {
     firstUploadRequired
   )
     return;
-  if (!retry) syncRetryAttempt = 0;
+  if (!retry) {
+    syncRetryAttempt = 0;
+    conflictFailures = 0;
+  }
   clearTimeout(syncTimer);
   const delay = retry
     ? Math.min(60_000, 5_000 * 2 ** Math.min(syncRetryAttempt, 4))
@@ -711,6 +719,22 @@ function scheduleAutomaticSync({ retry = false } = {}) {
       await uploadCurrentData({ force: false });
     } catch (error) {
       syncRetryAttempt += 1;
+      if (error instanceof CloudApiError && error.status === 409) {
+        conflictFailures += 1;
+      } else {
+        conflictFailures = 0;
+      }
+      if (conflictFailures >= MAX_CONFLICT_RETRIES) {
+        // Give up until the next local edit or a manual sync.
+        setStatus(
+          i18next.t('cloudSync.autoSyncConflictStopped', {
+            defaultValue:
+              '自動同步因反覆衝突而暫停；請稍後再試，或手動按「立即同步」。',
+          }),
+          true
+        );
+        return;
+      }
       setStatus(error.message || '自動同步失敗，稍後會重試。', true);
       scheduleAutomaticSync({ retry: true });
     }

@@ -265,6 +265,7 @@
     "recoveryConfirmError": "Recovery Key 確認不一致。",
     "unlocked": "已解鎖端到端加密同步。",
     "syncSuccess": "加密資料已同步。",
+    "autoSyncConflictStopped": "自動同步因反覆衝突而暫停；請稍後再試，或手動按「立即同步」。",
     "noRemoteData": "目前沒有雲端備份。",
     "restoreSuccess": "已下載並合併加密資料。",
     "rotationSuccess": "Recovery Key 已旋轉，請重新備份新 Key。",
