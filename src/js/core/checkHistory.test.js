@@ -54,7 +54,7 @@ describe('checkHistory', () => {
     expect(getHistory('a', store)).toEqual([]);
     expect(() => recordCheck('a', { status: 'online' }, store)).not.toThrow();
 
-    jest.spyOn(console, 'warn').mockImplementation(() => {});
+    const quiet = jest.spyOn(console, 'warn').mockImplementation(() => {});
     const throwing = {
       getItem: () => {
         throw new Error('denied');
@@ -66,6 +66,8 @@ describe('checkHistory', () => {
     expect(() =>
       recordCheck('a', { status: 'online' }, throwing)
     ).not.toThrow();
+    flushHistory();
+    quiet.mockRestore();
   });
 
   test('prunes history of deleted entries', () => {
