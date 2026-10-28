@@ -121,6 +121,9 @@ let lastPersistedEntities = new Map();
 // True when the stored encrypted record could not be decrypted. The in-memory
 // state is then an empty placeholder and must never be written over it.
 let storageUnreadable = false;
+// Transient per-entry health status (id -> 'checking' | 'online' | 'offline').
+// Kept out of appState.urls so it is never persisted, synced or stamped.
+const runtimeHealthStatus = new Map();
 let lastPersistedPresetIds = new Set();
 let lastPersistedPresetSnapshots = new Map();
 const syncDeviceId = getDeviceId();
@@ -176,6 +179,8 @@ function normalizeUrlEntries(entries = []) {
         createdAt: Number.isFinite(source.createdAt) ? source.createdAt : now,
         isPinned: source.isPinned === true,
       };
+      // Health status is runtime-only; drop it from older persisted/cloud data.
+      delete normalized.healthStatus;
       const assertions = normalizeAssertions(source.assertions);
       if (assertions) normalized.assertions = assertions;
       else delete normalized.assertions;
@@ -589,19 +594,34 @@ function getFilteredUrls() {
   return getSortedUrls(urlsToRender);
 }
 
-// User-triggered single URL health check
+// User-triggered single URL health check. The status is runtime-only (see
+// runtimeHealthStatus) so it is never persisted, synced or counted as an edit.
 async function runSingleHealthCheck(targetUrl, targetId) {
   const entry = appState.urls.find((u) => u.id === targetId);
-  if (entry) {
-    entry.healthStatus = 'checking';
-    renderUrlList();
-
+  if (!entry) return;
+  runtimeHealthStatus.set(targetId, 'checking');
+  renderUrlList();
+  try {
     const res = await runEntryCheck(entry, (u, t, o) =>
       checkUrlHealth(u, t, o)
     );
-    entry.healthStatus = res.status;
+    runtimeHealthStatus.set(targetId, res.status);
+  } catch (error) {
+    console.error('Health check failed.', error);
+    runtimeHealthStatus.set(targetId, 'offline');
+  } finally {
+    // Never leave a card stuck on 'checking'.
+    if (runtimeHealthStatus.get(targetId) === 'checking') {
+      runtimeHealthStatus.delete(targetId);
+    }
     renderUrlList();
   }
+}
+
+// Overlays the transient health status for display only.
+function _withRuntimeHealth(entry) {
+  const status = runtimeHealthStatus.get(entry.id);
+  return status ? { ...entry, healthStatus: status } : entry;
 }
 
 // 建立共用 callbacks 物件（卡片與表格行列共用）
@@ -651,7 +671,11 @@ function _makeCallbacks(urlsToRender) {
 
 function createCardElement(entry, urlsToRender) {
   const isSelected = appState.selectedIds.has(entry.id);
-  return createUrlCard(entry, _makeCallbacks(urlsToRender), isSelected);
+  return createUrlCard(
+    _withRuntimeHealth(entry),
+    _makeCallbacks(urlsToRender),
+    isSelected
+  );
 }
 
 // 更新 workspace count badge 與 sidebar 統計欄
@@ -728,7 +752,11 @@ function renderUrlList() {
     urlsToRender.forEach((entry) => {
       const isSelected = appState.selectedIds.has(entry.id);
       tbody.appendChild(
-        createUrlRow(entry, _makeCallbacks(urlsToRender), isSelected)
+        createUrlRow(
+          _withRuntimeHealth(entry),
+          _makeCallbacks(urlsToRender),
+          isSelected
+        )
       );
     });
     table.appendChild(tbody);

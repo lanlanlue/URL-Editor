@@ -196,3 +196,90 @@ describe('B2: restoreCloudData keeps remote sync stamps', () => {
     expect(remote.syncDeviceId).not.toBe('other-device');
   });
 });
+
+describe('B5: health status is runtime-only', () => {
+  const state = {
+    schemaVersion: 1,
+    urls: [{ id: 'a', url: 'https://a.example/', label: 'A' }],
+  };
+
+  test('healthStatus is never persisted while a check is running or after it', async () => {
+    let finish;
+    const checkUrlHealth = jest.fn(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        })
+    );
+    const { saveSecureState, cloudOptions } = await loadMain({
+      initialState: state,
+      checkUrlHealth,
+    });
+    saveSecureState.mockClear();
+
+    fireEvent.click(document.querySelector('.url-card__button--health'));
+    await waitFor(() => checkUrlHealth.mock.calls.length > 0, 'check start');
+    expect(document.querySelector('.health--checking')).toBeTruthy();
+
+    // Any save while the check runs must not carry the transient status.
+    fireEvent.click(document.querySelector('.url-card__pin-btn'));
+    let saved = lastSavedState(saveSecureState);
+    expect(saved.urls[0].healthStatus).toBeUndefined();
+    expect(cloudOptions.getData().urls[0].healthStatus).toBeUndefined();
+
+    finish({ status: 'online', code: 200, mode: 'extension' });
+    await flush();
+    await flush();
+    fireEvent.click(document.querySelector('.url-card__pin-btn'));
+    saved = lastSavedState(saveSecureState);
+    expect(saved.urls[0].healthStatus).toBeUndefined();
+    // ...but the finished result is still shown in the UI.
+    expect(document.querySelector('.health--online')).toBeTruthy();
+  });
+
+  test('a completed check does not trigger a save', async () => {
+    const checkUrlHealth = jest.fn(() =>
+      Promise.resolve({ status: 'online', code: 200, mode: 'extension' })
+    );
+    const { saveSecureState } = await loadMain({
+      initialState: state,
+      checkUrlHealth,
+    });
+    saveSecureState.mockClear();
+
+    fireEvent.click(document.querySelector('.url-card__button--health'));
+    await waitFor(() => checkUrlHealth.mock.calls.length > 0, 'check');
+    await flush();
+    await flush();
+    expect(document.querySelector('.health--online')).toBeTruthy();
+    expect(saveSecureState).not.toHaveBeenCalled();
+  });
+
+  test('persisted healthStatus from older data is stripped on load', async () => {
+    const { saveSecureState } = await loadMain({
+      initialState: {
+        schemaVersion: 1,
+        urls: [
+          { id: 'a', url: 'https://a.example/', healthStatus: 'checking' },
+        ],
+      },
+    });
+    expect(
+      lastSavedState(saveSecureState).urls[0].healthStatus
+    ).toBeUndefined();
+    expect(document.querySelector('.health--checking')).toBeNull();
+  });
+
+  test('a throwing check does not leave the entry stuck on checking', async () => {
+    const checkUrlHealth = jest.fn(() => Promise.reject(new Error('boom')));
+    await loadMain({ initialState: state, checkUrlHealth });
+    const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+
+    fireEvent.click(document.querySelector('.url-card__button--health'));
+    await waitFor(() => checkUrlHealth.mock.calls.length > 0, 'check');
+    await flush();
+    await flush();
+    errorSpy.mockRestore();
+    expect(document.querySelector('.health--checking')).toBeNull();
+  });
+});
