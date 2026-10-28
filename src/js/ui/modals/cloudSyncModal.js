@@ -24,6 +24,7 @@ import {
   deleteCurrentAccountLocalState,
   getAccountEncryptionKey,
   getStorageMode,
+  hasUnreadableGuestRecord,
   loadAccountState,
   useAccountEncryptionKey,
 } from '../../core/secureStorage.js';
@@ -42,6 +43,9 @@ let encryptionContext = null;
 let pendingRecovery = null;
 let firstUploadRequired = false;
 let guestMigrationPending = false;
+// True while the in-memory data is only the empty placeholder shown for an
+// unreadable guest record; it must never be uploaded as the user's data.
+let placeholderOnly = false;
 let suppressAutomaticSync = false;
 let callbacks = {
   getData: () => ({
@@ -112,6 +116,7 @@ function handleNetworkChange() {
 
 function restoreData(data) {
   suppressAutomaticSync = true;
+  placeholderOnly = false;
   try {
     return callbacks.onRestore(data);
   } finally {
@@ -319,6 +324,7 @@ async function refreshSession() {
       remoteDocument = { envelope: null, etag: '"rev-0"', revision: 0 };
       firstUploadRequired = false;
       guestMigrationPending = false;
+      placeholderOnly = false;
       updateControls();
       return;
     }
@@ -372,13 +378,19 @@ async function unlockWithSecret(secret, generated = false) {
   const previousContext = encryptionContext;
   const previousFirstUploadRequired = firstUploadRequired;
   const previousGuestMigrationPending = guestMigrationPending;
+  const previousPlaceholderOnly = placeholderOnly;
   const previousRecovery = pendingRecovery;
   encryptionContext = { key, salt, keyVersion };
   try {
-    let restoredData = callbacks.getData();
+    // An unreadable guest record is represented by an empty placeholder: it is
+    // not the user's data, so it is neither merged, migrated nor uploaded.
+    const guestUnreadable = hasUnreadableGuestRecord();
+    let restoredData = guestUnreadable ? null : callbacks.getData();
     if (remoteDocument.envelope) {
       const remoteData = await decryptCloudEnvelope(remoteDocument.envelope);
-      restoredData = mergeSyncData(restoredData, remoteData);
+      restoredData = restoredData
+        ? mergeSyncData(restoredData, remoteData)
+        : remoteData;
       firstUploadRequired = false;
     } else {
       firstUploadRequired = generated;
@@ -387,17 +399,19 @@ async function unlockWithSecret(secret, generated = false) {
       salt,
       keyVersion,
     });
-    guestMigrationPending = true;
+    guestMigrationPending = !guestUnreadable;
     pendingRecovery = null;
     const input = document.getElementById('cloud-sync-recovery-input');
     if (input) input.value = '';
-    restoreData(restoredData);
+    if (restoredData) restoreData(restoredData);
+    else placeholderOnly = true;
     await refreshHistory();
     updateControls();
   } catch (error) {
     encryptionContext = previousContext;
     firstUploadRequired = previousFirstUploadRequired;
     guestMigrationPending = previousGuestMigrationPending;
+    placeholderOnly = previousPlaceholderOnly;
     pendingRecovery = previousRecovery;
     throw error;
   }
@@ -459,6 +473,7 @@ async function uploadCurrentData({ force = false, retry = true } = {}) {
   if (!session || !encryptionContext)
     throw new Error('請先登入並解鎖 Recovery Key。');
   if (firstUploadRequired && !force) return;
+  if (placeholderOnly) return;
   await refreshRemoteDocument();
   const nextRevision = Number(remoteDocument.revision || 0) + 1;
   const envelope = await encryptCloudPayload(
@@ -754,7 +769,11 @@ export function initCloudSyncModal(options = {}) {
   document
     .getElementById('cloud-sync-delete-account-btn')
     ?.addEventListener('click', handleDeleteAccount);
-  window.addEventListener('url-editor-data-change', scheduleAutomaticSync);
+  window.addEventListener('url-editor-data-change', () => {
+    // A real user change means the data is no longer just the placeholder.
+    if (!suppressAutomaticSync) placeholderOnly = false;
+    scheduleAutomaticSync();
+  });
   window.addEventListener('offline', handleNetworkChange);
   window.addEventListener('online', handleNetworkChange);
   initialized = true;
