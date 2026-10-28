@@ -742,6 +742,11 @@ function renderUrlList() {
   appState.selectedIds.forEach((id) => {
     if (!existingIds.has(id)) appState.selectedIds.delete(id);
   });
+  // Runtime health status of deleted/replaced entries must not linger (it
+  // would resurface if the same id returns, e.g. via a sync restore).
+  runtimeHealthStatus.forEach((_status, id) => {
+    if (!existingIds.has(id)) runtimeHealthStatus.delete(id);
+  });
 
   // 更新統計 Badge
   _updateStatBadges(urlsToRender);

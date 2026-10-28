@@ -280,6 +280,70 @@ describe('B5: health status is runtime-only', () => {
     expect(document.querySelector('.health--online')).toBeTruthy();
   });
 
+  const checkOnline = () =>
+    jest.fn(() =>
+      Promise.resolve({ status: 'online', code: 200, mode: 'extension' })
+    );
+
+  test('B20: deleting an entry drops its runtime health status', async () => {
+    const checkUrlHealth = checkOnline();
+    const { cloudOptions } = await loadMain({
+      initialState: state,
+      checkUrlHealth,
+    });
+    fireEvent.click(document.querySelector('.url-card__button--health'));
+    await waitFor(() => document.querySelector('.health--online'), 'online');
+
+    fireEvent.click(document.querySelector('.url-card__button--delete'));
+    expect(document.querySelector('.url-card__button--health')).toBeNull();
+
+    // The same id coming back (e.g. a sync restore) must not show a stale badge.
+    cloudOptions.onRestore(state);
+    await flush();
+    expect(document.querySelector('.url-card__button--health')).toBeTruthy();
+    expect(document.querySelector('.health--online')).toBeNull();
+  });
+
+  test('B20: replacing the whole list (restore/import) drops stale health status', async () => {
+    const checkUrlHealth = checkOnline();
+    const { cloudOptions } = await loadMain({
+      initialState: state,
+      checkUrlHealth,
+    });
+    fireEvent.click(document.querySelector('.url-card__button--health'));
+    await waitFor(() => document.querySelector('.health--online'), 'online');
+
+    cloudOptions.onRestore({ urls: [] });
+    await flush();
+    cloudOptions.onRestore(state);
+    await flush();
+    expect(document.querySelector('.url-card__button--health')).toBeTruthy();
+    expect(document.querySelector('.health--online')).toBeNull();
+  });
+
+  test('B20: a check finishing after its entry was deleted leaves no status behind', async () => {
+    let finish;
+    const checkUrlHealth = jest.fn(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        })
+    );
+    const { cloudOptions } = await loadMain({
+      initialState: state,
+      checkUrlHealth,
+    });
+    fireEvent.click(document.querySelector('.url-card__button--health'));
+    await waitFor(() => checkUrlHealth.mock.calls.length > 0, 'check start');
+    fireEvent.click(document.querySelector('.url-card__button--delete'));
+    finish({ status: 'online', code: 200, mode: 'extension' });
+    await flush();
+    await flush();
+    cloudOptions.onRestore(state);
+    await flush();
+    expect(document.querySelector('.health--online')).toBeNull();
+  });
+
   test('a completed check does not trigger a save', async () => {
     const checkUrlHealth = jest.fn(() =>
       Promise.resolve({ status: 'online', code: 200, mode: 'extension' })
