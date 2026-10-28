@@ -23,11 +23,5 @@ npm run test:coverage    # includes src/server
 B21 remainder (backup prune/restore UI, account-scope unreadable detection), B29 orphan id (accepted), B28 clock-skew residuals, B30 real-browser check, B26 residual (needs a surrogate session id in the schema).
 Needs a human decision (outside this loop's authorization): cross-isolate rate limiting, expired-session purge and storage caps (Cloudflare infrastructure), IP pinning for SSRF, CSRF rotation semantics, `npm audit` (209 findings, all dev tooling; `--omit=dev` is 0).
 
-## Housekeeping (not done, your call)
-Ten worker worktrees and branches remain under `.claude/worktrees/` (about 28 MB), one per worker round. Their commits are all merged into `main` except the abandoned/reverted work noted in `decisions.md`, and the unreferenced merge commit `c2a6d5b` (an earlier, flawed integration of Worker I; main was reset away from it). To clean up once you no longer need them:
-```bash
-git worktree list
-git worktree remove --force .claude/worktrees/<name>   # per worktree
-git branch -D worktree-agent-<id>                       # per branch, after confirming it is merged
-```
-`.claude/launch.json` is untracked on purpose.
+## Housekeeping (done)
+The ten worker worktrees and their `worktree-agent-*` branches were removed after confirming every branch was merged into `main` and every worktree was clean (`git branch -d` refuses unmerged branches). `main` is the only branch. The unreferenced merge commit `c2a6d5b` (an earlier, flawed integration of Worker I that main was reset away from) is not referenced by any branch and will be garbage-collected by git eventually. `.claude/launch.json` is untracked on purpose.
