@@ -30,6 +30,9 @@ import {
 } from './ui/modals/liveTestModal.js';
 import { exportToCsvString, parseCsvString } from './utils/csvParser.js';
 import { checkUrlHealth } from './utils/healthCheck.js';
+import { runEntryCheck } from './core/entryCheck.js';
+import { pruneHistory } from './core/checkHistory.js';
+import { normalizeAssertions } from './core/assertions.js';
 import { initExtensionBridge } from './core/extensionBridge.js';
 import { loadSettings } from './core/settings.js';
 import {
@@ -151,7 +154,7 @@ function normalizeUrlEntries(entries = []) {
         return null;
       }
       const source = typeof entry === 'object' && entry ? entry : {};
-      return {
+      const normalized = {
         ...source,
         id: createEntryId(source.id),
         url: rawUrl.trim(),
@@ -170,6 +173,10 @@ function normalizeUrlEntries(entries = []) {
         createdAt: Number.isFinite(source.createdAt) ? source.createdAt : now,
         isPinned: source.isPinned === true,
       };
+      const assertions = normalizeAssertions(source.assertions);
+      if (assertions) normalized.assertions = assertions;
+      else delete normalized.assertions;
+      return normalized;
     })
     .filter(Boolean);
 }
@@ -571,7 +578,9 @@ async function runSingleHealthCheck(targetUrl, targetId) {
     entry.healthStatus = 'checking';
     renderUrlList();
 
-    const res = await checkUrlHealth(targetUrl);
+    const res = await runEntryCheck(entry, (u, t, o) =>
+      checkUrlHealth(u, t, o)
+    );
     entry.healthStatus = res.status;
     renderUrlList();
   }
@@ -1013,6 +1022,7 @@ function getCurrentState() {
 async function bootstrap() {
   const stateLoading = loadState();
   if (stateLoading) await stateLoading;
+  pruneHistory(appState.urls.map((entry) => entry.id));
   if (CLOUD_ENABLED) {
     const cloudSync = await loadCloudSyncModule();
     initCloudSyncModal = cloudSync.initCloudSyncModal;
@@ -1318,7 +1328,18 @@ async function bootstrap() {
       const selected = appState.urls.filter((u) =>
         appState.selectedIds.has(u.id)
       );
-      openLiveTestModal({ urls: selected });
+      openLiveTestModal({
+        urls: selected,
+        // saveState() swaps appState.urls for stamped copies, so write the
+        // change onto the live entry instead of the modal's reference.
+        onChange: (changed) => {
+          const target = appState.urls.find((u) => u.id === changed.id);
+          if (!target) return;
+          if (changed.assertions) target.assertions = changed.assertions;
+          else delete target.assertions;
+          saveState();
+        },
+      });
     });
   }
 

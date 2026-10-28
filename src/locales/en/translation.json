@@ -350,15 +350,36 @@
       "reloadIframe": "Reload this frame",
       "openNewTab": "Open in new tab",
       "copyUrl": "Copy URL",
-      "close": "✕ Close (ESC)"
+      "close": "✕ Close (ESC)",
+      "copied": "✅ Copied!",
+      "grantAccess": "Grant access to this domain to get the real HTTP status",
+      "exportResults": "📥 Export results (CSV)"
     },
     "status": {
       "online": "🟢 Online (Reachable)",
       "offline": "🔴 Offline (Unreachable)",
       "checking": "⏳ Checking connectivity...",
       "xframeWarn": "🔒 Target site blocks iframe embedding (X-Frame-Options), but network connection is OK. Click to open in a new tab.",
-      "offlineWarn": "⚠️ Unable to connect to this website! Please verify the URL format, network, or server status."
+      "offlineWarn": "⚠️ Unable to connect to this website! Please verify the URL format, network, or server status.",
+      "limitedHint": "Host responded, but the HTTP status is unavailable in this mode.",
+      "serverHint": "Checked from the server (cannot reach intranet URLs)."
     },
-    "emptySelection": "No URLs currently selected for live testing."
+    "emptySelection": "No URLs currently selected for live testing.",
+    "empty": {
+      "noOffline": "🎉 All good! No URLs with connection problems.",
+      "noMatch": "No items match the current filter."
+    },
+    "assert": {
+      "title": "Test assertions",
+      "expectedStatus": "Expected status",
+      "keyword": "Must contain text",
+      "maxTime": "Max response time (ms)",
+      "save": "Save & recheck",
+      "hint": "Status and content checks need extension host access or a signed-in server check; limited browser mode skips them."
+    },
+    "history": {
+      "regression": "⬇ OK last time, failing now",
+      "recovered": "⬆ Failed last time, OK now"
+    }
   }
 }

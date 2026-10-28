@@ -1,3 +1,5 @@
+import { PROBE_LIMITS, runProbe } from './probe.js';
+
 const MAX_BODY_BYTES = 1024 * 1024;
 const SESSION_DAYS = 30;
 const SESSION_ROTATION_DAYS = 7;
@@ -680,6 +682,28 @@ async function handleDeleteAccount(request, env) {
   return json({ ok: true }, 200, { 'Set-Cookie': clearSessionCookie() });
 }
 
+// Side-effect free, so session cookie + same-origin check + rate limit is used
+// instead of a CSRF token (issuing one would invalidate the sync client's).
+async function handleProbe(request, env) {
+  if (!assertMutationOrigin(request))
+    return errorResponse(403, 'ORIGIN_INVALID', 'Origin is not allowed.');
+  const session = await requireSession(request, env, { rotate: false });
+  if (!rateLimit(`probe:${session.account_id}`, 120, 60 * 1000))
+    return errorResponse(429, 'RATE_LIMITED', 'Too many probe requests.');
+  const body = await readJson(request);
+  if (
+    !exactKeys(body, new Set(['url', 'keyword'])) ||
+    typeof body.url !== 'string' ||
+    (body.keyword !== undefined &&
+      (typeof body.keyword !== 'string' ||
+        body.keyword.length > PROBE_LIMITS.maxKeywordLength))
+  )
+    return errorResponse(422, 'INVALID_BODY', 'Invalid probe request.');
+  const result = await runProbe(body.url, { keyword: body.keyword || '' });
+  if (result.blocked) return errorResponse(422, 'URL_BLOCKED', result.reason);
+  return json(result);
+}
+
 export async function handleApiRequest(request, env) {
   const url = new URL(request.url);
   const path = url.pathname.replace(/^\/api\/?/, '').replace(/\/$/, '');
@@ -728,6 +752,8 @@ export async function handleApiRequest(request, env) {
       return handleRevisions(request, env);
     if (request.method === 'GET' && path.startsWith('sync/revisions/'))
       return handleRevisions(request, env, path.split('/').pop());
+    if (request.method === 'POST' && path === 'probe')
+      return await handleProbe(request, env);
     if (request.method === 'DELETE' && path === 'account')
       return handleDeleteAccount(request, env);
     return errorResponse(404, 'NOT_FOUND', 'API route not found.');

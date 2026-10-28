@@ -13,7 +13,9 @@
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-lg);
   padding: 0;
-  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.05);
+  box-shadow:
+    0 25px 50px -12px rgba(0, 0, 0, 0.5),
+    0 0 0 1px rgba(255, 255, 255, 0.05);
   color: var(--text-primary);
   flex-direction: column;
   overflow: hidden;
@@ -250,7 +252,10 @@
   display: flex;
   flex-direction: column;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+  transition:
+    transform 0.15s ease,
+    box-shadow 0.15s ease,
+    border-color 0.15s ease;
 }
 
 .live-test-card:hover {
@@ -261,7 +266,9 @@
 /* 異常高亮樣式 (醒目標記) */
 .live-test-card--offline {
   border: 2px solid var(--status-offline) !important;
-  box-shadow: 0 0 20px rgba(239, 68, 68, 0.25), 0 4px 12px rgba(0, 0, 0, 0.2) !important;
+  box-shadow:
+    0 0 20px rgba(239, 68, 68, 0.25),
+    0 4px 12px rgba(0, 0, 0, 0.2) !important;
   background: rgba(239, 68, 68, 0.02);
 }
 
@@ -380,8 +387,13 @@
 }
 
 @keyframes pulse-danger {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); }
-  50% { box-shadow: 0 0 0 4px rgba(239, 68, 68, 0); }
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 0 4px rgba(239, 68, 68, 0);
+  }
 }
 
 .live-badge--checking {
@@ -548,7 +560,9 @@
 }
 
 @keyframes spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 /* Empty State */
@@ -586,4 +600,82 @@
   .live-test-iframe-wrapper {
     height: 360px;
   }
+}
+
+/* ── Assertions & history ─────────────────────────────── */
+.live-assert-panel {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  align-items: flex-end;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border-color, #ddd);
+}
+.live-assert-field {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 12px;
+}
+.live-assert-field input {
+  /* base.css styles text inputs only; mirror it so the number field matches */
+  background: var(--surface-hover);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font: inherit;
+  padding: 4px 6px;
+  min-width: 120px;
+  width: auto;
+  outline: none;
+}
+.live-assert-field input::placeholder {
+  color: var(--text-muted);
+}
+.live-assert-field input:focus {
+  border-color: var(--border-strong);
+  background: var(--surface);
+}
+/* Fits the "200 / 2xx / 200,301 / 200-299" placeholder */
+.live-assert-field input[type='text'] {
+  min-width: 220px;
+}
+.live-assert-hint {
+  flex-basis: 100%;
+  opacity: 0.7;
+}
+.live-card-history {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  min-height: 0;
+}
+.live-card-history:not(:empty) {
+  padding-top: 4px;
+  padding-bottom: 4px;
+}
+.live-history-dots {
+  display: inline-flex;
+  gap: 3px;
+}
+.live-history-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+.live-history-dot--ok {
+  background: #2ea043;
+}
+.live-history-dot--fail {
+  background: #d1242f;
+}
+.live-history-tag {
+  font-size: 11px;
+}
+.live-history-tag--fail {
+  color: #d1242f;
+}
+.live-history-tag--ok {
+  color: #2ea043;
 }

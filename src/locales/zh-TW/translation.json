@@ -350,15 +350,36 @@
       "reloadIframe": "重新載入此頁面",
       "openNewTab": "在新分頁開啟",
       "copyUrl": "複製網址",
-      "close": "✕ 關閉 (ESC)"
+      "close": "✕ 關閉 (ESC)",
+      "copied": "✅ 已複製！",
+      "grantAccess": "授權此網域以取得真實 HTTP 狀態",
+      "exportResults": "📥 匯出結果 (CSV)"
     },
     "status": {
       "online": "🟢 連線正常",
       "offline": "🔴 連線異常 / 無法連通",
       "checking": "⏳ 正在檢測連線...",
       "xframeWarn": "🔒 此網站設有限制嵌入保護 (X-Frame-Options)，連線狀態正常，建議直接點擊新分頁開啟瀏覽",
-      "offlineWarn": "⚠️ 無法連線至此網站！請確認網址格式、網路連線或伺服器運作狀態"
+      "offlineWarn": "⚠️ 無法連線至此網站！請確認網址格式、網路連線或伺服器運作狀態",
+      "limitedHint": "僅能確認主機有回應，無法取得 HTTP 狀態碼。",
+      "serverHint": "由伺服器檢測（無法連到內網網址）。"
     },
-    "emptySelection": "目前未選取任何 URL 進行測試。"
+    "emptySelection": "目前未選取任何 URL 進行測試。",
+    "empty": {
+      "noOffline": "🎉 太棒了！沒有任何連線異常的 URL。",
+      "noMatch": "沒有符合篩選條件的項目。"
+    },
+    "assert": {
+      "title": "測試斷言",
+      "expectedStatus": "預期狀態碼",
+      "keyword": "必須包含文字",
+      "maxTime": "最大回應時間 (ms)",
+      "save": "儲存並重新檢測",
+      "hint": "狀態碼與內文檢查需要擴充功能授權或登入後的伺服器檢測；一般網頁的有限模式會略過。"
+    },
+    "history": {
+      "regression": "⬇ 上次正常，本次異常",
+      "recovered": "⬆ 上次異常，本次已恢復"
+    }
   }
 }

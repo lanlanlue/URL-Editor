@@ -55,4 +55,26 @@ describe('Pages API boundary', () => {
     );
     expect(response.status).toBe(403);
   });
+
+  describe('POST /api/probe', () => {
+    const post = (headers = {}, body = { url: 'https://example.com' }) =>
+      handleApiRequest(
+        new Request('https://url-editor.ointw.com/api/probe', {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(body),
+        }),
+        {}
+      );
+
+    test('rejects a cross-origin or missing Origin', async () => {
+      expect((await post()).status).toBe(403);
+      expect((await post({ Origin: 'https://evil.example' })).status).toBe(403);
+    });
+
+    test('requires a session', async () => {
+      const response = await post({ Origin: 'https://url-editor.ointw.com' });
+      expect(response.status).toBe(401);
+    });
+  });
 });

@@ -2,6 +2,8 @@ import {
   getActiveTabUrl,
   initExtensionBridge,
   isExtensionEnvironment,
+  requestHostPermissions,
+  toOriginPattern,
 } from './extensionBridge';
 
 describe('extensionBridge', () => {
@@ -26,5 +28,33 @@ describe('extensionBridge', () => {
     expect(await getActiveTabUrl()).toBe('https://example.com');
     expect(await initExtensionBridge({ onUrl })).toBe('https://example.com');
     expect(onUrl).toHaveBeenCalledWith('https://example.com');
+  });
+
+  test('toOriginPattern keeps only http(s) origins', () => {
+    expect(toOriginPattern('https://a.test:8443/x?y=1')).toBe(
+      'https://a.test/*'
+    );
+    expect(toOriginPattern('ftp://a.test')).toBeNull();
+    expect(toOriginPattern('not a url')).toBeNull();
+  });
+
+  test('requestHostPermissions asks once for de-duplicated origins', async () => {
+    const request = jest.fn((_q, cb) => cb(true));
+    global.chrome = { tabs: {}, permissions: { contains: jest.fn(), request } };
+
+    const granted = await requestHostPermissions([
+      'https://a.test/one',
+      'https://a.test/two',
+      'http://b.test',
+    ]);
+    expect(granted).toBe(true);
+    expect(request).toHaveBeenCalledTimes(1);
+    expect(request.mock.calls[0][0]).toEqual({
+      origins: ['https://a.test/*', 'http://b.test/*'],
+    });
+  });
+
+  test('requestHostPermissions is false without the permissions API', async () => {
+    expect(await requestHostPermissions(['https://a.test'])).toBe(false);
   });
 });

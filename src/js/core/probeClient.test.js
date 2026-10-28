@@ -1,0 +1,88 @@
+import { probeViaServer, resetProbeClient } from './probeClient';
+
+const reply = (status, body) => ({
+  status,
+  ok: status >= 200 && status < 300,
+  json: async () => body,
+});
+
+describe('probeViaServer', () => {
+  beforeEach(() => {
+    resetProbeClient();
+    global.fetch = jest.fn();
+  });
+
+  test('maps a server response to a health result', async () => {
+    global.fetch.mockResolvedValueOnce(
+      reply(200, {
+        reachable: true,
+        code: 200,
+        finalUrl: 'https://e.com/x',
+        redirects: [{ url: 'https://e.com/', status: 301 }],
+        timeMs: 120,
+        embeddable: true,
+        title: 'Hi',
+        keywordFound: true,
+      })
+    );
+    const res = await probeViaServer('https://e.com/', 'Hi');
+    expect(res).toMatchObject({
+      status: 'online',
+      code: 200,
+      mode: 'server',
+      redirected: true,
+      keywordFound: true,
+      title: 'Hi',
+    });
+    const [path, init] = global.fetch.mock.calls[0];
+    expect(path).toBe('/api/probe');
+    expect(init.credentials).toBe('same-origin');
+    expect(JSON.parse(init.body)).toEqual({
+      url: 'https://e.com/',
+      keyword: 'Hi',
+    });
+  });
+
+  test('5xx from the target is offline with the code', async () => {
+    global.fetch.mockResolvedValueOnce(
+      reply(200, { reachable: true, code: 502, timeMs: 5 })
+    );
+    expect(await probeViaServer('https://e.com/')).toMatchObject({
+      status: 'offline',
+      code: 502,
+      error: 'HTTP 502',
+    });
+  });
+
+  test('unreachable target is offline', async () => {
+    global.fetch.mockResolvedValueOnce(
+      reply(200, { reachable: false, error: 'Timeout' })
+    );
+    expect(await probeViaServer('https://e.com/')).toMatchObject({
+      status: 'offline',
+      error: 'Timeout',
+      mode: 'server',
+    });
+  });
+
+  test('blocked/private address falls back without disabling the probe', async () => {
+    global.fetch.mockResolvedValueOnce(reply(422, { code: 'URL_BLOCKED' }));
+    expect(await probeViaServer('http://10.0.0.1/')).toBeNull();
+    global.fetch.mockResolvedValueOnce(
+      reply(200, { reachable: true, code: 200 })
+    );
+    expect(await probeViaServer('https://e.com/')).not.toBeNull();
+  });
+
+  test('signed out (401) disables further attempts for a while', async () => {
+    global.fetch.mockResolvedValueOnce(reply(401, {}));
+    expect(await probeViaServer('https://e.com/')).toBeNull();
+    expect(await probeViaServer('https://e.com/')).toBeNull();
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+  });
+
+  test('network failure falls back', async () => {
+    global.fetch.mockRejectedValueOnce(new TypeError('Failed to fetch'));
+    expect(await probeViaServer('https://e.com/')).toBeNull();
+  });
+});
