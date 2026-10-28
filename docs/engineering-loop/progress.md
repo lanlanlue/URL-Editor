@@ -10,3 +10,6 @@
 - Round 1 / Worker B: B1,B2,B5,B6,B7,B10 valid. Review found issues; reworked three times (B6b follow-up, B6c/B1b, B1c). Final commits up to ac0a60b, merged as fd33099 (no conflicts).
 - Verified on integrated main (excluding .claude/ worktrees): 27 suites / 275 tests pass, eslint clean. Baseline was 23 / 184.
 - Open: B12 (design), B13/B14 (round 2), B15-B22. Not started.
+
+- Round 2: B19 (Worker C, 1 critic rework) integrated ff to 75df3d8; B14 (Worker D) merged as b248f44. Verified in main with plain `npx jest`: 30 suites / 530 tests pass, eslint exit 0.
+- Worker D found pre-existing bug B23 (missing await in api.js dispatch), verified by reading. Worker E launched (B23, B24, B15).

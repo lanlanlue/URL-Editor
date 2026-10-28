@@ -9,3 +9,5 @@
 7. Running bare `npx jest` in main also collects .claude/worktrees copies; use --testPathIgnorePatterns '/.claude/' for authoritative main results (B18).
 8. B1 went through three reworks; the third used an explicit design (recovery only with confirmedRecovery:true, banner derived from storage state) after two ad-hoc strategies each exposed a new hole.
 9. B19 (cloudSyncModal placeholder migration) is outside Worker B's ownership and left for a human decision because the guest record is already preserved.
+10. B12 (auto-sync ETag overwrite) remains a design item for the user; not implemented.
+11. Worker C's first B19 version was sent back after review showed the placeholder guard could be cleared by non-data saves (view/sort), because uploadCurrentData's fresh-ETag fetch (B12) would then let an empty payload overwrite remote data.

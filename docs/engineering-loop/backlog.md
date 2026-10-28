@@ -17,7 +17,7 @@ Base Commit: ab46b3f. All items are HYPOTHESES from read-only audits until a fai
 | B11 | P1 | isEmbeddable ignores comma-combined CSP (frameHeaders.js) | Worker A | INTEGRATED (ef0705e) |
 | B12 | P2 | Auto-sync fetches fresh ETag before PUT, overwriting remote changes | Orchestrator design first | pending decision |
 | B13 | P2 | checkHistory O(n^2) I/O; liveTestModal races | round 2 | pending |
-| B14 | P3 | Missing tests: api.js, secureStorage, cryptoVault, cloudApi; jest.config does not collect src/server | round 2 | pending |
+| B14 | P3 | Missing tests: api.js, secureStorage, cryptoVault, cloudApi; jest.config does not collect src/server | Worker D | INTEGRATED (b248f44) |
 
 ## Out of scope (needs human decision)
 Cross-isolate rate limiting, expired-session purge and storage caps (Cloudflare infra), IP pinning, npm audit (dev tooling only; --omit=dev is 0), CSRF rotation semantics.
@@ -33,3 +33,10 @@ Cross-isolate rate limiting, expired-session purge and storage caps (Cloudflare 
 - B20 (P3): liveTestModal.js:122,163,615 read entry.healthStatus (now always undefined); runtimeHealthStatus Map not cleaned on entry delete.
 - B21 (P3): unreadable detection is guest-record only (loadAccountState throws and never sets the flag); unreadable-backup:* has no pruning or restore UI; banner not re-translated on language switch and uses inline styles.
 - B22 (P3): in-flight 401/404/429 can shorten an active 30s backoff to 10s (pre-existing).
+
+## Round 2 updates
+- B19: INTEGRATED (75df3d8) after Critic rework (flag now cleared only for saves carrying real urls/presets).
+- B14: INTEGRATED (b248f44). Coverage lines/branches before -> after: api.js 70.4/62.0 -> 98.0/95.1; secureStorage.js 71.8/50.4 -> 96.6/92.9; cryptoVault.js 63.0/41.7 -> 98.6/96.7; cloudApi.js 0/0 -> 100/100; entryCheck.js 100/50 -> 100/100; redirectGenerator.js 74.0/35.2 -> 100/98.9; trackerStripper.js 76.5/56.3 -> 100/100; settings.js 95.7/52.4 -> 100/95.2. Spot mutation check (CSRF check off: 6 tests fail; expiry check off: 1 fails).
+- B18: RESOLVED by jest.config.js testPathIgnorePatterns ['<rootDir>/.claude/'] and src/server in collectCoverageFrom.
+- B23 (P0/P1, found by Worker D): api.js route dispatch lacks `await` for logout/sync GET/PUT/revisions/delete-account, so thrown 401/403 Responses and DB errors make handleApiRequest reject (Worker throws) instead of returning JSON. Pre-existing. Assigned to Worker E with B24 (`[::1]` hostname) and B15.
+- B25 (P3): cryptoVault.js:13-16 TextDecoder fallback spreads an ArrayBuffer (breaks only where TextDecoder is missing, e.g. jsdom).
