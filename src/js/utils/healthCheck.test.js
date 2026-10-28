@@ -96,6 +96,69 @@ describe('healthCheck', () => {
       expect(res.status).toBe('online');
     });
 
+    test('a body that stalls after headers is aborted by the timeout', async () => {
+      setChrome(true);
+      // jsdom does not ship TextDecoder.
+      global.TextDecoder = global.TextDecoder || require('util').TextDecoder;
+      global.fetch.mockImplementationOnce((_url, init) =>
+        Promise.resolve({
+          status: 200,
+          headers: headers({}),
+          body: {
+            getReader: () => ({
+              read: () =>
+                new Promise((_resolve, reject) => {
+                  init.signal.addEventListener('abort', () => {
+                    const err = new Error('aborted');
+                    err.name = 'AbortError';
+                    reject(err);
+                  });
+                }),
+              cancel: () => Promise.resolve(),
+            }),
+          },
+        })
+      );
+
+      const guard = new Promise((resolve) =>
+        setTimeout(() => resolve('hung'), 1500)
+      );
+      const res = await Promise.race([
+        checkUrlHealth('https://intra.local', 50, { keyword: 'x' }),
+        guard,
+      ]);
+      expect(res).not.toBe('hung');
+      expect(res).toMatchObject({ status: 'offline', error: 'Timeout' });
+    });
+
+    test('cancels the unread HEAD body before the GET fallback', async () => {
+      setChrome(true);
+      const cancel = jest.fn(() => Promise.resolve());
+      global.fetch
+        .mockResolvedValueOnce({
+          status: 405,
+          headers: headers({}),
+          body: { cancel },
+        })
+        .mockResolvedValueOnce({ status: 200, headers: headers({}) });
+
+      await checkUrlHealth('https://intra.local');
+      expect(cancel).toHaveBeenCalled();
+    });
+
+    test('cancels the unread body of the final response when no keyword is checked', async () => {
+      setChrome(true);
+      const cancel = jest.fn(() => Promise.resolve());
+      global.fetch.mockResolvedValueOnce({
+        status: 200,
+        headers: headers({}),
+        body: { cancel },
+      });
+
+      await checkUrlHealth('https://intra.local');
+      expect(cancel).toHaveBeenCalled();
+    });
+
     test('flags non-embeddable pages', async () => {
       setChrome(true);
       global.fetch.mockResolvedValueOnce({

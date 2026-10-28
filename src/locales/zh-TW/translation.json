@@ -311,6 +311,10 @@
     "renamePrompt": "請輸入標籤「{{tag}}」的新名稱：",
     "deleteConfirm": "確定要將標籤「{{tag}}」從 {{count}} 筆 URL 中移除嗎？"
   },
+  "storage": {
+    "unreadableWarning": "無法解密您已儲存的資料。資料並未被修改，且本次操作的變更將不會被儲存。請重新載入頁面再試一次，或從備份或雲端同步還原。",
+    "unreadableNotice": "由於無法解密您已儲存的資料，目前的變更不會被儲存。請從備份或雲端同步還原後再繼續。"
+  },
   "healthCheck": {
     "btn": "📡 連線檢查",
     "btnTooltip": "測試目標網址連通狀態",

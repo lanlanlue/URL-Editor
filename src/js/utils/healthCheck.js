@@ -43,13 +43,31 @@ function normalizeUrl(url) {
   return /^https?:\/\//i.test(trimmed) ? trimmed : 'https://' + trimmed;
 }
 
+/**
+ * fetch() with an abort timer. The timer is NOT cleared when headers arrive:
+ * the caller owns it through `release()` so body reads stay bounded too.
+ * On a rejected fetch the timer is cleared here.
+ */
 async function timedFetch(url, init, timeoutMs) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const release = () => clearTimeout(timer);
   try {
-    return await fetch(url, { ...init, signal: controller.signal });
-  } finally {
-    clearTimeout(timer);
+    const resp = await fetch(url, { ...init, signal: controller.signal });
+    return { resp, release };
+  } catch (err) {
+    release();
+    throw err;
+  }
+}
+
+/** Discards an unread response body so the connection is not held open. */
+function discardBody(resp) {
+  try {
+    const result = resp?.body?.cancel?.();
+    if (result && typeof result.catch === 'function') result.catch(() => {});
+  } catch {
+    // Nothing to release.
   }
 }
 
@@ -83,27 +101,50 @@ async function probeWithExtension(url, timeoutMs, keyword) {
     redirect: 'follow',
     cache: 'no-store',
   };
+  let release = () => {};
   try {
     let resp;
     if (keyword) {
       // Keyword assertions need the body, so skip HEAD.
-      resp = await timedFetch(url, { ...init, method: 'GET' }, timeoutMs);
+      ({ resp, release } = await timedFetch(
+        url,
+        { ...init, method: 'GET' },
+        timeoutMs
+      ));
     } else {
       try {
-        resp = await timedFetch(url, { ...init, method: 'HEAD' }, timeoutMs);
+        ({ resp, release } = await timedFetch(
+          url,
+          { ...init, method: 'HEAD' },
+          timeoutMs
+        ));
         // Some servers reject HEAD; confirm with GET before reporting failure.
         if (resp.status === 405 || resp.status === 501) {
-          resp = await timedFetch(url, { ...init, method: 'GET' }, timeoutMs);
+          release();
+          discardBody(resp);
+          ({ resp, release } = await timedFetch(
+            url,
+            { ...init, method: 'GET' },
+            timeoutMs
+          ));
         }
       } catch (headErr) {
         if (headErr?.name === 'AbortError') throw headErr;
-        resp = await timedFetch(url, { ...init, method: 'GET' }, timeoutMs);
+        ({ resp, release } = await timedFetch(
+          url,
+          { ...init, method: 'GET' },
+          timeoutMs
+        ));
       }
     }
     const ok = resp.status >= 200 && resp.status < 400;
-    const keywordFound = keyword
-      ? (await readCappedText(resp)).includes(keyword)
-      : undefined;
+    let keywordFound;
+    if (keyword) {
+      // The abort timer is still armed here, so a stalling body is cut off.
+      keywordFound = (await readCappedText(resp)).includes(keyword);
+    } else {
+      discardBody(resp);
+    }
     return {
       status: ok ? 'online' : 'offline',
       code: resp.status,
@@ -122,6 +163,8 @@ async function probeWithExtension(url, timeoutMs, keyword) {
       timeMs: Date.now() - started,
       mode: 'extension',
     };
+  } finally {
+    release();
   }
 }
 
@@ -130,10 +173,20 @@ async function probeLimited(url, timeoutMs, needsPermission) {
   const init = { mode: 'no-cors' };
   try {
     try {
-      await timedFetch(url, { ...init, method: 'HEAD' }, timeoutMs);
+      const { release } = await timedFetch(
+        url,
+        { ...init, method: 'HEAD' },
+        timeoutMs
+      );
+      release();
     } catch (headErr) {
       if (headErr?.name === 'AbortError') throw headErr;
-      await timedFetch(url, { ...init, method: 'GET' }, timeoutMs);
+      const { release } = await timedFetch(
+        url,
+        { ...init, method: 'GET' },
+        timeoutMs
+      );
+      release();
     }
     // Opaque response: the host answered, but its status is unknown.
     return {

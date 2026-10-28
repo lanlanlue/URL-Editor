@@ -87,6 +87,18 @@ export function pruneHistory(validIds, storage) {
   if (changed) save(data, storage);
 }
 
+/**
+ * CSV label for an assertion outcome. Prefers `state`; results that only carry
+ * `passed` (older shape) map to pass/fail.
+ */
+function describeAssertion(assertion) {
+  if (!assertion) return '';
+  if (assertion.state === 'skipped') return 'skipped';
+  if (assertion.state === 'passed') return 'pass';
+  if (assertion.state === 'failed') return 'fail';
+  return assertion.passed ? 'pass' : 'fail';
+}
+
 function csvCell(value) {
   const text = value == null ? '' : String(value);
   // Neutralise spreadsheet formula injection, then quote if needed.
@@ -114,11 +126,7 @@ export function buildResultsCsv(entries, results, now = Date.now()) {
   ];
   const rows = entries.map((entry) => {
     const res = results.get(entry.id) || {};
-    const assertion = res.assertion
-      ? res.assertion.passed
-        ? 'pass'
-        : 'fail'
-      : '';
+    const assertion = describeAssertion(res.assertion);
     return [
       entry.label || '',
       entry.url,

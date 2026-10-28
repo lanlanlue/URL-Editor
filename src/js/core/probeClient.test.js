@@ -85,4 +85,124 @@ describe('probeViaServer', () => {
     global.fetch.mockRejectedValueOnce(new TypeError('Failed to fetch'));
     expect(await probeViaServer('https://e.com/')).toBeNull();
   });
+
+  test('a 5xx from the probe endpoint does not disable later probes', async () => {
+    global.fetch.mockResolvedValueOnce(reply(502, {}));
+    expect(await probeViaServer('https://slow.example/')).toBeNull();
+    global.fetch.mockResolvedValueOnce(
+      reply(200, { reachable: true, code: 200 })
+    );
+    expect(await probeViaServer('https://e.com/')).toMatchObject({
+      mode: 'server',
+    });
+    expect(global.fetch).toHaveBeenCalledTimes(2);
+  });
+
+  test('a single URL timing out does not disable later probes', async () => {
+    const abort = new Error('aborted');
+    abort.name = 'AbortError';
+    global.fetch.mockRejectedValueOnce(abort);
+    expect(await probeViaServer('https://slow.example/')).toBeNull();
+    global.fetch.mockResolvedValueOnce(
+      reply(200, { reachable: true, code: 200 })
+    );
+    expect(await probeViaServer('https://e.com/')).not.toBeNull();
+    expect(global.fetch).toHaveBeenCalledTimes(2);
+  });
+
+  test('a network failure does not disable later probes', async () => {
+    global.fetch.mockRejectedValueOnce(new TypeError('Failed to fetch'));
+    expect(await probeViaServer('https://e.com/')).toBeNull();
+    global.fetch.mockResolvedValueOnce(
+      reply(200, { reachable: true, code: 200 })
+    );
+    expect(await probeViaServer('https://e.com/')).not.toBeNull();
+  });
+
+  test('no backend (404) disables further attempts for a while', async () => {
+    global.fetch.mockResolvedValueOnce(reply(404, {}));
+    expect(await probeViaServer('https://e.com/')).toBeNull();
+    expect(await probeViaServer('https://e.com/')).toBeNull();
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+  });
+
+  describe('consecutive failure backoff', () => {
+    const ok = () => reply(200, { reachable: true, code: 200 });
+    const timeout = () => {
+      const err = new Error('aborted');
+      err.name = 'AbortError';
+      return err;
+    };
+    let now;
+
+    beforeEach(() => {
+      now = 1_000_000;
+      jest.spyOn(Date, 'now').mockImplementation(() => now);
+    });
+
+    afterEach(() => {
+      jest.restoreAllMocks();
+    });
+
+    test('one timeout among successes never disables probing', async () => {
+      global.fetch
+        .mockResolvedValueOnce(ok())
+        .mockRejectedValueOnce(timeout())
+        .mockResolvedValue(ok());
+      const results = [];
+      for (let i = 0; i < 6; i += 1) {
+        results.push(await probeViaServer(`https://e.com/${i}`));
+      }
+      expect(global.fetch).toHaveBeenCalledTimes(6);
+      expect(results.filter(Boolean)).toHaveLength(5);
+    });
+
+    test('a failing backend is only called a handful of times for 300 URLs', async () => {
+      global.fetch.mockRejectedValue(new TypeError('Failed to fetch'));
+      for (let i = 0; i < 300; i += 1) {
+        expect(await probeViaServer(`https://e.com/${i}`)).toBeNull();
+      }
+      expect(global.fetch.mock.calls.length).toBeLessThanOrEqual(5);
+    });
+
+    test('consecutive 5xx and timeouts also trip the backoff', async () => {
+      global.fetch
+        .mockResolvedValueOnce(reply(502, {}))
+        .mockRejectedValueOnce(timeout())
+        .mockResolvedValueOnce(reply(503, {}));
+      for (let i = 0; i < 10; i += 1) {
+        await probeViaServer(`https://e.com/${i}`);
+      }
+      expect(global.fetch).toHaveBeenCalledTimes(3);
+    });
+
+    test('a success resets the failure counter', async () => {
+      global.fetch
+        .mockRejectedValueOnce(new TypeError('x'))
+        .mockRejectedValueOnce(new TypeError('x'))
+        .mockResolvedValueOnce(ok())
+        .mockRejectedValueOnce(new TypeError('x'))
+        .mockRejectedValueOnce(new TypeError('x'))
+        .mockResolvedValue(ok());
+      for (let i = 0; i < 6; i += 1) {
+        await probeViaServer(`https://e.com/${i}`);
+      }
+      // 2 failures, success, 2 failures: never 3 in a row, so never disabled.
+      expect(global.fetch).toHaveBeenCalledTimes(6);
+    });
+
+    test('probing resumes after the backoff window', async () => {
+      global.fetch.mockRejectedValue(new TypeError('x'));
+      for (let i = 0; i < 5; i += 1) await probeViaServer('https://e.com/');
+      const callsWhileDisabled = global.fetch.mock.calls.length;
+      expect(callsWhileDisabled).toBeLessThanOrEqual(5);
+      await probeViaServer('https://e.com/');
+      expect(global.fetch).toHaveBeenCalledTimes(callsWhileDisabled);
+
+      now += 31 * 1000;
+      global.fetch.mockResolvedValue(ok());
+      expect(await probeViaServer('https://e.com/')).not.toBeNull();
+      expect(global.fetch).toHaveBeenCalledTimes(callsWhileDisabled + 1);
+    });
+  });
 });

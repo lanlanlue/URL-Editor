@@ -54,7 +54,12 @@ describe('evaluateAssertions / applyAssertions', () => {
       { expectedStatus: '2xx', keyword: 'hi', maxTimeMs: 1000 }
     );
     expect(out.status).toBe('online');
-    expect(out.assertion).toEqual({ passed: true, failures: [], skipped: [] });
+    expect(out.assertion).toEqual({
+      passed: true,
+      state: 'passed',
+      failures: [],
+      skipped: [],
+    });
   });
 
   test('wrong status fails and explains why', () => {
@@ -111,5 +116,38 @@ describe('evaluateAssertions / applyAssertions', () => {
     expect(
       evaluateAssertions(out, { expectedStatus: '200' }).failures[0].actual
     ).toBe('no response');
+  });
+
+  test('when every configured check is skipped the result is skipped, not passed', () => {
+    const limited = { status: 'online', mode: 'limited' };
+    const out = applyAssertions(limited, {
+      expectedStatus: '200',
+      keyword: 'x',
+    });
+    expect(out.assertion.skipped).toEqual(['status', 'keyword']);
+    expect(out.assertion.failures).toEqual([]);
+    expect(out.assertion.passed).toBe(false);
+    expect(out.assertion.state).toBe('skipped');
+    // A skipped assertion neither fails nor overrides the health status.
+    expect(out.status).toBe('online');
+    expect(out.error).toBeUndefined();
+  });
+
+  test('state is passed or failed when at least one check was evaluated', () => {
+    const limited = { status: 'online', timeMs: 50, mode: 'limited' };
+    expect(
+      evaluateAssertions(limited, {
+        expectedStatus: '200',
+        keyword: '',
+        maxTimeMs: 100,
+      }).state
+    ).toBe('passed');
+    expect(
+      evaluateAssertions(limited, {
+        expectedStatus: '',
+        keyword: '',
+        maxTimeMs: 10,
+      }).state
+    ).toBe('failed');
   });
 });
