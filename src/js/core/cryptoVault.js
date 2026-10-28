@@ -11,8 +11,19 @@ const TEXT_DECODER =
   typeof TextDecoder !== 'undefined'
     ? new TextDecoder()
     : {
-        decode: (bytes) =>
-          decodeURIComponent(escape(String.fromCharCode(...bytes))),
+        // SubtleCrypto.decrypt returns an ArrayBuffer (not iterable); wrap it
+        // and convert in chunks to stay under the call-argument limit.
+        decode: (input) => {
+          const bytes = new Uint8Array(input);
+          let binary = '';
+          for (let i = 0; i < bytes.length; i += 0x8000) {
+            binary += String.fromCharCode.apply(
+              null,
+              bytes.subarray(i, i + 0x8000)
+            );
+          }
+          return decodeURIComponent(escape(binary));
+        },
       };
 const RECOVERY_PREFIX = 'URE1';
 const RECOVERY_GROUP_LENGTH = 8;

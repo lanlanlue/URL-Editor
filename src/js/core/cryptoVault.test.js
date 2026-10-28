@@ -290,3 +290,43 @@ describe('cryptoVault without Web Crypto', () => {
     expect(() => randomBytes(8)).toThrow(/unavailable/);
   });
 });
+
+describe('cryptoVault TextDecoder fallback (B25)', () => {
+  function loadWithoutTextDecoder() {
+    const saved = global.TextDecoder;
+    delete global.TextDecoder;
+    let vault;
+    try {
+      jest.isolateModules(() => {
+        vault = require('./cryptoVault.js');
+      });
+    } finally {
+      if (saved !== undefined) global.TextDecoder = saved;
+    }
+    return vault;
+  }
+
+  test('decryptJson works on the ArrayBuffer from SubtleCrypto without TextDecoder', async () => {
+    const vault = loadWithoutTextDecoder();
+    const key = await vault.deriveEncryptionKey(
+      new Uint8Array(32),
+      new Uint8Array(16)
+    );
+    const envelope = await vault.encryptJson({ a: 'é中文', n: [1, 2] }, key);
+    await expect(vault.decryptJson(envelope, key)).resolves.toEqual({
+      a: 'é中文',
+      n: [1, 2],
+    });
+  });
+
+  test('decrypts a payload far beyond the spread/call-stack argument limit', async () => {
+    const vault = loadWithoutTextDecoder();
+    const key = await vault.deriveEncryptionKey(
+      new Uint8Array(32),
+      new Uint8Array(16)
+    );
+    const big = { text: 'x'.repeat(600000) + 'é' };
+    const envelope = await vault.encryptJson(big, key);
+    await expect(vault.decryptJson(envelope, key)).resolves.toEqual(big);
+  });
+});
