@@ -754,7 +754,7 @@ export async function handleApiRequest(request, env) {
       });
     }
     if (request.method === 'POST' && path === 'auth/google')
-      return authenticateGoogle(request, env);
+      return await authenticateGoogle(request, env);
     if (request.method === 'GET' && path === 'session') {
       const session = await requireSession(request, env);
       const csrfToken = await issueCsrfToken(env, session);
@@ -773,19 +773,19 @@ export async function handleApiRequest(request, env) {
       );
     }
     if (request.method === 'POST' && path === 'logout')
-      return handleLogout(request, env);
+      return await handleLogout(request, env);
     if (request.method === 'GET' && path === 'sync')
-      return handleSyncGet(request, env);
+      return await handleSyncGet(request, env);
     if (request.method === 'PUT' && path === 'sync')
-      return handleSyncPut(request, env);
+      return await handleSyncPut(request, env);
     if (request.method === 'GET' && path === 'sync/revisions')
-      return handleRevisions(request, env);
+      return await handleRevisions(request, env);
     if (request.method === 'GET' && path.startsWith('sync/revisions/'))
-      return handleRevisions(request, env, path.split('/').pop());
+      return await handleRevisions(request, env, path.split('/').pop());
     if (request.method === 'POST' && path === 'probe')
       return await handleProbe(request, env);
     if (request.method === 'DELETE' && path === 'account')
-      return handleDeleteAccount(request, env);
+      return await handleDeleteAccount(request, env);
     return errorResponse(404, 'NOT_FOUND', 'API route not found.');
   } catch (error) {
     if (error instanceof Response) return error;

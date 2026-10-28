@@ -1098,18 +1098,8 @@ describe('Pages API boundary', () => {
         });
       const freshRow = (extra = {}) =>
         sessionRow('tok', { last_rotated_at: nowS(), ...extra });
-      // KNOWN BUG (reported, not fixed): handleApiRequest does `return
-      // handleSyncGet(...)` etc. without `await`, so a Response thrown by
-      // requireSession/requireCsrf (and any DB error) rejects the returned
-      // promise instead of being caught and returned. `settle` unwraps that
-      // thrown Response so the 401/403 payload contract is still verified.
-      const settle = (promise) =>
-        promise.catch((error) => {
-          if (error instanceof Response) return error;
-          throw error;
-        });
       const call = (request, handlers) =>
-        settle(handleApiRequest(request, { DB: makeDb(handlers) }));
+        handleApiRequest(request, { DB: makeDb(handlers) });
 
       describe('every protected route requires a session', () => {
         const noCookie = [
@@ -1121,15 +1111,76 @@ describe('Pages API boundary', () => {
           ['DELETE', '/api/account'],
         ];
         test.each(noCookie)('%s %s -> 401', async (method, path) => {
-          const response = await settle(
-            handleApiRequest(
-              req(path, { method, headers: { Origin: ORIGIN } }),
-              { DB: makeDb([]) }
-            )
+          const promise = handleApiRequest(
+            req(path, { method, headers: { Origin: ORIGIN } }),
+            { DB: makeDb([]) }
           );
+          await expect(promise).resolves.toBeInstanceOf(Response);
+          const response = await promise;
           expect(response.status).toBe(401);
           expect((await response.json()).code).toBe('UNAUTHORIZED');
         });
+      });
+
+      describe('errors inside awaited route handlers resolve to JSON Responses (B23)', () => {
+        const dbError = () => {
+          throw new Error('D1 exploded');
+        };
+        const cases = [
+          [
+            'GET /api/sync',
+            () => authed('/api/sync'),
+            [['SELECT * FROM sync_documents', dbError]],
+          ],
+          [
+            'GET /api/sync/revisions',
+            () => authed('/api/sync/revisions'),
+            [['FROM sync_revisions', dbError]],
+          ],
+          [
+            'GET /api/sync/revisions/1',
+            () => authed('/api/sync/revisions/1'),
+            [['FROM sync_revisions', dbError]],
+          ],
+          [
+            'POST /api/logout',
+            () => authed('/api/logout', { method: 'POST' }),
+            [['DELETE FROM sessions', dbError]],
+          ],
+          [
+            'DELETE /api/account',
+            () =>
+              authed('/api/account', {
+                method: 'DELETE',
+                body: JSON.stringify({ confirmation: 'DELETE' }),
+              }),
+            [['DELETE FROM sync_revisions', dbError]],
+          ],
+          [
+            'PUT /api/sync',
+            () =>
+              authed('/api/sync', {
+                method: 'PUT',
+                headers: { 'If-Match': '"rev-0"' },
+                body: JSON.stringify(envelope(1)),
+              }),
+            [['SELECT * FROM sync_documents', dbError]],
+          ],
+        ];
+        test.each(cases)(
+          '%s with a DB error resolves to 500 INTERNAL_ERROR',
+          async (name, makeRequest, extra) => {
+            const row = await freshRow();
+            const promise = call(makeRequest(), [
+              ['SELECT s.*', () => row],
+              ...extra,
+            ]);
+            await expect(promise).resolves.toBeInstanceOf(Response);
+            const response = await promise;
+            expect(response.status).toBe(500);
+            expect((await response.json()).code).toBe('INTERNAL_ERROR');
+          }
+        );
       });
 
       describe('origin and CSRF checks on mutations', () => {
