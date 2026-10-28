@@ -253,8 +253,9 @@ async function verifyGoogleCredential(credential, env) {
     !validSignature ||
     !issuerValid ||
     !audienceValid ||
-    !Number.isFinite(Number(claims.exp)) ||
-    Number(claims.exp) <= nowSeconds() ||
+    typeof claims.exp !== 'number' ||
+    !Number.isFinite(claims.exp) ||
+    claims.exp <= nowSeconds() ||
     claims.email_verified !== true ||
     typeof claims.sub !== 'string'
   ) {
@@ -281,6 +282,26 @@ async function createSession(env, userId) {
     )
     .run();
   return { token, csrfToken };
+}
+
+// Re-resolves a session row whose token_hash was changed by a concurrent
+// rotation, using only columns that no UPDATE in this file ever changes
+// (user_id, created_at, last_authenticated_at, expires_at); csrf_hash is NOT
+// stable (the winner usually re-issues it). The winner has a strictly newer
+// last_rotated_at than the stale row, which excludes unrotated look-alike
+// sessions; ORDER BY picks the most recently rotated row if several match.
+async function findRotatedSession(env, session) {
+  return env.DB.prepare(
+    'SELECT token_hash FROM sessions WHERE user_id = ? AND created_at = ? AND last_authenticated_at = ? AND expires_at = ? AND last_rotated_at > ? ORDER BY last_rotated_at DESC LIMIT 1'
+  )
+    .bind(
+      session.user_id,
+      session.created_at,
+      session.last_authenticated_at,
+      session.expires_at,
+      session.last_rotated_at
+    )
+    .first();
 }
 
 async function getSession(request, env, { rotate = true } = {}) {
@@ -323,17 +344,7 @@ async function getSession(request, env, { rotate = true } = {}) {
       // has a strictly newer last_rotated_at than the stale row, which
       // excludes unrotated look-alike sessions; ORDER BY picks the most
       // recently rotated row if several still match.
-      const current = await env.DB.prepare(
-        'SELECT token_hash FROM sessions WHERE user_id = ? AND created_at = ? AND last_authenticated_at = ? AND expires_at = ? AND last_rotated_at > ? ORDER BY last_rotated_at DESC LIMIT 1'
-      )
-        .bind(
-          session.user_id,
-          session.created_at,
-          session.last_authenticated_at,
-          session.expires_at,
-          session.last_rotated_at
-        )
-        .first();
+      const current = await findRotatedSession(env, session);
       if (!current?.token_hash) return null;
       session.token_hash = current.token_hash;
     }
@@ -640,7 +651,8 @@ async function handleSyncPut(request, env) {
   try {
     await cleanupHistory(env, session.account_id);
   } catch {
-    // best effort
+    // best effort; fixed message only so no user data reaches the logs
+    console.warn('Sync history cleanup failed');
   }
   return json(
     { document: body, revision: body.revision },
@@ -685,9 +697,21 @@ async function handleLogout(request, env) {
     return errorResponse(403, 'ORIGIN_INVALID', 'Origin is not allowed.');
   const session = await requireSession(request, env, { rotate: false });
   await requireCsrf(request, session);
-  await env.DB.prepare('DELETE FROM sessions WHERE token_hash = ?')
-    .bind(session.token_hash)
-    .run();
+  // A rotation by another request may land between getSession and this DELETE,
+  // leaving the row under a new hash (0 rows deleted). Re-resolve and retry a
+  // bounded number of times so the user is not left logged in.
+  let current = session;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const result = await env.DB.prepare(
+      'DELETE FROM sessions WHERE token_hash = ?'
+    )
+      .bind(current.token_hash)
+      .run();
+    if (result?.meta?.changes !== 0) break;
+    const rotated = await findRotatedSession(env, current);
+    if (!rotated?.token_hash) break; // already gone
+    current = { ...current, token_hash: rotated.token_hash };
+  }
   return json({ ok: true }, 200, { 'Set-Cookie': clearSessionCookie() });
 }
 
@@ -708,8 +732,11 @@ async function handleDeleteAccount(request, env) {
   let body;
   try {
     body = await readJson(request);
-  } catch {
-    return errorResponse(422, 'INVALID_BODY', 'Invalid delete request.');
+  } catch (error) {
+    // Malformed JSON has always been INVALID_BODY here; keep that code.
+    if (error?.message === 'INVALID_JSON')
+      return errorResponse(422, 'INVALID_BODY', 'Invalid delete request.');
+    return bodyErrorResponse(error, 'Invalid delete request.');
   }
   if (
     !exactKeys(body, new Set(['confirmation'])) ||
@@ -743,7 +770,12 @@ async function handleProbe(request, env) {
   const session = await requireSession(request, env, { rotate: false });
   if (!rateLimit(`probe:${session.account_id}`, 120, 60 * 1000))
     return errorResponse(429, 'RATE_LIMITED', 'Too many probe requests.');
-  const body = await readJson(request);
+  let body;
+  try {
+    body = await readJson(request);
+  } catch (error) {
+    return bodyErrorResponse(error, 'Invalid probe request.');
+  }
   if (
     !exactKeys(body, new Set(['url', 'keyword'])) ||
     typeof body.url !== 'string' ||

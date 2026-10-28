@@ -348,6 +348,23 @@ describe('Pages API boundary', () => {
       expect((await response.json()).revision).toBe(2);
     });
 
+    test('B17: logs a fixed warning (no user data) when history cleanup fails after a committed write', async () => {
+      const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+      try {
+        const db = makeDb(
+          await syncHandlers(() => {
+            throw new Error('cleanup failed for a@example.com');
+          })
+        );
+        const response = await putSync(db);
+        expect(response.status).toBe(200);
+        expect(warn).toHaveBeenCalledTimes(1);
+        expect(warn).toHaveBeenCalledWith('Sync history cleanup failed');
+      } finally {
+        warn.mockRestore();
+      }
+    });
+
     test('B4: still returns SYNC_CONFLICT when the write itself matches 0 rows', async () => {
       const handlers = await syncHandlers(() => ({ meta: { changes: 0 } }));
       handlers.find(([n]) => n === 'UPDATE sync_documents')[1] = () => ({
@@ -550,6 +567,16 @@ describe('Pages API boundary', () => {
         const response = await loginWith(
           loadApi(),
           await signedCredential({ exp: 'never' })
+        );
+        expect(response.status).toBe(401);
+        expect((await response.json()).code).toBe('GOOGLE_TOKEN_INVALID');
+      });
+
+      test('B17: rejects a credential whose exp is a numeric string', async () => {
+        global.fetch = jwksFetch();
+        const response = await loginWith(
+          loadApi(),
+          await signedCredential({ exp: String(nowS() + 3600) })
         );
         expect(response.status).toBe(401);
         expect((await response.json()).code).toBe('GOOGLE_TOKEN_INVALID');
@@ -1802,6 +1829,82 @@ describe('Pages API boundary', () => {
         });
       });
 
+      describe('POST /api/logout rotation race (B26)', () => {
+        // Stateful table: DELETE by token_hash only hits the row currently
+        // holding that hash; the lookup mirrors getSession's immutable columns.
+        const logoutDb = (stale, table, log) => [
+          ['SELECT s.*', () => ({ ...stale })],
+          [
+            'SELECT token_hash FROM sessions',
+            (sql, [userId, createdAt, authAt, expiresAt, rotatedAfter]) => {
+              log.lookups += 1;
+              return (
+                table
+                  .filter(
+                    (r) =>
+                      r.user_id === userId &&
+                      r.created_at === createdAt &&
+                      r.last_authenticated_at === authAt &&
+                      r.expires_at === expiresAt &&
+                      r.last_rotated_at > rotatedAfter
+                  )
+                  .sort((x, y) => y.last_rotated_at - x.last_rotated_at)[0] ||
+                null
+              );
+            },
+          ],
+          [
+            'DELETE FROM sessions WHERE token_hash',
+            (sql, [hash]) => {
+              log.deletes.push(hash);
+              const i = table.findIndex((r) => r.token_hash === hash);
+              if (i >= 0) table.splice(i, 1);
+              return { meta: { changes: i >= 0 ? 1 : 0 } };
+            },
+          ],
+        ];
+
+        test('a rotation landing between getSession and the DELETE still logs the user out', async () => {
+          const stale = await freshRow({ created_at: nowS() - 100 });
+          const winnerHash = await sha('winner-token');
+          const table = [
+            { ...stale, token_hash: winnerHash, last_rotated_at: nowS() + 5 },
+          ];
+          const log = { lookups: 0, deletes: [] };
+          const response = await call(
+            authed('/api/logout', { method: 'POST', body: '{}' }),
+            logoutDb(stale, table, log)
+          );
+          expect(response.status).toBe(200);
+          expect(table).toHaveLength(0);
+          expect(log.deletes).toEqual([stale.token_hash, winnerHash]);
+        });
+
+        test('a 0-row delete with no surviving session (already logged out) just succeeds', async () => {
+          const stale = await freshRow();
+          const log = { lookups: 0, deletes: [] };
+          const response = await call(
+            authed('/api/logout', { method: 'POST', body: '{}' }),
+            logoutDb(stale, [], log)
+          );
+          expect(response.status).toBe(200);
+          expect(log.deletes).toEqual([stale.token_hash]);
+          expect(log.lookups).toBe(1);
+        });
+
+        test('does not touch a never-rotated look-alike session', async () => {
+          const stale = await freshRow();
+          const other = { ...stale, token_hash: await sha('other-session') };
+          const table = [other];
+          const log = { lookups: 0, deletes: [] };
+          await call(
+            authed('/api/logout', { method: 'POST', body: '{}' }),
+            logoutDb(stale, table, log)
+          );
+          expect(table).toEqual([other]);
+        });
+      });
+
       describe('DELETE /api/account', () => {
         const del = async ({ body, row, headers } = {}, handlers = []) => {
           const session = row || (await freshRow());
@@ -1867,6 +1970,32 @@ describe('Pages API boundary', () => {
           expect((await response.json()).code).toBe('INVALID_BODY');
         });
 
+        test.each([
+          [
+            'stream failure',
+            'stream exploded at /internal/path',
+            422,
+            'INVALID_BODY',
+          ],
+          ['oversized body', 'PAYLOAD_TOO_LARGE', 413, 'PAYLOAD_TOO_LARGE'],
+        ])(
+          'B17: body read %s maps like login/sync',
+          async (_l, message, status, code) => {
+            const row = await freshRow();
+            const request = {
+              ...authed('/api/account', { method: 'DELETE' }),
+              arrayBuffer: async () => {
+                throw new Error(message);
+              },
+            };
+            const response = await call(request, [['SELECT s.*', () => row]]);
+            const body = await response.json();
+            expect(response.status).toBe(status);
+            expect(body.code).toBe(code);
+            expect(JSON.stringify(body)).not.toContain('/internal/path');
+          }
+        );
+
         test('confirmed deletion removes revisions, document, sessions and user in order', async () => {
           const statements = [];
           const row = await freshRow();
@@ -1926,6 +2055,34 @@ describe('Pages API boundary', () => {
           expect(response.status).toBe(422);
           expect((await response.json()).code).toBe('INVALID_BODY');
         });
+
+        test.each([
+          [
+            'stream failure',
+            'stream exploded at /internal/path',
+            422,
+            'INVALID_BODY',
+          ],
+          ['oversized body', 'PAYLOAD_TOO_LARGE', 413, 'PAYLOAD_TOO_LARGE'],
+        ])(
+          'B17: body read %s maps like login/sync',
+          async (_l, message, status, code) => {
+            const row = await freshRow({
+              account_id: `acct-probe-${Math.random()}`,
+            });
+            const request = {
+              ...authed('/api/probe', { method: 'POST' }),
+              arrayBuffer: async () => {
+                throw new Error(message);
+              },
+            };
+            const response = await call(request, [['SELECT s.*', () => row]]);
+            const body = await response.json();
+            expect(response.status).toBe(status);
+            expect(body.code).toBe(code);
+            expect(JSON.stringify(body)).not.toContain('/internal/path');
+          }
+        );
 
         test('malformed JSON -> 422 INVALID_JSON', async () => {
           const response = await probe(undefined, '{bad');
