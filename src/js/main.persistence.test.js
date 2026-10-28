@@ -128,6 +128,31 @@ describe('B1: unreadable encrypted record', () => {
     expect(notice.getAttribute('role')).toBe('alert');
   });
 
+  test('B21: the notice text follows language changes and is never resurrected', async () => {
+    const { markStorageRecovered } = await loadMain({
+      initialState: unreadableState,
+    });
+    const { default: i18next } = await import('./core/i18n.js');
+    const notice = document.querySelector('[data-storage-unreadable-notice]');
+    expect(notice).toBeTruthy();
+    const before = notice.textContent;
+    await i18next.changeLanguage('zh-TW');
+    expect(notice.textContent).toBe(i18next.t('storage.unreadableNotice'));
+    expect(notice.textContent).not.toBe(before);
+    expect(notice.textContent).toMatch(/無法解密/);
+    expect(
+      document.querySelectorAll('[data-storage-unreadable-notice]')
+    ).toHaveLength(1);
+
+    // After the notice is removed, a language change must not bring it back.
+    markStorageRecovered();
+    notice.remove();
+    await i18next.changeLanguage('en');
+    expect(
+      document.querySelector('[data-storage-unreadable-notice]')
+    ).toBeNull();
+  });
+
   test('a restore without confirmedRecovery never clears the unreadable flag', async () => {
     const { saveSecureState, cloudOptions, markStorageRecovered } =
       await loadMain({ initialState: unreadableState });

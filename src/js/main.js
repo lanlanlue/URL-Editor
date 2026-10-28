@@ -359,6 +359,13 @@ function showUnreadableNotice() {
   document.body.appendChild(notice);
 }
 
+// Re-translate a visible notice on language change. Only updates an existing
+// element, so a removed notice is never resurrected. Registered once.
+i18next.on('languageChanged', () => {
+  const notice = document.querySelector('[data-storage-unreadable-notice]');
+  if (notice) notice.textContent = unreadableNoticeText();
+});
+
 function hideUnreadableNotice() {
   document.querySelector('[data-storage-unreadable-notice]')?.remove();
 }
