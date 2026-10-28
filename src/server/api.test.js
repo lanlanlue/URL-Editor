@@ -182,52 +182,115 @@ describe('Pages API boundary', () => {
       expect(response.headers.get('Set-Cookie')).toBeNull();
     });
 
-    test('B15: after a lost rotation race the CSRF token is stored against the winner token hash', async () => {
-      const row = await sessionRow('old-token');
-      const winnerHash = await sha('winner-token');
-      const csrfUpdates = [];
-      const reads = [];
-      const db = makeDb([
-        ['SELECT s.*', () => row],
+    // Stateful sessions table modelling the REAL race: `table` holds what is in
+    // D1 when the loser runs; the loser's earlier SELECT s.* saw `stale`.
+    const raceDb = (stale, table, log) =>
+      makeDb([
+        ['SELECT s.*', () => ({ ...stale })],
         ['UPDATE sessions SET token_hash', () => ({ meta: { changes: 0 } })],
         [
           'SELECT token_hash FROM sessions',
-          (sql, args) => (reads.push(args), { token_hash: winnerHash }),
+          (sql, [userId, createdAt, authAt, expiresAt, rotatedAfter]) => {
+            log.reads.push(sql);
+            return (
+              table
+                .filter(
+                  (r) =>
+                    r.user_id === userId &&
+                    r.created_at === createdAt &&
+                    r.last_authenticated_at === authAt &&
+                    r.expires_at === expiresAt &&
+                    r.last_rotated_at > rotatedAfter
+                )
+                .sort((x, y) => y.last_rotated_at - x.last_rotated_at)[0] ||
+              null
+            );
+          },
         ],
         [
           'UPDATE sessions SET csrf_hash',
-          (sql, args) => (csrfUpdates.push(args), { meta: { changes: 1 } }),
+          (sql, [csrfHash, tokenHash]) => {
+            log.csrf.push([csrfHash, tokenHash]);
+            const hit = table.find((r) => r.token_hash === tokenHash);
+            if (hit) hit.csrf_hash = csrfHash;
+            return { meta: { changes: hit ? 1 : 0 } };
+          },
         ],
       ]);
-      const response = await handleApiRequest(
+    const getSessionAsLoser = (db) =>
+      handleApiRequest(
         req('/api/session', {
           headers: { Cookie: '__Host-ue_session=old-token' },
         }),
         { DB: db }
       );
+
+    test('B15: loser still resolves when the winner already rotated AND re-issued csrf_hash', async () => {
+      const stale = await sessionRow('old-token', { created_at: nowS() - 100 });
+      const winnerHash = await sha('winner-token');
+      const table = [
+        {
+          ...stale,
+          token_hash: winnerHash,
+          csrf_hash: await sha('winner-csrf'),
+          last_rotated_at: nowS(),
+        },
+      ];
+      const log = { reads: [], csrf: [] };
+      const response = await getSessionAsLoser(raceDb(stale, table, log));
       expect(response.status).toBe(200);
       expect(response.headers.get('Set-Cookie')).toBeNull();
-      expect(reads).toEqual([[row.user_id, row.created_at, row.csrf_hash]]);
-      expect(csrfUpdates).toHaveLength(1);
-      expect(csrfUpdates[0][1]).toBe(winnerHash);
+      expect(log.csrf).toHaveLength(1);
+      expect(log.csrf[0][1]).toBe(winnerHash);
       const { csrfToken } = await response.json();
-      expect(await sha(csrfToken)).toBe(csrfUpdates[0][0]);
+      expect(await sha(csrfToken)).toBe(table[0].csrf_hash);
+      expect(log.reads[0]).not.toMatch(/csrf_hash/);
     });
 
     test('B15: a lost rotation race whose row vanished is treated as unauthenticated', async () => {
-      const row = await sessionRow('old-token');
-      const db = makeDb([
-        ['SELECT s.*', () => row],
-        ['UPDATE sessions SET token_hash', () => ({ meta: { changes: 0 } })],
-        ['SELECT token_hash FROM sessions', () => null],
-      ]);
-      const response = await handleApiRequest(
-        req('/api/session', {
-          headers: { Cookie: '__Host-ue_session=old-token' },
-        }),
-        { DB: db }
-      );
+      const stale = await sessionRow('old-token');
+      const log = { reads: [], csrf: [] };
+      const response = await getSessionAsLoser(raceDb(stale, [], log));
       expect(response.status).toBe(401);
+      expect(log.csrf).toHaveLength(0);
+    });
+
+    test('B15: loser does not adopt a different session of the same user created in the same second', async () => {
+      const created = nowS() - 100;
+      const stale = await sessionRow('old-token', {
+        created_at: created,
+        last_authenticated_at: created,
+        expires_at: created + 86400,
+      });
+      const otherHash = await sha('other-session');
+      const winnerHash = await sha('winner-token');
+      const other = {
+        ...stale,
+        token_hash: otherHash,
+        // Same created_at/last_authenticated_at/expires_at, never rotated.
+        last_rotated_at: stale.last_rotated_at,
+      };
+      const winner = {
+        ...stale,
+        token_hash: winnerHash,
+        last_rotated_at: nowS(),
+      };
+      const log = { reads: [], csrf: [] };
+      const response = await getSessionAsLoser(
+        raceDb(stale, [other, winner], log)
+      );
+      expect(response.status).toBe(200);
+      expect(log.csrf[0][1]).toBe(winnerHash);
+      expect(log.csrf[0][1]).not.toBe(otherHash);
+    });
+
+    test('B15: only a never-rotated look-alike session exists -> not adopted (401)', async () => {
+      const stale = await sessionRow('old-token');
+      const other = { ...stale, token_hash: await sha('other-session') };
+      const log = { reads: [], csrf: [] };
+      const response = await getSessionAsLoser(raceDb(stale, [other], log));
+      expect(response.status).toBe(401);
+      expect(log.csrf).toHaveLength(0);
     });
 
     test('B3: sets the rotated cookie when the rotation UPDATE changed exactly 1 row', async () => {

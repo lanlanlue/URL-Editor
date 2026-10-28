@@ -317,11 +317,22 @@ async function getSession(request, env, { rotate = true } = {}) {
     } else {
       // Lost the race: the row now lives under the winner's token hash, so
       // the stale hash would make later UPDATE/DELETE statements match 0 rows.
-      // Re-resolve the same row (rotation changes only token_hash).
+      // Re-resolve the same row using only columns that no UPDATE in this file
+      // ever changes (user_id, created_at, last_authenticated_at, expires_at);
+      // csrf_hash is NOT stable (the winner usually re-issues it). The winner
+      // has a strictly newer last_rotated_at than the stale row, which
+      // excludes unrotated look-alike sessions; ORDER BY picks the most
+      // recently rotated row if several still match.
       const current = await env.DB.prepare(
-        'SELECT token_hash FROM sessions WHERE user_id = ? AND created_at = ? AND csrf_hash = ? LIMIT 1'
+        'SELECT token_hash FROM sessions WHERE user_id = ? AND created_at = ? AND last_authenticated_at = ? AND expires_at = ? AND last_rotated_at > ? ORDER BY last_rotated_at DESC LIMIT 1'
       )
-        .bind(session.user_id, session.created_at, session.csrf_hash)
+        .bind(
+          session.user_id,
+          session.created_at,
+          session.last_authenticated_at,
+          session.expires_at,
+          session.last_rotated_at
+        )
         .first();
       if (!current?.token_hash) return null;
       session.token_hash = current.token_hash;
