@@ -18,27 +18,112 @@ function getStorage(storage) {
   }
 }
 
+/**
+ * In-memory cache per storage object. Parsing and re-serialising the whole
+ * blob on every call made a run of N checks O(N^2), so the parsed blob is kept
+ * here, writes are coalesced into one debounced setItem, and a cheap raw-string
+ * comparison (no JSON.parse) picks up changes made by other tabs.
+ */
+const FLUSH_DELAY_MS = 300;
+const cache = new WeakMap(); // storage -> { raw, data, dirty, timer }
+const dirtyTargets = new Set();
+let lifecycleHooked = false;
+
+function isRecord(value) {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+/** Drops non-array values and non-object elements from a parsed blob. */
+function sanitize(parsed) {
+  if (!isRecord(parsed)) return {};
+  const clean = {};
+  Object.keys(parsed).forEach((id) => {
+    if (Array.isArray(parsed[id])) clean[id] = parsed[id].filter(isRecord);
+  });
+  return clean;
+}
+
+function flushTarget(target) {
+  const entry = cache.get(target);
+  if (!entry || !entry.dirty) return;
+  if (entry.timer) clearTimeout(entry.timer);
+  entry.timer = null;
+  entry.dirty = false;
+  dirtyTargets.delete(target);
+  try {
+    const raw = JSON.stringify(entry.data);
+    target.setItem(STORAGE_KEY, raw);
+    entry.raw = raw;
+    entry.warned = false;
+  } catch (err) {
+    // Quota or privacy mode: history stays in memory for this session.
+    if (!entry.warned) {
+      entry.warned = true;
+      console.warn('[checkHistory] could not persist history:', err);
+    }
+  }
+}
+
+/** Writes any pending history immediately (also runs on page hide). */
+export function flushHistory() {
+  [...dirtyTargets].forEach(flushTarget);
+}
+
+function hookLifecycle() {
+  if (lifecycleHooked || typeof window === 'undefined') return;
+  lifecycleHooked = true;
+  window.addEventListener('pagehide', flushHistory);
+  window.addEventListener('beforeunload', flushHistory);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') flushHistory();
+  });
+}
+
 function load(storage) {
   const target = getStorage(storage);
   if (!target) return {};
+  const entry = cache.get(target);
+  if (entry?.dirty) return entry.data;
+  let raw = null;
   try {
-    const parsed = JSON.parse(target.getItem(STORAGE_KEY) || '{}');
-    return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
-      ? parsed
-      : {};
+    raw = target.getItem(STORAGE_KEY);
   } catch {
-    return {};
+    return entry ? entry.data : {};
   }
+  if (entry && entry.raw === raw) return entry.data;
+  let data = {};
+  try {
+    data = sanitize(JSON.parse(raw || '{}'));
+  } catch {
+    data = {};
+  }
+  cache.set(target, { raw, data, dirty: false, timer: null });
+  return data;
 }
 
 function save(data, storage) {
   const target = getStorage(storage);
   if (!target) return;
-  try {
-    target.setItem(STORAGE_KEY, JSON.stringify(data));
-  } catch {
-    // Quota or privacy mode: history is best-effort.
+  let entry = cache.get(target);
+  if (!entry) {
+    entry = { raw: null, data, dirty: false, timer: null };
+    cache.set(target, entry);
   }
+  entry.data = data;
+  entry.dirty = true;
+  dirtyTargets.add(target);
+  hookLifecycle();
+  if (!entry.timer) {
+    entry.timer = setTimeout(() => flushTarget(target), FLUSH_DELAY_MS);
+  }
+}
+
+/** Forgets the in-memory copy (tests, explicit reset). Pending writes flush first. */
+export function resetHistoryCache(storage) {
+  const target = getStorage(storage);
+  if (!target) return;
+  flushTarget(target);
+  cache.delete(target);
 }
 
 /** @returns {Array<{t: number, ok: boolean, code?: number, ms?: number, err?: string, mode?: string}>} */

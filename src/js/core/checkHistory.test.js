@@ -1,6 +1,7 @@
 import {
   HISTORY_LIMIT,
   buildResultsCsv,
+  flushHistory,
   getHistory,
   pruneHistory,
   recordCheck,
@@ -53,6 +54,7 @@ describe('checkHistory', () => {
     expect(getHistory('a', store)).toEqual([]);
     expect(() => recordCheck('a', { status: 'online' }, store)).not.toThrow();
 
+    jest.spyOn(console, 'warn').mockImplementation(() => {});
     const throwing = {
       getItem: () => {
         throw new Error('denied');
@@ -73,6 +75,74 @@ describe('checkHistory', () => {
     pruneHistory(['keep'], store);
     expect(getHistory('gone', store)).toEqual([]);
     expect(getHistory('keep', store)).toHaveLength(1);
+  });
+});
+
+describe('checkHistory caching and batching', () => {
+  test('N recordCheck + getHistory calls parse once and write once', () => {
+    const store = memoryStorage();
+    const setSpy = jest.spyOn(store, 'setItem');
+    const parseSpy = jest.spyOn(JSON, 'parse');
+    for (let i = 0; i < 100; i++) {
+      recordCheck(`id${i % 20}`, { status: 'online' }, store, i);
+      getHistory(`id${i % 20}`, store);
+    }
+    expect(parseSpy.mock.calls.length).toBeLessThanOrEqual(2);
+    expect(setSpy).not.toHaveBeenCalled(); // debounced
+    flushHistory();
+    expect(setSpy).toHaveBeenCalledTimes(1);
+    parseSpy.mockRestore();
+    const persisted = JSON.parse(store.getItem('urlEditorCheckHistory'));
+    expect(Object.keys(persisted)).toHaveLength(20);
+  });
+
+  test('debounced write lands after the delay', () => {
+    jest.useFakeTimers();
+    try {
+      const store = memoryStorage();
+      recordCheck('t', { status: 'online' }, store, 1);
+      expect(store.getItem('urlEditorCheckHistory')).toBeNull();
+      jest.advanceTimersByTime(1000);
+      expect(store.getItem('urlEditorCheckHistory')).toContain('"t"');
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  test('picks up changes written by another tab', () => {
+    const store = memoryStorage();
+    recordCheck('a', { status: 'online' }, store, 1);
+    flushHistory();
+    store.setItem(
+      'urlEditorCheckHistory',
+      JSON.stringify({ a: [{ t: 9, ok: false }] })
+    );
+    expect(getHistory('a', store)).toEqual([{ t: 9, ok: false }]);
+  });
+
+  test('drops null / non-object elements from corrupt data', () => {
+    const store = memoryStorage();
+    store.setItem(
+      'urlEditorCheckHistory',
+      JSON.stringify({ a: [null, 5, 'x', [1], { t: 1, ok: true }], b: 'bad' })
+    );
+    expect(getHistory('a', store)).toEqual([{ t: 1, ok: true }]);
+    expect(getHistory('b', store)).toEqual([]);
+  });
+
+  test('quota failure does not crash, warns once and keeps memory history', () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    const store = memoryStorage();
+    store.setItem = () => {
+      throw new Error('QuotaExceededError');
+    };
+    recordCheck('q', { status: 'online' }, store, 1);
+    expect(() => flushHistory()).not.toThrow();
+    recordCheck('q', { status: 'offline' }, store, 2);
+    flushHistory();
+    expect(getHistory('q', store)).toHaveLength(2);
+    expect(warn).toHaveBeenCalledTimes(1);
+    warn.mockRestore();
   });
 });
 
