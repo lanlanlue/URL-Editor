@@ -245,7 +245,16 @@ export function recordCheck(id, result, storage, now = Date.now()) {
   };
 }
 
-/** Drops history for entries that no longer exist (stored and pending). */
+/**
+ * Drops history for entries that no longer exist (stored and pending).
+ *
+ * Known limitation (deliberate): this only affects THIS tab's pending records
+ * and the stored blob. If another tab still has pending records for a pruned
+ * id, it writes them back at its next flush, leaving an orphan id until the
+ * next prune. That is harmless history data; a wall-clock "prune marker" was
+ * tried and rejected because it can silently drop valid records (same-ms
+ * records, reused ids after import, clock skew).
+ */
 export function pruneHistory(validIds, storage) {
   const target = getStorage(storage);
   if (!target) return;

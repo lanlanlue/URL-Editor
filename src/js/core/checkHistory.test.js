@@ -395,6 +395,23 @@ describe('checkHistory with two tabs on one storage', () => {
     expect(persisted.keepB).toHaveLength(1);
   });
 
+  test('known limitation: another tab pending records of a pruned id are written back', () => {
+    const store = memoryStorage();
+    const A = loadInstance();
+    const B = loadInstance();
+    A.recordCheck('gone', { status: 'online' }, store, 1);
+    A.recordCheck('keep', { status: 'online' }, store, 2);
+    A.flushHistory();
+    B.recordCheck('gone', { status: 'offline' }, store, 3); // pending in B
+    A.pruneHistory(['keep'], store);
+    expect(idsOf(store)).toEqual(['keep']);
+    B.flushHistory();
+    // Orphan id until the next prune; never loses valid records.
+    expect(idsOf(store).sort()).toEqual(['gone', 'keep']);
+    A.pruneHistory(['keep'], store);
+    expect(idsOf(store)).toEqual(['keep']);
+  });
+
   test('prune drops pending records of pruned ids', () => {
     const store = memoryStorage();
     const A = loadInstance();
