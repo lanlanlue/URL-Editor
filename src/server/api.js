@@ -314,6 +314,17 @@ async function getSession(request, env, { rotate = true } = {}) {
         rotatedToken,
         Math.max(0, Number(session.expires_at) - nowSeconds())
       );
+    } else {
+      // Lost the race: the row now lives under the winner's token hash, so
+      // the stale hash would make later UPDATE/DELETE statements match 0 rows.
+      // Re-resolve the same row (rotation changes only token_hash).
+      const current = await env.DB.prepare(
+        'SELECT token_hash FROM sessions WHERE user_id = ? AND created_at = ? AND csrf_hash = ? LIMIT 1'
+      )
+        .bind(session.user_id, session.created_at, session.csrf_hash)
+        .first();
+      if (!current?.token_hash) return null;
+      session.token_hash = current.token_hash;
     }
   }
   return session;
