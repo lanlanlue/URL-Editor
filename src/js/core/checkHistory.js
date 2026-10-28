@@ -49,7 +49,18 @@ function sanitize(parsed) {
   return clean;
 }
 
+let recordSeq = 0;
+const INSTANCE_TAG = Math.random().toString(36).slice(2, 8);
+
+/** Unique per recorded check, so identical-looking results are not merged. */
+function newRecordId() {
+  recordSeq += 1;
+  return `${INSTANCE_TAG}${recordSeq.toString(36)}`;
+}
+
+// Stable de-duplication key; legacy records without `r` fall back to content.
 function recordKey(record) {
+  if (record.r) return record.r;
   return [
     record.t,
     record.ok,
@@ -197,6 +208,7 @@ export function recordCheck(id, result, storage, now = Date.now()) {
   const previous = records[records.length - 1] || null;
   const record = {
     t: now,
+    r: newRecordId(),
     ok: result.status === 'online',
     ...(result.code != null ? { code: result.code } : {}),
     ...(typeof result.timeMs === 'number' ? { ms: result.timeMs } : {}),

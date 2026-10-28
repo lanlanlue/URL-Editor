@@ -344,3 +344,18 @@ describe('checkHistory with two tabs on one storage', () => {
     parseSpy.mockRestore();
   });
 });
+
+describe('checkHistory identical results', () => {
+  test('identical results in the same millisecond are all kept', () => {
+    const store = memoryStorage();
+    for (let i = 0; i < 3; i += 1) {
+      recordCheck('same', { status: 'online', code: 200 }, store, 5);
+    }
+    expect(getHistory('same', store)).toHaveLength(3);
+    flushHistory();
+    expect(getHistory('same', store)).toHaveLength(3);
+    expect(
+      JSON.parse(store.getItem('urlEditorCheckHistory')).same
+    ).toHaveLength(3);
+  });
+});
