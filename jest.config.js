@@ -11,6 +11,8 @@ module.exports = {
     ],
   },
   // 測試檔案的匹配模式
+  // 以 <rootDir> 為錨點，只忽略主工作區底下的 .claude/ 副本；worktree 內執行時 rootDir 本身位於 .claude/ 之下，仍可正常收集
+  testPathIgnorePatterns: ['<rootDir>/.claude/'],
   testMatch: ['**/src/**/*.test.js'],
   // 在測試環境設定前執行的檔案，可用於 polyfill
   setupFiles: ['./jest.setup.js'],
@@ -19,8 +21,10 @@ module.exports = {
   // 指定從哪些檔案收集覆蓋率資訊
   collectCoverageFrom: [
     'src/js/**/*.js',
+    'src/server/**/*.js',
     // 排除不需計算覆蓋率的檔案
     '!src/js/**/*.test.js',
+    '!src/server/**/*.test.js',
     '!src/js/i18n.js',
   ],
 };
