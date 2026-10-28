@@ -6,3 +6,7 @@
 
 - Round 1 / Worker A: B3,B4,B8,B9,B11 valid; 6 commits (deb5aea..ef0705e). Critic/Challenger: no FAIL, 3 non-blocking concerns (B15-B17). Fast-forward merged into main. Verified in main: 24 suites / 238 tests pass (excluding .claude/ worktrees), eslint clean.
 - Worker B was paused at user request, then resumed. Still running.
+
+- Round 1 / Worker B: B1,B2,B5,B6,B7,B10 valid. Review found issues; reworked three times (B6b follow-up, B6c/B1b, B1c). Final commits up to ac0a60b, merged as fd33099 (no conflicts).
+- Verified on integrated main (excluding .claude/ worktrees): 27 suites / 275 tests pass, eslint clean. Baseline was 23 / 184.
+- Open: B12 (design), B13/B14 (round 2), B15-B22. Not started.

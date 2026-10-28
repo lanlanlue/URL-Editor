@@ -7,3 +7,5 @@
 5. `npm run build` is not run in the main checkout because it rewrites tracked files; build baseline to be taken in a worktree.
 6. Worker A integrated by fast-forward (main was still at ab46b3f), so no merge conflicts and full commit traceability.
 7. Running bare `npx jest` in main also collects .claude/worktrees copies; use --testPathIgnorePatterns '/.claude/' for authoritative main results (B18).
+8. B1 went through three reworks; the third used an explicit design (recovery only with confirmedRecovery:true, banner derived from storage state) after two ad-hoc strategies each exposed a new hole.
+9. B19 (cloudSyncModal placeholder migration) is outside Worker B's ownership and left for a human decision because the guest record is already preserved.
