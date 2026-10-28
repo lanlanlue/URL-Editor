@@ -71,9 +71,18 @@ function recordKey(record) {
   ].join('|');
 }
 
-/** Appends `extra` after `base`, skipping duplicates, keeping the newest. */
+function recordTime(record) {
+  return Number.isFinite(record.t) ? record.t : -Infinity;
+}
+
+/**
+ * Merges `extra` into `base`, skipping duplicates, ordered by record time `t`
+ * (stable: ties keep append order, so base precedes extra), then keeps the
+ * newest HISTORY_LIMIT by time. Records without a numeric `t` (legacy or
+ * corrupt) sort oldest. Ordering by time, not by flush order, keeps the cap
+ * and "previous" correct when several tabs flush out of order.
+ */
 function mergeRecords(base = [], extra = []) {
-  if (!extra.length) return base.slice(-HISTORY_LIMIT);
   const seen = new Set(base.map(recordKey));
   const merged = [...base];
   extra.forEach((record) => {
@@ -82,6 +91,13 @@ function mergeRecords(base = [], extra = []) {
       seen.add(key);
       merged.push(record);
     }
+  });
+  // Array.prototype.sort is stable (ES2019).
+  merged.sort((a, b) => {
+    const ta = recordTime(a);
+    const tb = recordTime(b);
+    if (ta === tb) return 0;
+    return ta < tb ? -1 : 1;
   });
   return merged.slice(-HISTORY_LIMIT);
 }
@@ -218,10 +234,7 @@ export function recordCheck(id, result, storage, now = Date.now()) {
   const target = getStorage(storage);
   if (target) {
     const entry = getEntry(target);
-    entry.pending.set(
-      id,
-      [...(entry.pending.get(id) || []), record].slice(-HISTORY_LIMIT)
-    );
+    entry.pending.set(id, mergeRecords(entry.pending.get(id) || [], [record]));
     scheduleFlush(target, entry);
   }
   return {

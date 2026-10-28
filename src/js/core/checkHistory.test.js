@@ -277,7 +277,7 @@ describe('checkHistory with two tabs on one storage', () => {
     expect(B.getHistory('x', store).map((r) => r.t)).toEqual([1, 2]);
     A.recordCheck('x', { status: 'online' }, store, 3);
     A.flushHistory();
-    expect(B.getHistory('x', store).map((r) => r.t)).toEqual([1, 3, 2]);
+    expect(B.getHistory('x', store).map((r) => r.t)).toEqual([1, 2, 3]);
   });
 
   test('a repeated flush never duplicates records and the cap holds', () => {
@@ -295,6 +295,83 @@ describe('checkHistory with two tabs on one storage', () => {
     const persisted = JSON.parse(store.getItem('urlEditorCheckHistory')).x;
     expect(persisted).toHaveLength(A.HISTORY_LIMIT);
     expect(persisted.filter((r) => r.t === 1000)).toHaveLength(1);
+  });
+
+  test('records are ordered by time, not by flush order', () => {
+    const store = memoryStorage();
+    const A = loadInstance();
+    const B = loadInstance();
+    A.recordCheck('x', { status: 'online' }, store, 10);
+    A.recordCheck('x', { status: 'online' }, store, 30);
+    B.recordCheck('x', { status: 'offline' }, store, 20);
+    A.flushHistory();
+    B.flushHistory(); // flushed last but older than A's newest
+    const persisted = JSON.parse(store.getItem('urlEditorCheckHistory')).x;
+    expect(persisted.map((r) => r.t)).toEqual([10, 20, 30]);
+    expect(A.getHistory('x', store).map((r) => r.t)).toEqual([10, 20, 30]);
+  });
+
+  test('the cap keeps the newest by time even when flushed out of order', () => {
+    const store = memoryStorage();
+    const A = loadInstance();
+    const B = loadInstance();
+    const limit = A.HISTORY_LIMIT;
+    for (let i = 0; i < limit; i += 1) {
+      A.recordCheck('x', { status: 'online' }, store, 100 + i);
+    }
+    A.flushHistory(); // stored: full
+    B.recordCheck('x', { status: 'offline' }, store, 50); // older than all
+    B.recordCheck('x', { status: 'offline' }, store, 150); // newer than all
+    B.flushHistory();
+    const ts = JSON.parse(store.getItem('urlEditorCheckHistory')).x.map(
+      (r) => r.t
+    );
+    expect(ts).toHaveLength(limit);
+    expect(ts).not.toContain(50); // the old-by-time record loses
+    expect(ts[0]).toBe(101); // 100 is dropped only because 150 is newer
+    expect(ts[ts.length - 1]).toBe(150);
+  });
+
+  test('previous is the newest by time, not the last appended', () => {
+    const store = memoryStorage();
+    const A = loadInstance();
+    const B = loadInstance();
+    A.recordCheck('x', { status: 'online' }, store, 100);
+    A.flushHistory();
+    B.recordCheck('x', { status: 'offline' }, store, 50);
+    B.flushHistory(); // appended after, but older
+    const C = loadInstance();
+    const out = C.recordCheck('x', { status: 'offline' }, store, 200);
+    expect(out.previous.t).toBe(100);
+    expect(out.regression).toBe(true);
+  });
+
+  test('equal timestamps keep append order and are not merged', () => {
+    const store = memoryStorage();
+    const A = loadInstance();
+    const B = loadInstance();
+    A.recordCheck('x', { status: 'online', timeMs: 1 }, store, 5);
+    A.flushHistory();
+    B.recordCheck('x', { status: 'online', timeMs: 2 }, store, 5);
+    B.recordCheck('x', { status: 'online', timeMs: 3 }, store, 5);
+    B.flushHistory();
+    const persisted = JSON.parse(store.getItem('urlEditorCheckHistory')).x;
+    expect(persisted.map((r) => r.ms)).toEqual([1, 2, 3]);
+  });
+
+  test('legacy records without r or t are kept and sort oldest', () => {
+    const store = memoryStorage();
+    store.setItem(
+      'urlEditorCheckHistory',
+      JSON.stringify({ x: [{ t: 7, ok: true }, { ok: false }, null] })
+    );
+    const A = loadInstance();
+    A.recordCheck('x', { status: 'online' }, store, 3);
+    A.flushHistory();
+    const persisted = JSON.parse(store.getItem('urlEditorCheckHistory')).x;
+    expect(persisted).toHaveLength(3);
+    expect(persisted[0]).toEqual({ ok: false });
+    expect(persisted[persisted.length - 1].t).toBe(7);
   });
 
   test('prune neither resurrects nor loses the other tab records', () => {
