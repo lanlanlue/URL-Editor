@@ -1,15 +1,37 @@
 import { BUILD_MODE } from './buildMode.js';
 
 const PROBE_TIMEOUT_MS = 12000;
+const FAILURE_THRESHOLD = 3;
+const FAILURE_BACKOFF_MS = 30 * 1000;
 let disabledUntil = 0;
+let consecutiveFailures = 0;
 
 /** Test hook: forget earlier failures. */
 export function resetProbeClient() {
   disabledUntil = 0;
+  consecutiveFailures = 0;
 }
 
 function disableFor(ms) {
   disabledUntil = Date.now() + ms;
+}
+
+function recordSuccess() {
+  consecutiveFailures = 0;
+}
+
+/**
+ * A timeout, network error or 5xx for one URL must not disable probing for
+ * everyone, but a backend that keeps failing would otherwise cost one slow
+ * request per URL. After a few failures in a row, back off briefly.
+ */
+function recordFailure() {
+  if (Date.now() < disabledUntil) return; // late result of an in-flight call
+  consecutiveFailures += 1;
+  if (consecutiveFailures >= FAILURE_THRESHOLD) {
+    consecutiveFailures = 0;
+    disableFor(FAILURE_BACKOFF_MS);
+  }
 }
 
 /**
@@ -38,7 +60,10 @@ export async function probeViaServer(url, keyword) {
       body: JSON.stringify(keyword ? { url, keyword } : { url }),
       signal: controller.signal,
     });
-    if (response.status === 422) return null; // blocked/private: use browser check
+    if (response.status === 422) {
+      recordSuccess(); // backend answered; this address is just not probeable
+      return null; // blocked/private: use browser check
+    }
     if (response.status === 429) {
       disableFor(10 * 1000);
       return null;
@@ -47,12 +72,17 @@ export async function probeViaServer(url, keyword) {
       disableFor(60 * 1000); // signed out / no backend: every URL would fail
       return null;
     }
-    if (!response.ok) return null; // 5xx etc.: this request only
+    if (!response.ok) {
+      recordFailure(); // 5xx etc.
+      return null;
+    }
     const data = await response.json();
+    recordSuccess();
     return toHealthResult(data);
   } catch {
-    // A timeout or network error for one URL says nothing about the backend,
-    // so fall back for this URL only instead of disabling probing globally.
+    // One timeout or network error falls back for this URL only; repeated
+    // ones trip the short backoff in recordFailure().
+    recordFailure();
     return null;
   } finally {
     clearTimeout(timer);
