@@ -49,6 +49,8 @@ import {
 } from './ui/modals/redirectModal.js';
 import {
   initializeSecureStorage,
+  isStorageUnreadable,
+  markStorageRecovered,
   saveSecureState,
 } from './core/secureStorage.js';
 import { createSyncMetadata, getDeviceId } from './core/syncMerge.js';
@@ -118,9 +120,6 @@ let appState = {
 let appSettings = loadSettings();
 let marketingToolkitModulesPromise = null;
 let lastPersistedEntities = new Map();
-// True when the stored encrypted record could not be decrypted. The in-memory
-// state is then an empty placeholder and must never be written over it.
-let storageUnreadable = false;
 // Transient per-entry health status (id -> 'checking' | 'online' | 'offline').
 // Kept out of appState.urls so it is never persisted, synced or stamped.
 const runtimeHealthStatus = new Map();
@@ -253,7 +252,6 @@ function migrateDataToV3() {
 function applyLoadedState(data) {
   let nextData = data || { urls: [] };
   if (Array.isArray(nextData)) nextData = { urls: nextData };
-  storageUnreadable = nextData.unreadable === true;
   appState.urls = normalizeUrlEntries(nextData.urls);
   appState.sortMode = nextData.sortMode || 'created';
   appState.viewMode = nextData.viewMode || 'cards';
@@ -342,11 +340,42 @@ function markDeletedEntries(ids = []) {
   appState.tombstones = [...known.values()];
 }
 
+// Persistent, non-blocking notice shown while the stored record is unreadable
+// and saves are being skipped.
+function showUnreadableNotice() {
+  if (document.querySelector('[data-storage-unreadable-notice]')) return;
+  const notice = document.createElement('div');
+  notice.setAttribute('data-storage-unreadable-notice', '');
+  notice.setAttribute('role', 'alert');
+  notice.textContent = i18next.t('storage.unreadableNotice', {
+    defaultValue:
+      'Changes are not being saved because your stored data could not be decrypted. Restore from a backup or cloud sync to continue.',
+  });
+  Object.assign(notice.style, {
+    position: 'fixed',
+    left: '0',
+    right: '0',
+    bottom: '0',
+    zIndex: '10000',
+    padding: '10px 16px',
+    background: '#7f1d1d',
+    color: '#ffffff',
+    fontSize: '14px',
+    textAlign: 'center',
+  });
+  document.body.appendChild(notice);
+}
+
+function hideUnreadableNotice() {
+  document.querySelector('[data-storage-unreadable-notice]')?.remove();
+}
+
 function saveState() {
-  if (storageUnreadable) {
+  if (isStorageUnreadable()) {
     // Persisting now would overwrite the unreadable record with placeholder
-    // data (and broadcast it to sync listeners). Keep the session read-only.
+    // data (and broadcast it to sync listeners). Skip, but tell the user.
     console.warn('Skipped saving: the stored data could not be decrypted.');
+    showUnreadableNotice();
     return;
   }
   stampChangedEntities();
@@ -1050,6 +1079,12 @@ function restoreCloudData(data) {
   // The restored data already carries the stamps of the device that wrote it.
   // Treat it as persisted so saveState() does not re-stamp it as a local edit.
   refreshPersistedSnapshots();
+  if (isStorageUnreadable()) {
+    // An explicit restore is the recovery path for an unreadable record (a
+    // copy of it is kept by secureStorage), so allow this save through.
+    markStorageRecovered();
+    hideUnreadableNotice();
+  }
   saveState();
   renderUrlList();
 }
@@ -1071,7 +1106,7 @@ function getCurrentState() {
 async function bootstrap() {
   const stateLoading = loadState();
   if (stateLoading) await stateLoading;
-  if (storageUnreadable) {
+  if (isStorageUnreadable()) {
     // An empty id list would wipe every check history, and a bootstrap save
     // would replace the unreadable record. Leave both untouched and warn.
     alert(
@@ -1080,6 +1115,7 @@ async function bootstrap() {
           'Your saved data could not be decrypted. It has not been modified, and changes made in this session will not be saved. Reload to retry, or restore from a backup or cloud sync.',
       })
     );
+    showUnreadableNotice();
   } else {
     pruneHistory(appState.urls.map((entry) => entry.id));
   }
@@ -1108,7 +1144,7 @@ async function bootstrap() {
     },
   });
   // Persist a freshly encrypted record before removing any legacy plaintext.
-  if (!storageUnreadable) saveState();
+  if (!isStorageUnreadable()) saveState();
   migrateDataToV3();
   initSettingsModal({
     settings: appSettings,

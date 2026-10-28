@@ -312,7 +312,8 @@
     "deleteConfirm": "Are you sure you want to remove tag '{{tag}}' from {{count}} URLs?"
   },
   "storage": {
-    "unreadableWarning": "Your saved data could not be decrypted. It has not been modified, and changes made in this session will not be saved. Reload to retry, or restore from a backup or cloud sync."
+    "unreadableWarning": "Your saved data could not be decrypted. It has not been modified, and changes made in this session will not be saved. Reload to retry, or restore from a backup or cloud sync.",
+    "unreadableNotice": "Changes are not being saved because your stored data could not be decrypted. Restore from a backup or cloud sync to continue."
   },
   "healthCheck": {
     "btn": "📡 Health Check",

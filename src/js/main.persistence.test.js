@@ -27,9 +27,17 @@ async function loadMain({ initialState, checkUrlHealth } = {}) {
   };
 
   jest.doMock('./core/darkMode.js', () => ({ initDarkMode: jest.fn() }));
+  // Mirrors secureStorage: the unreadable state is tracked there (per scope)
+  // and cleared by an explicit recovery.
+  let unreadable = Boolean(initialState?.unreadable);
+  mocks.markStorageRecovered = jest.fn(() => {
+    unreadable = false;
+  });
   jest.doMock('./core/secureStorage.js', () => ({
     initializeSecureStorage: jest.fn(() => Promise.resolve(initialState)),
     saveSecureState: mocks.saveSecureState,
+    isStorageUnreadable: () => unreadable,
+    markStorageRecovered: mocks.markStorageRecovered,
   }));
   jest.doMock('./core/runtimeConfig.js', () => ({
     ...jest.requireActual('./core/runtimeConfig.js'),
@@ -95,14 +103,33 @@ describe('B1: unreadable encrypted record', () => {
     expect(alertSpy).toHaveBeenCalledTimes(1);
   });
 
-  test('later edits in the session do not overwrite the unreadable record', async () => {
-    const { saveSecureState, cloudOptions } = await loadMain({
+  test('ordinary edits while unreadable are skipped but visibly reported', async () => {
+    const { saveSecureState } = await loadMain({
       initialState: unreadableState,
     });
+    const urlInput = document.getElementById('url-main-input');
+    fireEvent.change(urlInput, { target: { value: 'https://new.example/' } });
+    fireEvent.click(document.getElementById('parse-btn'));
+    fireEvent.click(document.getElementById('save-url-btn'));
+    expect(saveSecureState).not.toHaveBeenCalled();
+    const notice = document.querySelector('[data-storage-unreadable-notice]');
+    expect(notice).toBeTruthy();
+    expect(notice.getAttribute('role')).toBe('alert');
+    expect(notice.textContent).toMatch(/not (being )?saved/i);
+  });
+
+  test('an explicit cloud restore recovers: clears the flag, persists, hides the notice', async () => {
+    const { saveSecureState, cloudOptions, markStorageRecovered } =
+      await loadMain({ initialState: unreadableState });
     cloudOptions.onRestore({
       urls: [{ id: 'r1', url: 'https://remote.example/' }],
     });
-    expect(saveSecureState).not.toHaveBeenCalled();
+    expect(markStorageRecovered).toHaveBeenCalled();
+    expect(saveSecureState).toHaveBeenCalled();
+    expect(lastSavedState(saveSecureState).urls[0].id).toBe('r1');
+    expect(
+      document.querySelector('[data-storage-unreadable-notice]')
+    ).toBeNull();
   });
 
   test('a readable store still persists on bootstrap and prunes history', async () => {

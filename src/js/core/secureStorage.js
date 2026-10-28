@@ -17,6 +17,33 @@ let database = null;
 let backend = 'legacy';
 let legacyPending = false;
 let context = { scope: 'guest', keyId: 'guest', key: null };
+// Scope whose stored record could not be decrypted. Saves are refused for that
+// scope only, so an account scope with readable data is unaffected.
+let unreadableScope = null;
+
+/** True while the active scope's stored record is unreadable and unrecovered. */
+export function isStorageUnreadable() {
+  return unreadableScope !== null && context.scope === unreadableScope;
+}
+
+/**
+ * Explicit recovery (the user restored data from a backup or cloud sync): the
+ * next save may replace the unreadable record. A copy of it was already kept
+ * under `unreadable-backup:<record id>`.
+ */
+export function markStorageRecovered() {
+  unreadableScope = null;
+}
+
+async function backupUnreadableRecord(record) {
+  try {
+    const backupId = `unreadable-backup:${record.id}`;
+    if (await readRecord(backupId)) return; // keep the first copy
+    await writeRecord({ ...record, id: backupId, backedUpAt: Date.now() });
+  } catch {
+    // Best effort: the original record is still untouched.
+  }
+}
 
 function recordId(scope = context.scope) {
   return `local:${scope}`;
@@ -192,6 +219,8 @@ export function initializeSecureStorage() {
         // Do not overwrite an unreadable encrypted record with legacy data.
         // `unreadable` tells the caller this empty state is a placeholder and
         // must not be persisted over the stored record.
+        unreadableScope = context.scope;
+        await backupUnreadableRecord(record);
         return {
           schemaVersion: 1,
           urls: [],
@@ -210,6 +239,7 @@ export function initializeSecureStorage() {
 }
 
 export async function saveSecureState(state) {
+  if (isStorageUnreadable()) return; // never replace an unreadable record
   const safeState = clone(state);
   if (backend !== 'indexeddb' || !database || !context.key) {
     try {
@@ -334,6 +364,8 @@ export async function getCurrentEncryptedRecord() {
 export default {
   initializeSecureStorage,
   saveSecureState,
+  isStorageUnreadable,
+  markStorageRecovered,
   useAccountEncryptionKey,
   getAccountEncryptionKey,
   loadAccountState,
