@@ -14,6 +14,9 @@ describe('validateProbeTarget', () => {
     'https://sub.example.co.uk',
     'https://93.184.216.34/',
     'https://[2606:4700::1111]/',
+    'https://[2001:4860:4860::8888]/',
+    'https://[2001:1::1]/',
+    'https://[2003::1]/',
   ])('allows %s', (url) => {
     expect(validateProbeTarget(url).ok).toBe(true);
   });
@@ -45,6 +48,12 @@ describe('validateProbeTarget', () => {
     ['http://[fd00::1]/', 'ipv6 ula'],
     ['http://[fe80::1]/', 'ipv6 link-local'],
     ['http://[::ffff:127.0.0.1]/', 'ipv4-mapped'],
+    ['http://[2002:7f00:1::1]/', '6to4 embedding 127.0.0.1'],
+    ['http://[2002::]/', '6to4 range'],
+    ['http://[2001::1]/', 'teredo'],
+    ['http://[2001:0:4136:e378:8000:63bf:3fff:fdd2]/', 'teredo full'],
+    ['http://[2001:db8::1]/', 'documentation'],
+    ['http://[2001:0db8:85a3::8a2e:370:7334]/', 'documentation long'],
     ['', 'empty'],
     ['not a url', 'garbage'],
   ])('blocks %s (%s)', (url, label) => {
@@ -172,5 +181,31 @@ describe('runProbe', () => {
       jest.fn().mockResolvedValue(res(503))
     );
     expect(out).toMatchObject({ reachable: true, code: 503 });
+  });
+
+  test('B8: hostile 256KB body with repeated "<title" finishes quickly', async () => {
+    const body = '<title'.repeat(Math.floor(PROBE_LIMITS.maxBodyBytes / 6));
+    const fetchImpl = jest.fn().mockResolvedValue(res(200, { body }));
+    const started = Date.now();
+    const out = await runProbe('https://e.com/', {}, fetchImpl);
+    expect(Date.now() - started).toBeLessThan(500);
+    expect(out).toMatchObject({ reachable: true, title: '' });
+  });
+
+  test.each([
+    ['<TITLE lang="en">Upper</TITLE>', 'Upper'],
+    ['<title>a<b</title>', 'a'],
+    ['<title>' + 'x'.repeat(500) + '</title>', 'x'.repeat(300)],
+    ['<title', ''],
+    ['<title>', ''],
+    ['no title here', ''],
+    ['<title  >  spaced \n out </title>', 'spaced out'],
+  ])('title extraction keeps behaviour for %j', async (body, expected) => {
+    const out = await runProbe(
+      'https://e.com/',
+      {},
+      jest.fn().mockResolvedValue(res(200, { body }))
+    );
+    expect(out.title).toBe(expected);
   });
 });

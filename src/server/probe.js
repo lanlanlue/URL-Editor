@@ -52,6 +52,18 @@ function isPrivateIpv4([a, b, c]) {
   );
 }
 
+// Inside 2000::/3 but still not routable public hosts: 6to4 (2002::/16, can
+// embed any IPv4 incl. private), Teredo (2001::/32) and documentation
+// (2001:db8::/32). `bare` is the WHATWG-normalised literal (lowercase).
+function isReservedIpv6Prefix(bare) {
+  const parts = bare.split(':');
+  const first = parseInt(parts[0], 16);
+  const second = parts[1] === '' ? 0 : parseInt(parts[1], 16);
+  return (
+    first === 0x2002 || (first === 0x2001 && (second === 0 || second === 0xdb8))
+  );
+}
+
 /**
  * Validates a probe target. Only public http(s) hosts on web ports pass.
  * WHATWG URL parsing already normalises decimal/hex/octal IPv4 spellings
@@ -79,7 +91,7 @@ export function validateProbeTarget(raw) {
   if (host.startsWith('[')) {
     // IPv6 literal: allow only global unicast 2000::/3.
     const bare = host.slice(1, -1);
-    if (!/^[23]/.test(bare))
+    if (!/^[23]/.test(bare) || isReservedIpv6Prefix(bare))
       return { ok: false, reason: 'Private or reserved address' };
     return { ok: true, url };
   }
@@ -120,9 +132,17 @@ async function readCapped(response, maxBytes) {
   return text;
 }
 
+// Linear-time: `/<title[^>]*>/` backtracks quadratically on a body made of
+// repeated "<title" with no ">". The first ">" after the first "<title" always
+// ends the tag, and if there is none no later "<title" can match either.
 function extractTitle(html) {
-  const match = /<title[^>]*>([^<]{0,300})/i.exec(html);
-  return match ? match[1].replace(/\s+/g, ' ').trim() : '';
+  const start = /<title/i.exec(html);
+  if (!start) return '';
+  const tagEnd = html.indexOf('>', start.index);
+  if (tagEnd === -1) return '';
+  const raw = html.slice(tagEnd + 1, tagEnd + 1 + 300);
+  const lt = raw.indexOf('<');
+  return (lt === -1 ? raw : raw.slice(0, lt)).replace(/\s+/g, ' ').trim();
 }
 
 /**
