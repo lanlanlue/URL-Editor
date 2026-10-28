@@ -86,6 +86,16 @@ export function initLiveTestModal() {
 
   dialog.addEventListener('cancel', stopAndClear);
 
+  // Any other close path (programmatic dialog.close(), a skipped `cancel`)
+  // still ends with an async `close` event. It may be delivered AFTER the
+  // dialog was reopened for a new run (openLiveTestModal already cancelled the
+  // old run and rebuilt the grid), so only act while the dialog is really
+  // closed: a still-open dialog means a newer run owns the grid.
+  dialog.addEventListener('close', () => {
+    if (dialog.open) return;
+    stopAndClear();
+  });
+
   // Filter Buttons
   const filterBtns = dialog.querySelectorAll(
     '.live-test-filters .live-ctrl-btn'

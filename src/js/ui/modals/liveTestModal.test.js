@@ -371,6 +371,53 @@ describe('liveTestModal rework (G2)', () => {
     expect(cardCount()).toBe(2);
   });
 
+  // jsdom has no dialog.close(); emulate the browser: drop `open`, then fire
+  // `close` asynchronously (a queued task), without any `cancel` event.
+  function installAsyncClose(dialog) {
+    dialog.close = () => {
+      dialog.removeAttribute('open');
+      setTimeout(() => dialog.dispatchEvent(new Event('close')), 0);
+    };
+  }
+  const tick = () => new Promise((resolve) => setTimeout(resolve, 5));
+
+  test('programmatic dialog.close() cancels the run and clears the grid', async () => {
+    const calls = deferredChecks();
+    const dialog = document.getElementById('live-test-modal');
+    installAsyncClose(dialog);
+    const urls = makeUrls(2, 'pc');
+    openLiveTestModal({ urls });
+    await flushAsync();
+    expect(cardCount()).toBe(2);
+    dialog.close();
+    await tick(); // the close event has fired
+    expect(cardCount()).toBe(0);
+    calls.forEach((c) => c.resolve({ status: 'online', code: 200 }));
+    await flushAsync();
+    flushHistory();
+    expect(cardCount()).toBe(0);
+    urls.forEach((u) => expect(getHistory(u.id)).toEqual([]));
+  });
+
+  test('programmatic close then immediate reopen keeps the new run', async () => {
+    const calls = deferredChecks();
+    const dialog = document.getElementById('live-test-modal');
+    installAsyncClose(dialog);
+    openLiveTestModal({ urls: makeUrls(1, 'ro') });
+    dialog.close();
+    openLiveTestModal({ urls: makeUrls(2, 'rn') });
+    await tick(); // the async close event of the FIRST close lands now
+    expect(cardCount()).toBe(2);
+    calls
+      .filter((c) => c.url.includes('rn'))
+      .forEach((c) => c.resolve({ status: 'online', code: 200 }));
+    await flushAsync();
+    flushHistory();
+    expect(cardCount()).toBe(2);
+    expect(getHistory('rn0')).toHaveLength(1);
+    expect(getHistory('rn1')).toHaveLength(1);
+  });
+
   test('superseded runs record no history; the current run records once', async () => {
     const calls = deferredChecks();
     const urls = makeUrls(2);
