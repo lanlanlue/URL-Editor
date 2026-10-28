@@ -459,3 +459,67 @@ describe('B27 automatic retries stop after repeated 409 conflicts', () => {
     }
   });
 });
+
+describe('B27 conflict counter resets', () => {
+  async function toggleDevice() {
+    const server = makeServer();
+    server.write(data([url('r1', 5)]));
+    const a = await makeDevice(server, {
+      local: data([url('a1', 10)]),
+      storedKey: true,
+    });
+    a.activate();
+    const { CloudApiError } = a.api;
+    const mode = { ok: false };
+    a.api.putSyncDocument.mockImplementation(async (envelope) => {
+      if (!mode.ok) throw new CloudApiError('conflict', { status: 409 });
+      return { document: envelope, etag: '"rev-9"', revision: 9 };
+    });
+    return { a, mode };
+  }
+  const edit = (a) =>
+    window.dispatchEvent(
+      new CustomEvent('url-editor-data-change', { detail: a.state })
+    );
+
+  test('3 conflicts, a manual success, then conflicts again: the cap restarts at 5', async () => {
+    const { a, mode } = await toggleDevice();
+    jest.useFakeTimers();
+    try {
+      edit(a);
+      // Attempts at 2s, 12s and 32s fail (6 PUTs); the next retry is pending.
+      await jest.advanceTimersByTimeAsync(32_500);
+      expect(a.api.putSyncDocument).toHaveBeenCalledTimes(6);
+
+      mode.ok = true;
+      a.activate();
+      document.getElementById('cloud-sync-upload-btn').click();
+      await jest.advanceTimersByTimeAsync(50);
+      expect(a.api.putSyncDocument).toHaveBeenCalledTimes(7); // manual success
+      mode.ok = false;
+
+      a.api.putSyncDocument.mockClear();
+      await jest.advanceTimersByTimeAsync(60 * 60 * 1000);
+      // The pending retry starts a fresh count: 5 attempts x 2 PUTs, not 2 x 2.
+      expect(a.api.putSyncDocument).toHaveBeenCalledTimes(10);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  test('3 conflicts, a new edit, then conflicts again: the cap restarts at 5', async () => {
+    const { a } = await toggleDevice();
+    jest.useFakeTimers();
+    try {
+      edit(a);
+      await jest.advanceTimersByTimeAsync(32_500);
+      expect(a.api.putSyncDocument).toHaveBeenCalledTimes(6);
+
+      edit(a); // a new local edit re-arms automatic sync
+      await jest.advanceTimersByTimeAsync(60 * 60 * 1000);
+      expect(a.api.putSyncDocument).toHaveBeenCalledTimes(6 + 10);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+});
