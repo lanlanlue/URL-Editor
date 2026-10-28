@@ -374,6 +374,84 @@ describe('checkHistory with two tabs on one storage', () => {
     expect(persisted[persisted.length - 1].t).toBe(7);
   });
 
+  describe('untrusted record times (bad clocks)', () => {
+    const key = 'urlEditorCheckHistory';
+    const SKEW = 5 * 60 * 1000;
+
+    test('20 far-future stored records do not hide a later real record or poison previous', () => {
+      const store = memoryStorage();
+      const now = Date.now();
+      const bogus = Array.from({ length: 20 }, (_, i) => ({
+        t: now + 1e12 + i,
+        r: `bogus${i}`,
+        ok: true,
+      }));
+      store.setItem(key, JSON.stringify({ x: bogus }));
+      const B = loadInstance();
+      const out = B.recordCheck('x', { status: 'offline' }, store, now);
+      expect(out.record.t).toBe(now);
+      B.flushHistory();
+      const persisted = JSON.parse(store.getItem(key)).x;
+      expect(persisted).toHaveLength(B.HISTORY_LIMIT);
+      expect(persisted[persisted.length - 1].r).toBe(out.record.r);
+      expect(Math.max(...persisted.map((r) => r.t))).toBeLessThan(
+        now + SKEW + 1000
+      );
+      // The next check compares against the real record, not a bogus one.
+      const next = B.recordCheck('x', { status: 'online' }, store, now + 1);
+      expect(next.previous.r).toBe(out.record.r);
+      expect(next.recovered).toBe(true);
+    });
+
+    test.each([
+      ['1e300', 1e300],
+      ['Infinity', Infinity],
+      ['NaN', NaN],
+      ['string', '5'],
+    ])('a %s time is treated as now, not trusted', (_name, bad) => {
+      const store = memoryStorage();
+      const A = loadInstance();
+      const now = Date.now();
+      const out = A.recordCheck('x', { status: 'online' }, store, bad);
+      expect(Number.isFinite(out.record.t)).toBe(true);
+      expect(out.record.t).toBeLessThan(now + SKEW + 1000);
+      expect(out.record.t).toBeGreaterThanOrEqual(now);
+      // A bad time that is already stored is also neutralised when merged.
+      store.setItem(key, JSON.stringify({ y: [{ t: bad, r: 'b', ok: true }] }));
+      const B = loadInstance();
+      const read = B.getHistory('y', store);
+      expect(read).toHaveLength(1);
+      expect(read[0].t == null || Number.isFinite(read[0].t)).toBe(true);
+      const real = B.recordCheck('y', { status: 'offline' }, store, now);
+      expect(real.previous.r).toBe('b');
+      B.flushHistory();
+      const stored = JSON.parse(store.getItem(key)).y;
+      expect(stored.every((r) => r.t == null || Number.isFinite(r.t))).toBe(
+        true
+      );
+    });
+
+    test('a record within the allowed skew keeps its position', () => {
+      const store = memoryStorage();
+      const now = Date.now();
+      const ahead = now + SKEW - 1000; // fast clock, still trusted
+      const behind = now - 10 * 60 * 1000; // slow clock
+      store.setItem(
+        key,
+        JSON.stringify({
+          x: [
+            { t: behind, r: 'b', ok: true },
+            { t: ahead, r: 'a', ok: true },
+          ],
+        })
+      );
+      const A = loadInstance();
+      const hist = A.getHistory('x', store);
+      expect(hist.map((r) => r.r)).toEqual(['b', 'a']);
+      expect(hist[1].t).toBe(ahead);
+    });
+  });
+
   test('prune neither resurrects nor loses the other tab records', () => {
     const store = memoryStorage();
     const A = loadInstance();
