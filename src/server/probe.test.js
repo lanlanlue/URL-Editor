@@ -17,6 +17,18 @@ describe('validateProbeTarget', () => {
     'https://[2001:4860:4860::8888]/',
     'https://[2001:1::1]/',
     'https://[2003::1]/',
+    'https://[2a00::1]/',
+    'https://[2001:db9::1]/',
+    'https://[2620:4f:8000::1]/',
+    'https://[2001:4860::]/',
+    // Boundaries just outside the newly blocked ranges.
+    'https://[3ffe::1]/',
+    'https://[3fff:1000::1]/',
+    'https://[2001:2:1::1]/',
+    'https://[2001:3::1]/',
+    'https://[2001:f::1]/',
+    'https://[2001:30::1]/',
+    'https://[2001:1f0::1]/',
   ])('allows %s', (url) => {
     expect(validateProbeTarget(url).ok).toBe(true);
   });
@@ -54,6 +66,15 @@ describe('validateProbeTarget', () => {
     ['http://[2001:0:4136:e378:8000:63bf:3fff:fdd2]/', 'teredo full'],
     ['http://[2001:db8::1]/', 'documentation'],
     ['http://[2001:0db8:85a3::8a2e:370:7334]/', 'documentation long'],
+    ['http://[3fff::1]/', 'documentation 3fff::/20 start'],
+    ['http://[3fff:fff:ffff::1]/', 'documentation 3fff::/20 end'],
+    ['http://[2001:2::1]/', 'benchmarking 2001:2::/48'],
+    ['http://[2001:2:0:ffff::1]/', 'benchmarking 2001:2::/48 end'],
+    ['http://[2001:10::1]/', 'orchid 2001:10::/28 start'],
+    ['http://[2001:1f:ffff::1]/', 'orchid 2001:10::/28 end'],
+    ['http://[2001:20::1]/', 'orchidv2 2001:20::/28 start'],
+    ['http://[2001:2f:ffff::1]/', 'orchidv2 2001:20::/28 end'],
+    ['http://[4000::1]/', 'outside 2000::/3'],
     ['', 'empty'],
     ['not a url', 'garbage'],
   ])('blocks %s (%s)', (url, label) => {

@@ -52,15 +52,43 @@ function isPrivateIpv4([a, b, c]) {
   );
 }
 
+// Expands a WHATWG-normalised IPv6 literal (no brackets, lowercase, no
+// embedded dotted quad) into 8 numeric groups; null if malformed.
+function ipv6Groups(bare) {
+  const halves = bare.split('::');
+  if (halves.length > 2) return null;
+  const head = halves[0] ? halves[0].split(':') : [];
+  const tail = halves.length === 2 && halves[1] ? halves[1].split(':') : [];
+  const fill = 8 - head.length - tail.length;
+  if (halves.length === 2 ? fill < 1 : fill !== 0) return null;
+  const groups = [
+    ...head,
+    ...Array(halves.length === 2 ? fill : 0).fill('0'),
+    ...tail,
+  ];
+  const nums = groups.map((g) =>
+    /^[0-9a-f]{1,4}$/.test(g) ? parseInt(g, 16) : NaN
+  );
+  return nums.some(Number.isNaN) ? null : nums;
+}
+
 // Inside 2000::/3 but still not routable public hosts: 6to4 (2002::/16, can
-// embed any IPv4 incl. private), Teredo (2001::/32) and documentation
-// (2001:db8::/32). `bare` is the WHATWG-normalised literal (lowercase).
+// embed any IPv4 incl. private), Teredo (2001::/32), benchmarking
+// (2001:2::/48), ORCHID (2001:10::/28), ORCHIDv2 (2001:20::/28),
+// documentation (2001:db8::/32 and 3fff::/20). `bare` is the WHATWG-normalised
+// literal (lowercase).
 function isReservedIpv6Prefix(bare) {
-  const parts = bare.split(':');
-  const first = parseInt(parts[0], 16);
-  const second = parts[1] === '' ? 0 : parseInt(parts[1], 16);
+  const g = ipv6Groups(bare);
+  if (!g) return true; // fail closed
+  const [first, second, third] = g;
+  if (first === 0x2002) return true;
+  if (first === 0x3fff) return second <= 0x0fff; // /20: top 4 bits of group 2 are 0
+  if (first !== 0x2001) return false;
   return (
-    first === 0x2002 || (first === 0x2001 && (second === 0 || second === 0xdb8))
+    second === 0 ||
+    second === 0xdb8 ||
+    (second === 2 && third === 0) ||
+    (second >= 0x10 && second <= 0x2f) // 2001:10::/28 + 2001:20::/28
   );
 }
 
