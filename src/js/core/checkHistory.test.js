@@ -1,6 +1,7 @@
 import {
   HISTORY_LIMIT,
   buildResultsCsv,
+  flushHistory,
   getHistory,
   pruneHistory,
   recordCheck,
@@ -53,6 +54,7 @@ describe('checkHistory', () => {
     expect(getHistory('a', store)).toEqual([]);
     expect(() => recordCheck('a', { status: 'online' }, store)).not.toThrow();
 
+    const quiet = jest.spyOn(console, 'warn').mockImplementation(() => {});
     const throwing = {
       getItem: () => {
         throw new Error('denied');
@@ -64,6 +66,8 @@ describe('checkHistory', () => {
     expect(() =>
       recordCheck('a', { status: 'online' }, throwing)
     ).not.toThrow();
+    flushHistory();
+    quiet.mockRestore();
   });
 
   test('prunes history of deleted entries', () => {
@@ -73,6 +77,74 @@ describe('checkHistory', () => {
     pruneHistory(['keep'], store);
     expect(getHistory('gone', store)).toEqual([]);
     expect(getHistory('keep', store)).toHaveLength(1);
+  });
+});
+
+describe('checkHistory caching and batching', () => {
+  test('N recordCheck + getHistory calls parse once and write once', () => {
+    const store = memoryStorage();
+    const setSpy = jest.spyOn(store, 'setItem');
+    const parseSpy = jest.spyOn(JSON, 'parse');
+    for (let i = 0; i < 100; i++) {
+      recordCheck(`id${i % 20}`, { status: 'online' }, store, i);
+      getHistory(`id${i % 20}`, store);
+    }
+    expect(parseSpy.mock.calls.length).toBeLessThanOrEqual(2);
+    expect(setSpy).not.toHaveBeenCalled(); // debounced
+    flushHistory();
+    expect(setSpy).toHaveBeenCalledTimes(1);
+    parseSpy.mockRestore();
+    const persisted = JSON.parse(store.getItem('urlEditorCheckHistory'));
+    expect(Object.keys(persisted)).toHaveLength(20);
+  });
+
+  test('debounced write lands after the delay', () => {
+    jest.useFakeTimers();
+    try {
+      const store = memoryStorage();
+      recordCheck('t', { status: 'online' }, store, 1);
+      expect(store.getItem('urlEditorCheckHistory')).toBeNull();
+      jest.advanceTimersByTime(1000);
+      expect(store.getItem('urlEditorCheckHistory')).toContain('"t"');
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  test('picks up changes written by another tab', () => {
+    const store = memoryStorage();
+    recordCheck('a', { status: 'online' }, store, 1);
+    flushHistory();
+    store.setItem(
+      'urlEditorCheckHistory',
+      JSON.stringify({ a: [{ t: 9, ok: false }] })
+    );
+    expect(getHistory('a', store)).toEqual([{ t: 9, ok: false }]);
+  });
+
+  test('drops null / non-object elements from corrupt data', () => {
+    const store = memoryStorage();
+    store.setItem(
+      'urlEditorCheckHistory',
+      JSON.stringify({ a: [null, 5, 'x', [1], { t: 1, ok: true }], b: 'bad' })
+    );
+    expect(getHistory('a', store)).toEqual([{ t: 1, ok: true }]);
+    expect(getHistory('b', store)).toEqual([]);
+  });
+
+  test('quota failure does not crash, warns once and keeps memory history', () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    const store = memoryStorage();
+    store.setItem = () => {
+      throw new Error('QuotaExceededError');
+    };
+    recordCheck('q', { status: 'online' }, store, 1);
+    expect(() => flushHistory()).not.toThrow();
+    recordCheck('q', { status: 'offline' }, store, 2);
+    flushHistory();
+    expect(getHistory('q', store)).toHaveLength(2);
+    expect(warn).toHaveBeenCalledTimes(1);
+    warn.mockRestore();
   });
 });
 
@@ -143,5 +215,147 @@ describe('buildResultsCsv', () => {
     );
     expect(out.record.ok).toBe(true);
     expect(out.regression).toBe(false);
+  });
+});
+
+describe('checkHistory with two tabs on one storage', () => {
+  function loadInstance() {
+    let mod;
+    jest.isolateModules(() => {
+      mod = require('./checkHistory');
+    });
+    return mod;
+  }
+  const idsOf = (store) =>
+    Object.keys(JSON.parse(store.getItem('urlEditorCheckHistory') || '{}'));
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  test('records from both tabs survive after both flush', () => {
+    const store = memoryStorage();
+    const A = loadInstance();
+    const B = loadInstance();
+    A.recordCheck('x', { status: 'online' }, store, 1);
+    B.recordCheck('y', { status: 'online' }, store, 2);
+    A.recordCheck('x', { status: 'offline' }, store, 3);
+    A.flushHistory();
+    B.flushHistory();
+    const persisted = JSON.parse(store.getItem('urlEditorCheckHistory'));
+    expect(persisted.x).toHaveLength(2);
+    expect(persisted.y).toHaveLength(1);
+    // A fresh reader sees everything.
+    const C = loadInstance();
+    expect(C.getHistory('x', store)).toHaveLength(2);
+    expect(C.getHistory('y', store)).toHaveLength(1);
+  });
+
+  test('two tabs recording 50 distinct ids interleaved lose nothing', () => {
+    jest.useFakeTimers();
+    const store = memoryStorage();
+    const A = loadInstance();
+    const B = loadInstance();
+    for (let i = 0; i < 50; i += 1) {
+      A.recordCheck(`a${i}`, { status: 'online' }, store, i);
+      jest.advanceTimersByTime(12);
+      B.recordCheck(`b${i}`, { status: 'online' }, store, i);
+      jest.advanceTimersByTime(13);
+    }
+    A.flushHistory();
+    B.flushHistory();
+    expect(idsOf(store)).toHaveLength(100);
+  });
+
+  test('reads return fresh storage records plus local pending ones', () => {
+    const store = memoryStorage();
+    const A = loadInstance();
+    const B = loadInstance();
+    A.recordCheck('x', { status: 'online' }, store, 1);
+    A.flushHistory();
+    B.recordCheck('x', { status: 'offline' }, store, 2); // pending in B
+    expect(B.getHistory('x', store).map((r) => r.t)).toEqual([1, 2]);
+    A.recordCheck('x', { status: 'online' }, store, 3);
+    A.flushHistory();
+    expect(B.getHistory('x', store).map((r) => r.t)).toEqual([1, 3, 2]);
+  });
+
+  test('a repeated flush never duplicates records and the cap holds', () => {
+    const store = memoryStorage();
+    const A = loadInstance();
+    const B = loadInstance();
+    for (let i = 0; i < A.HISTORY_LIMIT + 5; i += 1) {
+      A.recordCheck('x', { status: 'online' }, store, i);
+    }
+    A.flushHistory();
+    A.flushHistory();
+    B.recordCheck('x', { status: 'online' }, store, 1000);
+    B.flushHistory();
+    B.flushHistory();
+    const persisted = JSON.parse(store.getItem('urlEditorCheckHistory')).x;
+    expect(persisted).toHaveLength(A.HISTORY_LIMIT);
+    expect(persisted.filter((r) => r.t === 1000)).toHaveLength(1);
+  });
+
+  test('prune neither resurrects nor loses the other tab records', () => {
+    const store = memoryStorage();
+    const A = loadInstance();
+    const B = loadInstance();
+    A.recordCheck('keep', { status: 'online' }, store, 1);
+    A.recordCheck('gone', { status: 'online' }, store, 2);
+    A.flushHistory();
+    B.recordCheck('keepB', { status: 'online' }, store, 3);
+    B.flushHistory();
+    // A prunes: only 'keep' and 'keepB' are valid.
+    A.pruneHistory(['keep', 'keepB'], store);
+    expect(idsOf(store).sort()).toEqual(['keep', 'keepB']);
+    // A records again and flushes; B's record and the prune both stick.
+    A.recordCheck('keep', { status: 'offline' }, store, 4);
+    A.flushHistory();
+    const persisted = JSON.parse(store.getItem('urlEditorCheckHistory'));
+    expect(Object.keys(persisted).sort()).toEqual(['keep', 'keepB']);
+    expect(persisted.keep).toHaveLength(2);
+    expect(persisted.keepB).toHaveLength(1);
+  });
+
+  test('prune drops pending records of pruned ids', () => {
+    const store = memoryStorage();
+    const A = loadInstance();
+    A.recordCheck('gone', { status: 'online' }, store, 1);
+    A.recordCheck('keep', { status: 'online' }, store, 2);
+    A.pruneHistory(['keep'], store);
+    A.flushHistory();
+    expect(idsOf(store)).toEqual(['keep']);
+    expect(A.getHistory('gone', store)).toEqual([]);
+  });
+
+  test('100 record+get calls still parse O(1) and write once', () => {
+    const store = memoryStorage();
+    const A = loadInstance();
+    const setSpy = jest.spyOn(store, 'setItem');
+    const parseSpy = jest.spyOn(JSON, 'parse');
+    for (let i = 0; i < 100; i += 1) {
+      A.recordCheck(`id${i % 20}`, { status: 'online' }, store, i);
+      A.getHistory(`id${i % 20}`, store);
+    }
+    A.flushHistory();
+    expect(parseSpy.mock.calls.length).toBeLessThanOrEqual(3);
+    expect(setSpy).toHaveBeenCalledTimes(1);
+    parseSpy.mockRestore();
+  });
+});
+
+describe('checkHistory identical results', () => {
+  test('identical results in the same millisecond are all kept', () => {
+    const store = memoryStorage();
+    for (let i = 0; i < 3; i += 1) {
+      recordCheck('same', { status: 'online', code: 200 }, store, 5);
+    }
+    expect(getHistory('same', store)).toHaveLength(3);
+    flushHistory();
+    expect(getHistory('same', store)).toHaveLength(3);
+    expect(
+      JSON.parse(store.getItem('urlEditorCheckHistory')).same
+    ).toHaveLength(3);
   });
 });

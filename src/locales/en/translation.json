@@ -265,6 +265,7 @@
     "recoveryConfirmError": "Recovery Key confirmation does not match.",
     "unlocked": "End-to-end encrypted sync is unlocked.",
     "syncSuccess": "Encrypted data synced.",
+    "autoSyncConflictStopped": "Automatic sync paused after repeated conflicts. Try again later or sync manually.",
     "noRemoteData": "There is no cloud backup yet.",
     "restoreSuccess": "Encrypted data downloaded and merged.",
     "rotationSuccess": "Recovery Key rotated. Back up the new key.",

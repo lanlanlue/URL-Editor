@@ -12,6 +12,41 @@ let currentFilter = 'all'; // 'all' | 'offline' | 'online'
 let currentCols = 'auto'; // 'auto' | '1' | '2' | '3'
 let currentDevice = 'desktop'; // 'desktop' | 'tablet' | 'mobile'
 let onEntryChange = () => {};
+// id -> token object of the newest check for that entry. A result is applied
+// only while its token is still the current one, so overlapping runs, single
+// card rechecks and results arriving after close/reopen are ignored.
+const checkTokens = new Map();
+const RELOAD_BLANK_MS = 100;
+
+function _claimCheck(id) {
+  const token = {};
+  checkTokens.set(id, token);
+  return token;
+}
+
+function _isCurrentCheck(id, token) {
+  return checkTokens.get(id) === token;
+}
+
+/** Invalidates every in-flight check (close, reopen). */
+function _cancelChecks() {
+  checkTokens.clear();
+}
+
+/**
+ * Reloads an iframe from the source stored at creation (never from the live
+ * `src`, which is about:blank while a previous reload is pending).
+ */
+function _reloadIframe(iframe) {
+  const target = iframe.dataset.liveSrc;
+  if (!target) return;
+  clearTimeout(iframe._liveReloadTimer);
+  iframe.src = 'about:blank';
+  iframe._liveReloadTimer = setTimeout(() => {
+    iframe._liveReloadTimer = null;
+    if (iframe.isConnected) iframe.src = target;
+  }, RELOAD_BLANK_MS);
+}
 
 /**
  * Initializes the Live Test Modal listeners and controls.
@@ -33,7 +68,12 @@ export function initLiveTestModal() {
       dialog.removeAttribute('open');
       dialog.classList.add('hidden');
     }
-    // Stop all running iframes to free memory
+    stopAndClear();
+  };
+
+  // Stop all running iframes to free memory and cancel in-flight checks.
+  const stopAndClear = () => {
+    _cancelChecks();
     const grid = document.getElementById('live-test-grid');
     if (grid) grid.innerHTML = '';
   };
@@ -44,10 +84,7 @@ export function initLiveTestModal() {
     if (e.target === dialog) handleClose();
   });
 
-  dialog.addEventListener('cancel', () => {
-    const grid = document.getElementById('live-test-grid');
-    if (grid) grid.innerHTML = '';
-  });
+  dialog.addEventListener('cancel', stopAndClear);
 
   // Filter Buttons
   const filterBtns = dialog.querySelectorAll(
@@ -115,11 +152,12 @@ export function openLiveTestModal({ urls = [], onChange } = {}) {
   currentUrls = Array.isArray(urls) ? urls : [];
   onEntryChange = typeof onChange === 'function' ? onChange : () => {};
   healthResults.clear();
+  _cancelChecks();
 
-  // Populate initial health status from entry data if available
+  // Health status is runtime-only; every entry starts as 'checking'.
   currentUrls.forEach((entry) => {
     healthResults.set(entry.id, {
-      status: entry.healthStatus || 'checking',
+      status: 'checking',
       code: null,
       error: null,
     });
@@ -160,7 +198,7 @@ function renderGrid() {
 
   const filteredUrls = currentUrls.filter((entry) => {
     const result = healthResults.get(entry.id) || {};
-    const status = result.status || entry.healthStatus;
+    const status = result.status;
     if (currentFilter === 'offline') return status === 'offline';
     if (currentFilter === 'online') return status === 'online';
     return true;
@@ -185,6 +223,15 @@ function renderGrid() {
 
   filteredUrls.forEach((entry) => {
     grid.appendChild(_createLiveTestCard(entry));
+  });
+
+  // Cards are rebuilt: restore badge details, history tags, grant buttons and
+  // embedding-blocked notices from the cached results.
+  filteredUrls.forEach((entry) => {
+    const cached = healthResults.get(entry.id);
+    if (cached && cached.status && cached.status !== 'checking') {
+      _applyResultDetails(entry, cached);
+    }
   });
 }
 
@@ -349,6 +396,7 @@ function _createLiveTestCard(entry) {
   if (!/^https?:\/\//i.test(formattedUrl)) {
     formattedUrl = 'https://' + formattedUrl;
   }
+  iframe.dataset.liveSrc = formattedUrl;
   iframe.src = formattedUrl;
 
   frameHolder.appendChild(iframe);
@@ -365,17 +413,21 @@ function _createLiveTestCard(entry) {
 async function _reloadSingleCard(card, entry) {
   const { id } = entry;
   const iframe = card.querySelector('iframe');
-  if (iframe) {
-    const currentSrc = iframe.src;
-    iframe.src = 'about:blank';
-    setTimeout(() => {
-      iframe.src = currentSrc;
-    }, 100);
-  }
+  if (iframe) _reloadIframe(iframe);
 
   // Update badge to checking
+  const token = _claimCheck(id);
   _updateCardStatus(id, 'checking');
-  const res = await runEntryCheck(entry, (u, t, o) => checkUrlHealth(u, t, o));
+  let res;
+  try {
+    res = await runEntryCheck(entry, (u, t, o) => checkUrlHealth(u, t, o), {
+      isCurrent: () => _isCurrentCheck(id, token),
+    });
+  } catch (err) {
+    // Never leave the card on 'checking' when the check itself rejects.
+    res = { status: 'offline', error: err?.message || String(err) };
+  }
+  if (!_isCurrentCheck(id, token)) return;
   healthResults.set(id, res);
   _updateCardStatus(id, res.status);
   _applyResultDetails(entry, res);
@@ -387,13 +439,7 @@ async function _reloadSingleCard(card, entry) {
  */
 function reloadAllIframes() {
   const iframes = document.querySelectorAll('.live-test-iframe');
-  iframes.forEach((iframe) => {
-    const src = iframe.src;
-    iframe.src = 'about:blank';
-    setTimeout(() => {
-      iframe.src = src;
-    }, 100);
-  });
+  iframes.forEach(_reloadIframe);
 }
 
 /**
@@ -416,19 +462,30 @@ async function recheckWithPermissions() {
  * Runs connectivity checks (capped concurrency) and updates cards live.
  */
 async function checkAllHealth() {
-  currentUrls.forEach((entry) => {
+  const entries = currentUrls;
+  const tokens = new Map();
+  entries.forEach((entry) => {
+    tokens.set(entry.id, _claimCheck(entry.id));
     healthResults.set(entry.id, { status: 'checking' });
     _updateCardStatus(entry.id, 'checking');
   });
 
   updateStatsCounters();
 
-  await checkManyUrls(currentUrls, {
-    run: (entry) =>
-      runEntryCheck(entry, (url, timeoutMs, options) =>
-        checkUrlHealth(url, timeoutMs, options)
-      ),
+  await checkManyUrls(entries, {
+    run: (entry) => {
+      // Superseded or cancelled: don't start (or record) another request.
+      if (!_isCurrentCheck(entry.id, tokens.get(entry.id))) {
+        return Promise.resolve({ status: 'checking', stale: true });
+      }
+      return runEntryCheck(
+        entry,
+        (url, timeoutMs, options) => checkUrlHealth(url, timeoutMs, options),
+        { isCurrent: () => _isCurrentCheck(entry.id, tokens.get(entry.id)) }
+      );
+    },
     onResult: (entry, res) => {
+      if (!_isCurrentCheck(entry.id, tokens.get(entry.id))) return;
       healthResults.set(entry.id, res);
       _updateCardStatus(entry.id, res.status);
       _applyResultDetails(entry, res);
@@ -437,7 +494,10 @@ async function checkAllHealth() {
   });
 
   // If in filtered mode, re-render to reflect new offline/online statuses
-  if (currentFilter !== 'all') {
+  const stillCurrent = entries.some((entry) =>
+    _isCurrentCheck(entry.id, tokens.get(entry.id))
+  );
+  if (stillCurrent && currentFilter !== 'all') {
     renderGrid();
   }
 }
@@ -612,7 +672,7 @@ function updateStatsCounters() {
 
   currentUrls.forEach((entry) => {
     const res = healthResults.get(entry.id) || {};
-    const status = res.status || entry.healthStatus;
+    const status = res.status;
     if (status === 'online') onlineCount++;
     else if (status === 'offline') offlineCount++;
   });
@@ -667,7 +727,9 @@ function _renderHistory(id, latest) {
   const el = document.getElementById(`live-history-${id}`);
   if (!el) return;
   el.innerHTML = '';
-  const records = getHistory(id).slice(-10);
+  const records = getHistory(id)
+    .filter((record) => record && typeof record === 'object')
+    .slice(-10);
   if (!records.length) return;
 
   const dots = document.createElement('span');

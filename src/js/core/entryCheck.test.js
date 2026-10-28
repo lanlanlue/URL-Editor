@@ -70,3 +70,48 @@ describe('runEntryCheck', () => {
     ).rejects.toThrow('net');
   });
 });
+
+describe('runEntryCheck isCurrent predicate', () => {
+  beforeEach(() => localStorage.clear());
+
+  test('a stale check records nothing and returns a marked stale result', async () => {
+    const check = jest.fn().mockResolvedValue({ ...okResult });
+    const isCurrent = jest.fn(() => false);
+    const result = await runEntryCheck(
+      { id: 's1', url: 'https://a.test' },
+      check,
+      { isCurrent }
+    );
+    expect(check).toHaveBeenCalledTimes(1);
+    expect(isCurrent).toHaveBeenCalledTimes(1);
+    expect(result).toMatchObject({ stale: true, status: 'checking' });
+    expect(getHistory('s1')).toEqual([]);
+  });
+
+  test('a current check records exactly once', async () => {
+    const check = jest.fn().mockResolvedValue({ ...okResult });
+    const result = await runEntryCheck(
+      { id: 's2', url: 'https://a.test' },
+      check,
+      { isCurrent: () => true }
+    );
+    expect(result.stale).toBeUndefined();
+    expect(result.status).toBe('online');
+    expect(getHistory('s2')).toHaveLength(1);
+  });
+
+  test('predicate is evaluated after the network check returns', async () => {
+    let current = true;
+    const check = jest.fn(async () => {
+      current = false; // superseded while the request is in flight
+      return { ...okResult };
+    });
+    const result = await runEntryCheck(
+      { id: 's3', url: 'https://a.test' },
+      check,
+      { isCurrent: () => current }
+    );
+    expect(result.stale).toBe(true);
+    expect(getHistory('s3')).toEqual([]);
+  });
+});

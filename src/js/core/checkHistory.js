@@ -18,33 +18,185 @@ function getStorage(storage) {
   }
 }
 
-function load(storage) {
-  const target = getStorage(storage);
-  if (!target) return {};
+/**
+ * Per storage object we keep:
+ *  - `raw` / `data`: the last parsed copy of the stored blob. A cheap raw
+ *    string comparison (no JSON.parse) detects writes by other tabs, so reads
+ *    always reflect fresh storage.
+ *  - `pending`: records appended locally and not yet written.
+ *
+ * Writes are additive. A flush re-reads the CURRENT storage string, appends the
+ * pending records per id (de-duplicated by record key, capped), and writes
+ * once. Another tab's records are therefore never overwritten by a stale blob,
+ * and a run of N checks costs O(1) parses and writes instead of O(N).
+ */
+const FLUSH_DELAY_MS = 300;
+const cache = new WeakMap(); // storage -> { raw, data, pending: Map, timer, warned }
+const dirtyTargets = new Set();
+let lifecycleHooked = false;
+
+function isRecord(value) {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+/** Drops non-array values and non-object elements from a parsed blob. */
+function sanitize(parsed) {
+  if (!isRecord(parsed)) return {};
+  const clean = {};
+  Object.keys(parsed).forEach((id) => {
+    if (Array.isArray(parsed[id])) clean[id] = parsed[id].filter(isRecord);
+  });
+  return clean;
+}
+
+let recordSeq = 0;
+const INSTANCE_TAG = Math.random().toString(36).slice(2, 8);
+
+/** Unique per recorded check, so identical-looking results are not merged. */
+function newRecordId() {
+  recordSeq += 1;
+  return `${INSTANCE_TAG}${recordSeq.toString(36)}`;
+}
+
+// Stable de-duplication key; legacy records without `r` fall back to content.
+function recordKey(record) {
+  if (record.r) return record.r;
+  return [
+    record.t,
+    record.ok,
+    record.code,
+    record.ms,
+    record.err,
+    record.mode,
+  ].join('|');
+}
+
+/** Appends `extra` after `base`, skipping duplicates, keeping the newest. */
+function mergeRecords(base = [], extra = []) {
+  if (!extra.length) return base.slice(-HISTORY_LIMIT);
+  const seen = new Set(base.map(recordKey));
+  const merged = [...base];
+  extra.forEach((record) => {
+    const key = recordKey(record);
+    if (!seen.has(key)) {
+      seen.add(key);
+      merged.push(record);
+    }
+  });
+  return merged.slice(-HISTORY_LIMIT);
+}
+
+function getEntry(target) {
+  let entry = cache.get(target);
+  if (!entry) {
+    entry = {
+      raw: undefined,
+      data: {},
+      pending: new Map(),
+      timer: null,
+      warned: false,
+    };
+    cache.set(target, entry);
+  }
+  return entry;
+}
+
+/** Fresh stored blob; parses only when the raw string changed. */
+function loadFresh(target) {
+  const entry = getEntry(target);
+  let raw;
   try {
-    const parsed = JSON.parse(target.getItem(STORAGE_KEY) || '{}');
-    return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
-      ? parsed
-      : {};
+    raw = target.getItem(STORAGE_KEY);
   } catch {
-    return {};
+    return entry.data;
+  }
+  if (entry.raw === raw) return entry.data;
+  let data = {};
+  try {
+    data = sanitize(JSON.parse(raw || '{}'));
+  } catch {
+    data = {};
+  }
+  entry.raw = raw;
+  entry.data = data;
+  return data;
+}
+
+function flushTarget(target) {
+  const entry = cache.get(target);
+  if (!entry) return;
+  if (entry.timer) clearTimeout(entry.timer);
+  entry.timer = null;
+  if (!entry.pending.size) {
+    dirtyTargets.delete(target);
+    return;
+  }
+  const next = { ...loadFresh(target) };
+  entry.pending.forEach((records, id) => {
+    next[id] = mergeRecords(next[id], records);
+  });
+  try {
+    const raw = JSON.stringify(next);
+    target.setItem(STORAGE_KEY, raw);
+    entry.raw = raw;
+    entry.data = next;
+    entry.pending.clear();
+    entry.warned = false;
+    dirtyTargets.delete(target);
+  } catch (err) {
+    // Quota or privacy mode: records stay pending in memory for this session.
+    if (!entry.warned) {
+      entry.warned = true;
+      console.warn('[checkHistory] could not persist history:', err);
+    }
   }
 }
 
-function save(data, storage) {
+/** Writes any pending history immediately (also runs on page hide). */
+export function flushHistory() {
+  [...dirtyTargets].forEach(flushTarget);
+}
+
+function hookLifecycle() {
+  if (lifecycleHooked || typeof window === 'undefined') return;
+  lifecycleHooked = true;
+  window.addEventListener('pagehide', flushHistory);
+  window.addEventListener('beforeunload', flushHistory);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') flushHistory();
+  });
+}
+
+function scheduleFlush(target, entry) {
+  dirtyTargets.add(target);
+  hookLifecycle();
+  if (!entry.timer) {
+    entry.timer = setTimeout(() => flushTarget(target), FLUSH_DELAY_MS);
+  }
+}
+
+function readRecords(id, storage) {
+  const target = getStorage(storage);
+  if (!target) return [];
+  const entry = getEntry(target);
+  const fresh = loadFresh(target)[id];
+  return mergeRecords(
+    Array.isArray(fresh) ? fresh : [],
+    entry.pending.get(id) || []
+  );
+}
+
+/** Forgets the in-memory copy (tests, explicit reset). Pending writes flush first. */
+export function resetHistoryCache(storage) {
   const target = getStorage(storage);
   if (!target) return;
-  try {
-    target.setItem(STORAGE_KEY, JSON.stringify(data));
-  } catch {
-    // Quota or privacy mode: history is best-effort.
-  }
+  flushTarget(target);
+  cache.delete(target);
 }
 
 /** @returns {Array<{t: number, ok: boolean, code?: number, ms?: number, err?: string, mode?: string}>} */
 export function getHistory(id, storage) {
-  const records = load(storage)[id];
-  return Array.isArray(records) ? records : [];
+  return readRecords(id, storage);
 }
 
 /**
@@ -52,19 +204,26 @@ export function getHistory(id, storage) {
  * @returns {{record: object, previous: object|null, regression: boolean, recovered: boolean}}
  */
 export function recordCheck(id, result, storage, now = Date.now()) {
-  const data = load(storage);
-  const records = Array.isArray(data[id]) ? data[id] : [];
+  const records = readRecords(id, storage);
   const previous = records[records.length - 1] || null;
   const record = {
     t: now,
+    r: newRecordId(),
     ok: result.status === 'online',
     ...(result.code != null ? { code: result.code } : {}),
     ...(typeof result.timeMs === 'number' ? { ms: result.timeMs } : {}),
     ...(result.error ? { err: String(result.error).slice(0, 120) } : {}),
     ...(result.mode ? { mode: result.mode } : {}),
   };
-  data[id] = [...records, record].slice(-HISTORY_LIMIT);
-  save(data, storage);
+  const target = getStorage(storage);
+  if (target) {
+    const entry = getEntry(target);
+    entry.pending.set(
+      id,
+      [...(entry.pending.get(id) || []), record].slice(-HISTORY_LIMIT)
+    );
+    scheduleFlush(target, entry);
+  }
   return {
     record,
     previous,
@@ -73,18 +232,28 @@ export function recordCheck(id, result, storage, now = Date.now()) {
   };
 }
 
-/** Drops history for entries that no longer exist. */
+/** Drops history for entries that no longer exist (stored and pending). */
 export function pruneHistory(validIds, storage) {
+  const target = getStorage(storage);
+  if (!target) return;
   const keep = new Set(validIds);
-  const data = load(storage);
-  let changed = false;
-  Object.keys(data).forEach((id) => {
-    if (!keep.has(id)) {
-      delete data[id];
-      changed = true;
-    }
+  const entry = getEntry(target);
+  entry.pending.forEach((_records, id) => {
+    if (!keep.has(id)) entry.pending.delete(id);
   });
-  if (changed) save(data, storage);
+  const fresh = loadFresh(target);
+  const stale = Object.keys(fresh).filter((id) => !keep.has(id));
+  if (!stale.length) return;
+  const next = { ...fresh };
+  stale.forEach((id) => delete next[id]);
+  try {
+    const raw = JSON.stringify(next);
+    target.setItem(STORAGE_KEY, raw);
+    entry.raw = raw;
+    entry.data = next;
+  } catch {
+    // Best-effort: the blob keeps the stale ids until the next successful write.
+  }
 }
 
 /**
