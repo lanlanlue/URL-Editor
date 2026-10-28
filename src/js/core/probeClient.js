@@ -12,8 +12,10 @@ export function resetProbeClient() {
   consecutiveFailures = 0;
 }
 
+// Never shorten an already longer disabled window (a late in-flight 429 must
+// not cut a 30s backoff down to 10s).
 function disableFor(ms) {
-  disabledUntil = Date.now() + ms;
+  disabledUntil = Math.max(disabledUntil, Date.now() + ms);
 }
 
 function recordSuccess() {

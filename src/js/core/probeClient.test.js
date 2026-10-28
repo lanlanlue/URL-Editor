@@ -191,6 +191,35 @@ describe('probeViaServer', () => {
       expect(global.fetch).toHaveBeenCalledTimes(6);
     });
 
+    test('B22: a late 429 never shortens an already longer 30s backoff', async () => {
+      let resolveLate;
+      global.fetch.mockImplementationOnce(
+        () => new Promise((resolve) => (resolveLate = resolve))
+      );
+      const late = probeViaServer('https://e.com/late');
+      // Meanwhile three failures trip the 30s backoff.
+      global.fetch.mockRejectedValue(new TypeError('x'));
+      for (let i = 0; i < 3; i += 1) await probeViaServer(`https://e.com/${i}`);
+      const callsAfterTrip = global.fetch.mock.calls.length;
+
+      resolveLate(reply(429, {}));
+      expect(await late).toBeNull();
+
+      now += 15 * 1000; // past a 10s window, inside the 30s one
+      await probeViaServer('https://e.com/x');
+      expect(global.fetch).toHaveBeenCalledTimes(callsAfterTrip);
+    });
+
+    test('B22: a 429 on a healthy client still backs off for 10s only', async () => {
+      global.fetch.mockResolvedValueOnce(reply(429, {}));
+      await probeViaServer('https://e.com/');
+      await probeViaServer('https://e.com/');
+      expect(global.fetch).toHaveBeenCalledTimes(1);
+      now += 11 * 1000;
+      global.fetch.mockResolvedValue(ok());
+      expect(await probeViaServer('https://e.com/')).not.toBeNull();
+    });
+
     test('probing resumes after the backoff window', async () => {
       global.fetch.mockRejectedValue(new TypeError('x'));
       for (let i = 0; i < 5; i += 1) await probeViaServer('https://e.com/');
