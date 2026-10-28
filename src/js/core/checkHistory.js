@@ -71,9 +71,46 @@ function recordKey(record) {
   ].join('|');
 }
 
-/** Appends `extra` after `base`, skipping duplicates, keeping the newest. */
+// A record time is trusted only if it is a finite number no later than
+// "Date.now() + MAX_CLOCK_SKEW_MS". A device with a fast clock (or corrupt
+// data) would otherwise outrank every real record forever: the cap would drop
+// the real ones and `previous` would stay pinned to stale data. Five minutes
+// tolerates ordinary clock drift; slow clocks are always fine (they only look
+// older). The test is time-dependent: a record stamped now+6min is untrusted
+// at first and becomes trusted once the clock catches up. That is acceptable.
+const MAX_CLOCK_SKEW_MS = 5 * 60 * 1000;
+
+/** `now` if it is a sane time, else the real current time. */
+function trustedNow(now) {
+  const real = Date.now();
+  return Number.isFinite(now) && now <= real + MAX_CLOCK_SKEW_MS ? now : real;
+}
+
+/**
+ * Time used for ordering. A time that is missing, null (legacy, or JSON
+ * NaN/Infinity), not a number, non-finite or too far in the future means
+ * "unknown": it ranks OLDEST (stable by append order among such records), so
+ * real records always outrank it and the cap evicts it first. Stored records
+ * are never rewritten; only the ordering ignores the untrusted value.
+ */
+function recordTime(record) {
+  const t = record.t;
+  if (
+    typeof t === 'number' &&
+    Number.isFinite(t) &&
+    t <= Date.now() + MAX_CLOCK_SKEW_MS
+  )
+    return t;
+  return -Infinity;
+}
+
+/**
+ * Merges `extra` into `base`, skipping duplicates, ordered by record time `t`
+ * (stable: ties keep append order, so base precedes extra), then keeps the
+ * newest HISTORY_LIMIT by time. Ordering by time, not by flush order, keeps
+ * the cap and "previous" correct when several tabs flush out of order.
+ */
 function mergeRecords(base = [], extra = []) {
-  if (!extra.length) return base.slice(-HISTORY_LIMIT);
   const seen = new Set(base.map(recordKey));
   const merged = [...base];
   extra.forEach((record) => {
@@ -83,6 +120,20 @@ function mergeRecords(base = [], extra = []) {
       merged.push(record);
     }
   });
+  const times = merged.map(recordTime);
+  let sorted = true;
+  for (let i = 1; i < times.length; i += 1) {
+    if (times[i] < times[i - 1]) {
+      sorted = false;
+      break;
+    }
+  }
+  if (!sorted) {
+    // Explicit index tie-break keeps the sort stable.
+    const order = merged.map((_, i) => i);
+    order.sort((x, y) => (times[x] === times[y] ? x - y : times[x] - times[y]));
+    return order.slice(-HISTORY_LIMIT).map((i) => merged[i]);
+  }
   return merged.slice(-HISTORY_LIMIT);
 }
 
@@ -203,7 +254,8 @@ export function getHistory(id, storage) {
  * Appends a result and reports whether it changed state versus the last run.
  * @returns {{record: object, previous: object|null, regression: boolean, recovered: boolean}}
  */
-export function recordCheck(id, result, storage, now = Date.now()) {
+export function recordCheck(id, result, storage, nowArg = Date.now()) {
+  const now = trustedNow(nowArg);
   const records = readRecords(id, storage);
   const previous = records[records.length - 1] || null;
   const record = {
@@ -218,10 +270,7 @@ export function recordCheck(id, result, storage, now = Date.now()) {
   const target = getStorage(storage);
   if (target) {
     const entry = getEntry(target);
-    entry.pending.set(
-      id,
-      [...(entry.pending.get(id) || []), record].slice(-HISTORY_LIMIT)
-    );
+    entry.pending.set(id, mergeRecords(entry.pending.get(id) || [], [record]));
     scheduleFlush(target, entry);
   }
   return {
@@ -232,7 +281,16 @@ export function recordCheck(id, result, storage, now = Date.now()) {
   };
 }
 
-/** Drops history for entries that no longer exist (stored and pending). */
+/**
+ * Drops history for entries that no longer exist (stored and pending).
+ *
+ * Known limitation (deliberate): this only affects THIS tab's pending records
+ * and the stored blob. If another tab still has pending records for a pruned
+ * id, it writes them back at its next flush, leaving an orphan id until the
+ * next prune. That is harmless history data; a wall-clock "prune marker" was
+ * tried and rejected because it can silently drop valid records (same-ms
+ * records, reused ids after import, clock skew).
+ */
 export function pruneHistory(validIds, storage) {
   const target = getStorage(storage);
   if (!target) return;
