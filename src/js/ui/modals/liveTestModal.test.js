@@ -1,6 +1,43 @@
 import { initLiveTestModal, openLiveTestModal } from './liveTestModal';
 import * as healthCheckModule from '../../utils/healthCheck';
 
+const MODAL_HTML = `
+      <dialog id="live-test-modal" class="live-test-modal">
+        <div class="live-test-header">
+          <div class="live-test-header__top">
+            <span id="live-stat-total">共 0 個網址</span>
+            <span id="live-stat-online">🟢 0 正常</span>
+            <span id="live-stat-offline">🔴 0 異常</span>
+            <button id="live-test-close-btn">✕</button>
+          </div>
+          <div class="live-test-controls">
+            <div class="live-test-filters">
+              <button id="live-filter-all" class="live-ctrl-btn active" data-filter="all">全部</button>
+              <button id="live-filter-offline" class="live-ctrl-btn" data-filter="offline">🔴 僅顯示異常</button>
+              <button id="live-filter-online" class="live-ctrl-btn" data-filter="online">🟢 僅顯示正常</button>
+            </div>
+            <div class="live-test-layout-btns">
+              <select id="live-device-select">
+                <option value="desktop">Desktop</option>
+                <option value="tablet">Tablet</option>
+                <option value="mobile">Mobile</option>
+              </select>
+              <button id="live-grid-auto" class="live-ctrl-btn active" data-cols="auto">Auto</button>
+              <button id="live-grid-cols2" class="live-ctrl-btn" data-cols="2">2 Cols</button>
+              <button id="live-grid-cols3" class="live-ctrl-btn" data-cols="3">3 Cols</button>
+              <button id="live-grid-cols1" class="live-ctrl-btn" data-cols="1">1 Col</button>
+            </div>
+            <button id="live-reload-all-btn">🔄 Reload All</button>
+            <button id="live-recheck-health-btn">📡 Recheck</button>
+          </div>
+        </div>
+        <div class="live-test-body">
+          <div id="live-test-grid" class="live-test-grid live-grid--auto"></div>
+          <div id="live-test-empty-msg" class="live-test-empty hidden">No URLs</div>
+        </div>
+      </dialog>
+    `;
+
 describe('liveTestModal', () => {
   let mockUrls;
 
@@ -151,5 +188,139 @@ describe('liveTestModal', () => {
 
     const emptyMsg = document.getElementById('live-test-empty-msg');
     expect(emptyMsg.classList.contains('hidden')).toBe(false);
+  });
+});
+
+describe('liveTestModal races and caching', () => {
+  const flushAsync = async () => {
+    for (let i = 0; i < 20; i += 1) await Promise.resolve();
+  };
+
+  // Each checkUrlHealth call returns a promise the test settles by hand.
+  function deferredChecks() {
+    const calls = [];
+    jest.spyOn(healthCheckModule, 'checkUrlHealth').mockImplementation(
+      (url) =>
+        new Promise((resolve) => {
+          calls.push({ url, resolve });
+        })
+    );
+    return calls;
+  }
+
+  const makeUrls = (n) =>
+    Array.from({ length: n }, (_, i) => ({
+      id: `r${i}`,
+      url: `https://site${i}.example.com/`,
+      label: `Site ${i}`,
+    }));
+
+  beforeEach(() => {
+    document.body.innerHTML = MODAL_HTML;
+    initLiveTestModal();
+    document.getElementById('live-filter-all').click();
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+    jest.restoreAllMocks();
+  });
+
+  test('two quick reload clicks keep the original iframe source', () => {
+    jest.useFakeTimers();
+    deferredChecks();
+    openLiveTestModal({ urls: makeUrls(1) });
+    const iframe = document.querySelector('iframe.live-test-iframe');
+    const original = iframe.src;
+    const reloadBtn = document.querySelectorAll('.live-card-btn')[1];
+
+    reloadBtn.click();
+    expect(iframe.src).toBe('about:blank');
+    reloadBtn.click();
+    jest.advanceTimersByTime(500);
+    expect(iframe.src).toBe(original);
+  });
+
+  test('a recheck supersedes the previous run: stale results are ignored and queued checks skipped', async () => {
+    const calls = deferredChecks();
+    openLiveTestModal({ urls: makeUrls(8) });
+    await flushAsync();
+    expect(calls).toHaveLength(6); // run 1, concurrency cap
+    const firstRun = calls.splice(0, 6);
+
+    document.getElementById('live-recheck-health-btn').click();
+    await flushAsync();
+    const secondRun = calls.splice(0, 6);
+    expect(secondRun).toHaveLength(6);
+
+    // Fresh run reports online for the first site, then the old run lands late.
+    secondRun[0].resolve({ status: 'online', code: 200 });
+    await flushAsync();
+    firstRun[0].resolve({ status: 'offline', error: 'late and stale' });
+    await flushAsync();
+    const badge = document.getElementById('live-badge-r0');
+    expect(badge.className).toContain('live-badge--online');
+
+    // Old workers must not start the two entries still queued in run 1.
+    firstRun.slice(1).forEach((c) => c.resolve({ status: 'online' }));
+    secondRun.slice(1).forEach((c) => c.resolve({ status: 'online' }));
+    await flushAsync();
+    // Run 2 starts all 8 entries; run 1 only the 6 it had already started.
+    // calls now holds the late starts of both runs (2 from run 2, 0 from run 1).
+    const started = 6 + 6 + calls.length;
+    expect(started).toBe(14);
+  });
+
+  test('closing the modal cancels the run: late results do not rebuild the grid', async () => {
+    const calls = deferredChecks();
+    document.getElementById('live-filter-offline').click();
+    openLiveTestModal({ urls: makeUrls(2) });
+    await flushAsync();
+    document.getElementById('live-test-close-btn').click();
+    const grid = document.getElementById('live-test-grid');
+    expect(grid.children).toHaveLength(0);
+
+    calls.forEach((c) => c.resolve({ status: 'offline', error: 'x' }));
+    await flushAsync();
+    expect(grid.querySelectorAll('.live-test-card')).toHaveLength(0);
+  });
+
+  test('re-rendering after a filter click restores badge details and embed-blocked notice', async () => {
+    jest.spyOn(healthCheckModule, 'checkUrlHealth').mockResolvedValue({
+      status: 'online',
+      code: 200,
+      timeMs: 42,
+      embeddable: false,
+    });
+    openLiveTestModal({ urls: makeUrls(2) });
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(document.querySelectorAll('.live-embed-blocked')).toHaveLength(2);
+
+    document.getElementById('live-filter-online').click();
+    expect(document.querySelectorAll('.live-test-card')).toHaveLength(2);
+    expect(document.querySelectorAll('.live-embed-blocked')).toHaveLength(2);
+    expect(
+      document
+        .getElementById('live-badge-r0')
+        .querySelector('.live-badge__text').textContent
+    ).toContain('200');
+  });
+
+  test('entry.healthStatus is ignored: everything starts as checking', async () => {
+    deferredChecks();
+    openLiveTestModal({
+      urls: [
+        { id: 'h1', url: 'https://h.example.com/', healthStatus: 'offline' },
+      ],
+    });
+    await flushAsync();
+    expect(document.getElementById('live-badge-h1').className).toContain(
+      'live-badge--checking'
+    );
+    expect(document.getElementById('live-stat-offline').textContent).toContain(
+      '0'
+    );
+    document.getElementById('live-filter-offline').click();
+    expect(document.querySelectorAll('.live-test-card')).toHaveLength(0);
   });
 });
