@@ -342,27 +342,20 @@ function markDeletedEntries(ids = []) {
 
 // Persistent, non-blocking notice shown while the stored record is unreadable
 // and saves are being skipped.
+function unreadableNoticeText() {
+  return i18next.t('storage.unreadableNotice', {
+    defaultValue:
+      'Changes are not being saved because your stored data could not be decrypted. Restore from a backup or cloud sync to continue.',
+  });
+}
+
 function showUnreadableNotice() {
   if (document.querySelector('[data-storage-unreadable-notice]')) return;
   const notice = document.createElement('div');
   notice.setAttribute('data-storage-unreadable-notice', '');
   notice.setAttribute('role', 'alert');
-  notice.textContent = i18next.t('storage.unreadableNotice', {
-    defaultValue:
-      'Changes are not being saved because your stored data could not be decrypted. Restore from a backup or cloud sync to continue.',
-  });
-  Object.assign(notice.style, {
-    position: 'fixed',
-    left: '0',
-    right: '0',
-    bottom: '0',
-    zIndex: '10000',
-    padding: '10px 16px',
-    background: '#7f1d1d',
-    color: '#ffffff',
-    fontSize: '14px',
-    textAlign: 'center',
-  });
+  notice.className = 'storage-unreadable-notice';
+  notice.textContent = unreadableNoticeText();
   document.body.appendChild(notice);
 }
 

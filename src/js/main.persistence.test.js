@@ -118,6 +118,16 @@ describe('B1: unreadable encrypted record', () => {
     expect(notice.textContent).toMatch(/not (being )?saved/i);
   });
 
+  test('B21: the notice is styled by a class and has no inline style', async () => {
+    await loadMain({ initialState: unreadableState });
+    fireEvent.click(document.getElementById('save-url-btn'));
+    const notice = document.querySelector('[data-storage-unreadable-notice]');
+    expect(notice).toBeTruthy();
+    expect(notice.classList.contains('storage-unreadable-notice')).toBe(true);
+    expect(notice.hasAttribute('style')).toBe(false);
+    expect(notice.getAttribute('role')).toBe('alert');
+  });
+
   test('a restore without confirmedRecovery never clears the unreadable flag', async () => {
     const { saveSecureState, cloudOptions, markStorageRecovered } =
       await loadMain({ initialState: unreadableState });
