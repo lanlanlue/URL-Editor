@@ -104,4 +104,44 @@ describe('buildResultsCsv', () => {
     expect(lines[1]).toContain(',fail,');
     expect(lines[2].startsWith(',https://b.test')).toBe(true);
   });
+
+  test('maps assertion state to pass, fail or skipped (legacy passed-only still works)', () => {
+    const entries = ['a', 'b', 'c', 'd', 'e'].map((id) => ({
+      id,
+      url: `https://${id}.test`,
+    }));
+    const online = { status: 'online', mode: 'limited' };
+    const csv = buildResultsCsv(
+      entries,
+      new Map([
+        ['a', { ...online, assertion: { passed: true, state: 'passed' } }],
+        ['b', { ...online, assertion: { passed: false, state: 'failed' } }],
+        ['c', { ...online, assertion: { passed: false, state: 'skipped' } }],
+        ['d', { ...online, assertion: { passed: true } }],
+        ['e', { ...online, assertion: { passed: false } }],
+      ]),
+      0
+    );
+    const cells = csv
+      .split('\n')
+      .slice(1)
+      .map((line) => line.split(',')[7]);
+    expect(cells).toEqual(['pass', 'fail', 'skipped', 'pass', 'fail']);
+  });
+
+  test('an all-skipped assertion does not count as a failure in history', () => {
+    const store = memoryStorage();
+    recordCheck('x', { status: 'online' }, store, 1);
+    const out = recordCheck(
+      'x',
+      {
+        status: 'online',
+        assertion: { passed: false, state: 'skipped', failures: [] },
+      },
+      store,
+      2
+    );
+    expect(out.record.ok).toBe(true);
+    expect(out.regression).toBe(false);
+  });
 });
