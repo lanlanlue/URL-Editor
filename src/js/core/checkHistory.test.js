@@ -395,6 +395,64 @@ describe('checkHistory with two tabs on one storage', () => {
     expect(persisted.keepB).toHaveLength(1);
   });
 
+  describe('prune markers vs another tab pending records', () => {
+    function setup() {
+      const store = memoryStorage();
+      const A = loadInstance();
+      const B = loadInstance();
+      A.recordCheck('gone', { status: 'online' }, store, 10);
+      A.recordCheck('keep', { status: 'online' }, store, 11);
+      A.flushHistory();
+      return { store, A, B };
+    }
+    const persistedOf = (store) =>
+      JSON.parse(store.getItem('urlEditorCheckHistory'));
+
+    test('records older than the prune are not written back by the other tab', () => {
+      const { store, A, B } = setup();
+      B.recordCheck('gone', { status: 'offline' }, store, 50); // pending
+      B.recordCheck('keep', { status: 'offline' }, store, 51); // pending
+      A.pruneHistory(['keep'], store, 100);
+      B.flushHistory();
+      const persisted = persistedOf(store);
+      expect(Object.keys(persisted)).toEqual(['keep']);
+      expect(persisted.keep.map((r) => r.t)).toEqual([11, 51]);
+    });
+
+    test('records newer than the prune still land (id is alive again)', () => {
+      const { store, A, B } = setup();
+      B.recordCheck('gone', { status: 'offline' }, store, 50);
+      B.recordCheck('gone', { status: 'online' }, store, 200);
+      A.pruneHistory(['keep'], store, 100);
+      B.flushHistory();
+      expect(persistedOf(store).gone.map((r) => r.t)).toEqual([200]);
+    });
+
+    test('the pruning tab own later records for a re-used id are kept', () => {
+      const { store, A } = setup();
+      A.pruneHistory(['keep'], store, 100);
+      A.recordCheck('gone', { status: 'online' }, store, 150);
+      A.flushHistory();
+      expect(persistedOf(store).gone.map((r) => r.t)).toEqual([150]);
+    });
+
+    test('limitation: an id that was never stored cannot be detected as pruned', () => {
+      const { store, A, B } = setup();
+      B.recordCheck('fresh', { status: 'online' }, store, 50); // never flushed
+      A.pruneHistory(['keep'], store, 100); // does not know about "fresh"
+      B.flushHistory();
+      expect(Object.keys(persistedOf(store)).sort()).toEqual(['fresh', 'keep']);
+    });
+
+    test('a corrupt marker blob is ignored', () => {
+      const { store, B } = setup();
+      store.setItem('urlEditorCheckHistoryPruned', '{bad');
+      B.recordCheck('gone', { status: 'offline' }, store, 50);
+      B.flushHistory();
+      expect(persistedOf(store).gone.map((r) => r.t)).toEqual([10, 50]);
+    });
+  });
+
   test('prune drops pending records of pruned ids', () => {
     const store = memoryStorage();
     const A = loadInstance();

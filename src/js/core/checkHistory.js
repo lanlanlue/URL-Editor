@@ -7,6 +7,11 @@
  */
 
 const STORAGE_KEY = 'urlEditorCheckHistory';
+// Small side key: { [prunedId]: pruneTimestamp }. Lets a tab that flushes later
+// drop its own pending records of an id another tab already pruned, without a
+// format change to the history blob.
+const PRUNED_KEY = 'urlEditorCheckHistoryPruned';
+const PRUNED_MAX = 200;
 export const HISTORY_LIMIT = 20;
 
 function getStorage(storage) {
@@ -109,6 +114,8 @@ function getEntry(target) {
       raw: undefined,
       data: {},
       pending: new Map(),
+      prunedRaw: undefined,
+      pruned: {},
       timer: null,
       warned: false,
     };
@@ -138,6 +145,61 @@ function loadFresh(target) {
   return data;
 }
 
+/** Prune markers written by any tab; parses only when the raw string changed. */
+function loadPruned(target, entry) {
+  let raw;
+  try {
+    raw = target.getItem(PRUNED_KEY);
+  } catch {
+    return {};
+  }
+  if (!raw) return {};
+  if (entry.prunedRaw === raw) return entry.pruned;
+  let marks = {};
+  try {
+    const parsed = JSON.parse(raw);
+    if (isRecord(parsed)) {
+      Object.keys(parsed).forEach((id) => {
+        if (Number.isFinite(parsed[id])) marks[id] = parsed[id];
+      });
+    }
+  } catch {
+    marks = {};
+  }
+  entry.prunedRaw = raw;
+  entry.pruned = marks;
+  return marks;
+}
+
+/** Keeps only pending records newer than the id's prune marker, if any. */
+function dropPrunedRecords(records, prunedAt) {
+  if (prunedAt === undefined) return records;
+  return records.filter((record) => recordTime(record) > prunedAt);
+}
+
+/** Stores prune markers for `ids` (best effort), bounded to PRUNED_MAX. */
+function markPruned(target, entry, ids, now) {
+  const marks = { ...loadPruned(target, entry) };
+  ids.forEach((id) => {
+    marks[id] = now;
+  });
+  const kept = Object.keys(marks)
+    .sort((a, b) => marks[b] - marks[a])
+    .slice(0, PRUNED_MAX);
+  const next = {};
+  kept.forEach((id) => {
+    next[id] = marks[id];
+  });
+  try {
+    const raw = JSON.stringify(next);
+    target.setItem(PRUNED_KEY, raw);
+    entry.prunedRaw = raw;
+    entry.pruned = next;
+  } catch {
+    // Best-effort: without a marker the other tab may write the id back once.
+  }
+}
+
 function flushTarget(target) {
   const entry = cache.get(target);
   if (!entry) return;
@@ -148,8 +210,10 @@ function flushTarget(target) {
     return;
   }
   const next = { ...loadFresh(target) };
-  entry.pending.forEach((records, id) => {
-    next[id] = mergeRecords(next[id], records);
+  const pruned = loadPruned(target, entry);
+  entry.pending.forEach((all, id) => {
+    const records = dropPrunedRecords(all, pruned[id]);
+    if (records.length) next[id] = mergeRecords(next[id], records);
   });
   try {
     const raw = JSON.stringify(next);
@@ -245,8 +309,12 @@ export function recordCheck(id, result, storage, now = Date.now()) {
   };
 }
 
-/** Drops history for entries that no longer exist (stored and pending). */
-export function pruneHistory(validIds, storage) {
+/**
+ * Drops history for entries that no longer exist (stored and pending) and
+ * leaves a timestamped marker so other tabs do not write older pending records
+ * of those ids back. Only records newer than the prune can recreate an id.
+ */
+export function pruneHistory(validIds, storage, now = Date.now()) {
   const target = getStorage(storage);
   if (!target) return;
   const keep = new Set(validIds);
@@ -257,6 +325,10 @@ export function pruneHistory(validIds, storage) {
   const fresh = loadFresh(target);
   const stale = Object.keys(fresh).filter((id) => !keep.has(id));
   if (!stale.length) return;
+  // Known limitation: only ids present in the stored blob get a marker. An id
+  // that exists solely in another tab's unflushed pending records cannot be
+  // detected here and is written back by that tab at its next flush.
+  markPruned(target, entry, stale, now);
   const next = { ...fresh };
   stale.forEach((id) => delete next[id]);
   try {
