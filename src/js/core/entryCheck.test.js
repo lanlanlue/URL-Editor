@@ -60,6 +60,7 @@ describe('runEntryCheck', () => {
     expect(second.recovered).toBe(false);
     const third = await runEntryCheck(entry, check);
     expect(third.recovered).toBe(true);
+    expect(getHistory('e4')).toHaveLength(3);
   });
 
   test('propagates checker rejection', async () => {

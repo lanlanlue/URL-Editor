@@ -1301,7 +1301,12 @@ describe('Pages API boundary', () => {
             { ...envelope(1), ciphertext: base64Url(new Uint8Array(15)) },
           ],
           ['empty ciphertext', { ...envelope(1), ciphertext: '' }],
-          ['missing field', (({ iv, ...rest }) => rest)(envelope(1))],
+          [
+            'missing field',
+            Object.fromEntries(
+              Object.entries(envelope(1)).filter(([key]) => key !== 'iv')
+            ),
+          ],
           ['array body', []],
           ['null body', null],
         ])('rejects an invalid envelope: %s', async (_label, body) => {
