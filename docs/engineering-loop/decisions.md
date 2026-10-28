@@ -11,3 +11,5 @@
 9. B19 (cloudSyncModal placeholder migration) is outside Worker B's ownership and left for a human decision because the guest record is already preserved.
 10. B12 (auto-sync ETag overwrite) remains a design item for the user; not implemented.
 11. Worker C's first B19 version was sent back after review showed the placeholder guard could be cleared by non-data saves (view/sort), because uploadCurrentData's fresh-ETag fetch (B12) would then let an empty payload overwrite remote data.
+12. B29 reverted: a wall-clock prune marker drops valid records under skew and id reuse; the harmless orphan id it targets is accepted instead.
+13. Local reset of main from c2a6d5b to d13637d (unpushed merge commit) after a flaky test appeared post-integration; the worker branch kept the commits and was re-merged after the fix.

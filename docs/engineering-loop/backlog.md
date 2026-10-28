@@ -57,3 +57,7 @@ Cross-isolate rate limiting, expired-session purge and storage caps (Cloudflare 
 - Worker H (ff to d033857): B16, B17, B22, B25, B26, B20(map cleanup). Worker G (merge 957ded6): B13a/b, B20(liveTestModal), B27, after one rework (checkHistory two-tab loss).
 - New low-priority items: B28 (history ordering by flush order), B29 (prune vs another tab's pending records), B30 (dialog close paths unverified in a real browser).
 - Still open: B21, B28, B29, B30 and the infra items. See final-report.md.
+
+## Round 5 (integrated c4dfbc6)
+- B21 (part) INTEGRATED (3db5434, d13637d). B28 INTEGRATED after two reworks (final: untrusted `t` ranks oldest). B30 INTEGRATED. B29 REVERTED (clock-dependent, can drop valid records); limitation documented.
+- Open (all P3): B21 remainder (backup prune/restore UI, account-scope detection), B29 orphan id, B28 residual clock cases, B30 real-browser check, and the infra items.
