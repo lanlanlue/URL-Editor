@@ -33,6 +33,19 @@ describe('Pages API boundary', () => {
     expect(await response.json()).toEqual({ googleClientId: '' });
   });
 
+  test.each([
+    'http://localhost/api/config',
+    'http://127.0.0.1/api/config',
+    'http://[::1]/api/config',
+  ])('exposes OAuth configuration on loopback dev host %s', async (url) => {
+    const response = await handleApiRequest(new Request(url), {
+      GOOGLE_CLIENT_ID: 'public-client-id',
+    });
+    expect(await response.json()).toEqual({
+      googleClientId: 'public-client-id',
+    });
+  });
+
   test('accepts the documented envelope and rejects unknown fields', () => {
     const valid = {
       revision: 1,
@@ -153,7 +166,11 @@ describe('Pages API boundary', () => {
       const db = makeDb([
         ['SELECT s.*', () => row],
         ['UPDATE sessions SET token_hash', () => ({ meta: { changes: 0 } })],
-        ['UPDATE sessions SET csrf_hash', () => ({ meta: { changes: 0 } })],
+        [
+          'SELECT token_hash FROM sessions',
+          () => ({ token_hash: 'winner-hash' }),
+        ],
+        ['UPDATE sessions SET csrf_hash', () => ({ meta: { changes: 1 } })],
       ]);
       const response = await handleApiRequest(
         req('/api/session', {
@@ -163,6 +180,117 @@ describe('Pages API boundary', () => {
       );
       expect(response.status).toBe(200);
       expect(response.headers.get('Set-Cookie')).toBeNull();
+    });
+
+    // Stateful sessions table modelling the REAL race: `table` holds what is in
+    // D1 when the loser runs; the loser's earlier SELECT s.* saw `stale`.
+    const raceDb = (stale, table, log) =>
+      makeDb([
+        ['SELECT s.*', () => ({ ...stale })],
+        ['UPDATE sessions SET token_hash', () => ({ meta: { changes: 0 } })],
+        [
+          'SELECT token_hash FROM sessions',
+          (sql, [userId, createdAt, authAt, expiresAt, rotatedAfter]) => {
+            log.reads.push(sql);
+            return (
+              table
+                .filter(
+                  (r) =>
+                    r.user_id === userId &&
+                    r.created_at === createdAt &&
+                    r.last_authenticated_at === authAt &&
+                    r.expires_at === expiresAt &&
+                    r.last_rotated_at > rotatedAfter
+                )
+                .sort((x, y) => y.last_rotated_at - x.last_rotated_at)[0] ||
+              null
+            );
+          },
+        ],
+        [
+          'UPDATE sessions SET csrf_hash',
+          (sql, [csrfHash, tokenHash]) => {
+            log.csrf.push([csrfHash, tokenHash]);
+            const hit = table.find((r) => r.token_hash === tokenHash);
+            if (hit) hit.csrf_hash = csrfHash;
+            return { meta: { changes: hit ? 1 : 0 } };
+          },
+        ],
+      ]);
+    const getSessionAsLoser = (db) =>
+      handleApiRequest(
+        req('/api/session', {
+          headers: { Cookie: '__Host-ue_session=old-token' },
+        }),
+        { DB: db }
+      );
+
+    test('B15: loser still resolves when the winner already rotated AND re-issued csrf_hash', async () => {
+      const stale = await sessionRow('old-token', { created_at: nowS() - 100 });
+      const winnerHash = await sha('winner-token');
+      const table = [
+        {
+          ...stale,
+          token_hash: winnerHash,
+          csrf_hash: await sha('winner-csrf'),
+          last_rotated_at: nowS(),
+        },
+      ];
+      const log = { reads: [], csrf: [] };
+      const response = await getSessionAsLoser(raceDb(stale, table, log));
+      expect(response.status).toBe(200);
+      expect(response.headers.get('Set-Cookie')).toBeNull();
+      expect(log.csrf).toHaveLength(1);
+      expect(log.csrf[0][1]).toBe(winnerHash);
+      const { csrfToken } = await response.json();
+      expect(await sha(csrfToken)).toBe(table[0].csrf_hash);
+      expect(log.reads[0]).not.toMatch(/csrf_hash/);
+    });
+
+    test('B15: a lost rotation race whose row vanished is treated as unauthenticated', async () => {
+      const stale = await sessionRow('old-token');
+      const log = { reads: [], csrf: [] };
+      const response = await getSessionAsLoser(raceDb(stale, [], log));
+      expect(response.status).toBe(401);
+      expect(log.csrf).toHaveLength(0);
+    });
+
+    test('B15: loser does not adopt a different session of the same user created in the same second', async () => {
+      const created = nowS() - 100;
+      const stale = await sessionRow('old-token', {
+        created_at: created,
+        last_authenticated_at: created,
+        expires_at: created + 86400,
+      });
+      const otherHash = await sha('other-session');
+      const winnerHash = await sha('winner-token');
+      const other = {
+        ...stale,
+        token_hash: otherHash,
+        // Same created_at/last_authenticated_at/expires_at, never rotated.
+        last_rotated_at: stale.last_rotated_at,
+      };
+      const winner = {
+        ...stale,
+        token_hash: winnerHash,
+        last_rotated_at: nowS(),
+      };
+      const log = { reads: [], csrf: [] };
+      const response = await getSessionAsLoser(
+        raceDb(stale, [other, winner], log)
+      );
+      expect(response.status).toBe(200);
+      expect(log.csrf[0][1]).toBe(winnerHash);
+      expect(log.csrf[0][1]).not.toBe(otherHash);
+    });
+
+    test('B15: only a never-rotated look-alike session exists -> not adopted (401)', async () => {
+      const stale = await sessionRow('old-token');
+      const other = { ...stale, token_hash: await sha('other-session') };
+      const log = { reads: [], csrf: [] };
+      const response = await getSessionAsLoser(raceDb(stale, [other], log));
+      expect(response.status).toBe(401);
+      expect(log.csrf).toHaveLength(0);
     });
 
     test('B3: sets the rotated cookie when the rotation UPDATE changed exactly 1 row', async () => {
@@ -1098,18 +1226,8 @@ describe('Pages API boundary', () => {
         });
       const freshRow = (extra = {}) =>
         sessionRow('tok', { last_rotated_at: nowS(), ...extra });
-      // KNOWN BUG (reported, not fixed): handleApiRequest does `return
-      // handleSyncGet(...)` etc. without `await`, so a Response thrown by
-      // requireSession/requireCsrf (and any DB error) rejects the returned
-      // promise instead of being caught and returned. `settle` unwraps that
-      // thrown Response so the 401/403 payload contract is still verified.
-      const settle = (promise) =>
-        promise.catch((error) => {
-          if (error instanceof Response) return error;
-          throw error;
-        });
       const call = (request, handlers) =>
-        settle(handleApiRequest(request, { DB: makeDb(handlers) }));
+        handleApiRequest(request, { DB: makeDb(handlers) });
 
       describe('every protected route requires a session', () => {
         const noCookie = [
@@ -1121,15 +1239,76 @@ describe('Pages API boundary', () => {
           ['DELETE', '/api/account'],
         ];
         test.each(noCookie)('%s %s -> 401', async (method, path) => {
-          const response = await settle(
-            handleApiRequest(
-              req(path, { method, headers: { Origin: ORIGIN } }),
-              { DB: makeDb([]) }
-            )
+          const promise = handleApiRequest(
+            req(path, { method, headers: { Origin: ORIGIN } }),
+            { DB: makeDb([]) }
           );
+          await expect(promise).resolves.toBeInstanceOf(Response);
+          const response = await promise;
           expect(response.status).toBe(401);
           expect((await response.json()).code).toBe('UNAUTHORIZED');
         });
+      });
+
+      describe('errors inside awaited route handlers resolve to JSON Responses (B23)', () => {
+        const dbError = () => {
+          throw new Error('D1 exploded');
+        };
+        const cases = [
+          [
+            'GET /api/sync',
+            () => authed('/api/sync'),
+            [['SELECT * FROM sync_documents', dbError]],
+          ],
+          [
+            'GET /api/sync/revisions',
+            () => authed('/api/sync/revisions'),
+            [['FROM sync_revisions', dbError]],
+          ],
+          [
+            'GET /api/sync/revisions/1',
+            () => authed('/api/sync/revisions/1'),
+            [['FROM sync_revisions', dbError]],
+          ],
+          [
+            'POST /api/logout',
+            () => authed('/api/logout', { method: 'POST' }),
+            [['DELETE FROM sessions', dbError]],
+          ],
+          [
+            'DELETE /api/account',
+            () =>
+              authed('/api/account', {
+                method: 'DELETE',
+                body: JSON.stringify({ confirmation: 'DELETE' }),
+              }),
+            [['DELETE FROM sync_revisions', dbError]],
+          ],
+          [
+            'PUT /api/sync',
+            () =>
+              authed('/api/sync', {
+                method: 'PUT',
+                headers: { 'If-Match': '"rev-0"' },
+                body: JSON.stringify(envelope(1)),
+              }),
+            [['SELECT * FROM sync_documents', dbError]],
+          ],
+        ];
+        test.each(cases)(
+          '%s with a DB error resolves to 500 INTERNAL_ERROR',
+          async (name, makeRequest, extra) => {
+            const row = await freshRow();
+            const promise = call(makeRequest(), [
+              ['SELECT s.*', () => row],
+              ...extra,
+            ]);
+            await expect(promise).resolves.toBeInstanceOf(Response);
+            const response = await promise;
+            expect(response.status).toBe(500);
+            expect((await response.json()).code).toBe('INTERNAL_ERROR');
+          }
+        );
       });
 
       describe('origin and CSRF checks on mutations', () => {
