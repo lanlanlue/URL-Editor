@@ -31,6 +31,10 @@ export function isStorageUnreadable() {
  * next save may replace the unreadable record. A copy of it was already kept
  * under `unreadable-backup:<record id>`.
  */
+export function hasUnreadableGuestRecord() {
+  return unreadableScope === 'guest';
+}
+
 export function markStorageRecovered() {
   unreadableScope = null;
 }
@@ -349,6 +353,10 @@ export async function deleteCurrentAccountLocalState(accountId) {
 
 export async function clearGuestState() {
   if (backend !== 'indexeddb' || !database) return;
+  // Sign-in migration calls this after copying guest data into the account.
+  // An unreadable, unrecovered guest record was never copied (it could not be
+  // read), so deleting it would destroy the only remaining copy.
+  if (unreadableScope === 'guest') return;
   await deleteRecord(recordId('guest'));
   await deleteRecord('local');
   if (context.scope === 'guest') await createGuestContext();

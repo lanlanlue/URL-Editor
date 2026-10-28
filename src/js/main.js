@@ -370,12 +370,19 @@ function hideUnreadableNotice() {
   document.querySelector('[data-storage-unreadable-notice]')?.remove();
 }
 
+// The notice is a pure function of the storage state; call after any event
+// that can change it (save attempts, restores, scope switches).
+function syncUnreadableNotice() {
+  if (isStorageUnreadable()) showUnreadableNotice();
+  else hideUnreadableNotice();
+}
+
 function saveState() {
+  syncUnreadableNotice();
   if (isStorageUnreadable()) {
     // Persisting now would overwrite the unreadable record with placeholder
     // data (and broadcast it to sync listeners). Skip, but tell the user.
     console.warn('Skipped saving: the stored data could not be decrypted.');
-    showUnreadableNotice();
     return;
   }
   stampChangedEntities();
@@ -1061,7 +1068,7 @@ function initPanelResizer() {
   window.addEventListener('touchend', stopDragging);
 }
 
-function restoreCloudData(data) {
+function restoreCloudData(data, options = {}) {
   if (!data || !Array.isArray(data.urls)) return;
   appState.urls = normalizeUrlEntries(data.urls);
   if (Array.isArray(data.presets)) appState.presets = data.presets;
@@ -1079,13 +1086,14 @@ function restoreCloudData(data) {
   // The restored data already carries the stamps of the device that wrote it.
   // Treat it as persisted so saveState() does not re-stamp it as a local edit.
   refreshPersistedSnapshots();
-  if (isStorageUnreadable()) {
-    // An explicit restore is the recovery path for an unreadable record (a
-    // copy of it is kept by secureStorage), so allow this save through.
+  if (options.confirmedRecovery === true && isStorageUnreadable()) {
+    // Only a caller that explicitly confirms recovery may replace an
+    // unreadable record (a copy of it is kept by secureStorage). Restored data
+    // alone cannot tell a placeholder from genuinely empty remote data.
     markStorageRecovered();
-    hideUnreadableNotice();
   }
-  saveState();
+  saveState(); // also re-evaluates the notice
+  syncUnreadableNotice();
   renderUrlList();
 }
 

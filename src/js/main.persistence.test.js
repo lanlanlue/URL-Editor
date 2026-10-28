@@ -118,12 +118,28 @@ describe('B1: unreadable encrypted record', () => {
     expect(notice.textContent).toMatch(/not (being )?saved/i);
   });
 
-  test('an explicit cloud restore recovers: clears the flag, persists, hides the notice', async () => {
+  test('a restore without confirmedRecovery never clears the unreadable flag', async () => {
     const { saveSecureState, cloudOptions, markStorageRecovered } =
       await loadMain({ initialState: unreadableState });
+    // Indistinguishable from genuinely empty remote data: must not recover.
+    cloudOptions.onRestore({ urls: [] });
     cloudOptions.onRestore({
       urls: [{ id: 'r1', url: 'https://remote.example/' }],
     });
+    expect(markStorageRecovered).not.toHaveBeenCalled();
+    expect(saveSecureState).not.toHaveBeenCalled();
+    expect(
+      document.querySelector('[data-storage-unreadable-notice]')
+    ).toBeTruthy();
+  });
+
+  test('a restore with confirmedRecovery recovers: clears the flag, persists, hides the notice', async () => {
+    const { saveSecureState, cloudOptions, markStorageRecovered } =
+      await loadMain({ initialState: unreadableState });
+    cloudOptions.onRestore(
+      { urls: [{ id: 'r1', url: 'https://remote.example/' }] },
+      { confirmedRecovery: true }
+    );
     expect(markStorageRecovered).toHaveBeenCalled();
     expect(saveSecureState).toHaveBeenCalled();
     expect(lastSavedState(saveSecureState).urls[0].id).toBe('r1');
