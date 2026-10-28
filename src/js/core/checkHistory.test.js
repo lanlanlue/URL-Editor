@@ -377,30 +377,67 @@ describe('checkHistory with two tabs on one storage', () => {
   describe('untrusted record times (bad clocks)', () => {
     const key = 'urlEditorCheckHistory';
     const SKEW = 5 * 60 * 1000;
+    const BASE = 1_800_000_000_000;
+    // Gaps between the real record and the merge/flush, all strictly > 0.
+    const gaps = Array.from({ length: 50 }, (_, i) =>
+      i < 25 ? i + 1 : (i - 24) * 17_000
+    );
 
-    test('20 far-future stored records do not hide a later real record or poison previous', () => {
-      const store = memoryStorage();
-      const now = Date.now();
-      const bogus = Array.from({ length: 20 }, (_, i) => ({
-        t: now + 1e12 + i,
-        r: `bogus${i}`,
+    beforeEach(() => {
+      jest.useFakeTimers();
+      jest.setSystemTime(BASE);
+    });
+
+    const bogusRecords = (n, t, prefix = 'bogus') =>
+      Array.from({ length: n }, (_, i) => ({
+        t,
+        r: `${prefix}${i}`,
         ok: true,
       }));
-      store.setItem(key, JSON.stringify({ x: bogus }));
-      const B = loadInstance();
-      const out = B.recordCheck('x', { status: 'offline' }, store, now);
-      expect(out.record.t).toBe(now);
-      B.flushHistory();
-      const persisted = JSON.parse(store.getItem(key)).x;
-      expect(persisted).toHaveLength(B.HISTORY_LIMIT);
-      expect(persisted[persisted.length - 1].r).toBe(out.record.r);
-      expect(Math.max(...persisted.map((r) => r.t))).toBeLessThan(
-        now + SKEW + 1000
-      );
-      // The next check compares against the real record, not a bogus one.
-      const next = B.recordCheck('x', { status: 'online' }, store, now + 1);
-      expect(next.previous.r).toBe(out.record.r);
-      expect(next.recovered).toBe(true);
+
+    test('20 far-future stored records never hide a real record or poison previous (50 clock gaps)', () => {
+      gaps.forEach((gap) => {
+        jest.setSystemTime(BASE);
+        const store = memoryStorage();
+        store.setItem(
+          key,
+          JSON.stringify({ x: bogusRecords(20, BASE + 1e12) })
+        );
+        const B = loadInstance();
+        const out = B.recordCheck('x', { status: 'offline' }, store);
+        expect(out.previous.r).toBe('bogus19'); // only history there is
+        jest.setSystemTime(BASE + gap); // merge strictly later than the record
+        B.flushHistory();
+        const persisted = JSON.parse(store.getItem(key)).x;
+        expect(persisted).toHaveLength(B.HISTORY_LIMIT);
+        expect(persisted[persisted.length - 1].r).toBe(out.record.r);
+        const next = B.recordCheck('x', { status: 'online' }, store);
+        expect(next.previous.r).toBe(out.record.r);
+        expect(next.recovered).toBe(true);
+        // Existing stored records are never rewritten.
+        expect(persisted[0].t).toBe(BASE + 1e12);
+      });
+    });
+
+    test('20 far-future plus 20 real records: the 20 real ones survive (50 clock gaps)', () => {
+      gaps.forEach((gap) => {
+        jest.setSystemTime(BASE);
+        const store = memoryStorage();
+        store.setItem(
+          key,
+          JSON.stringify({ x: bogusRecords(20, BASE + 1e12) })
+        );
+        const B = loadInstance();
+        const real = [];
+        for (let i = 0; i < 20; i += 1) {
+          real.push(B.recordCheck('x', { status: 'online' }, store).record.r);
+          jest.setSystemTime(BASE + i + 1);
+        }
+        jest.setSystemTime(BASE + 100 + gap);
+        B.flushHistory();
+        const persisted = JSON.parse(store.getItem(key)).x;
+        expect(persisted.map((r) => r.r)).toEqual(real);
+      });
     });
 
     test.each([
@@ -408,47 +445,65 @@ describe('checkHistory with two tabs on one storage', () => {
       ['Infinity', Infinity],
       ['NaN', NaN],
       ['string', '5'],
-    ])('a %s time is treated as now, not trusted', (_name, bad) => {
+      ['just beyond the skew', null],
+    ])(
+      'a %s stored time ranks oldest, real records win (50 clock gaps)',
+      (_n, raw) => {
+        gaps.forEach((gap) => {
+          jest.setSystemTime(BASE);
+          // Beyond the skew: untrusted only until the clock catches up (gap < 60s).
+          if (raw === null && gap >= 60_000) return;
+          const bad = raw === null ? BASE + SKEW + 60_000 : raw;
+          const store = memoryStorage();
+          // JSON turns NaN/Infinity into null, which is also "unknown".
+          store.setItem(key, JSON.stringify({ y: bogusRecords(20, bad) }));
+          const B = loadInstance();
+          const out = B.recordCheck('y', { status: 'offline' }, store);
+          jest.setSystemTime(BASE + gap);
+          B.flushHistory();
+          const persisted = JSON.parse(store.getItem(key)).y;
+          expect(persisted).toHaveLength(B.HISTORY_LIMIT);
+          expect(persisted[persisted.length - 1].r).toBe(out.record.r);
+          expect(
+            B.recordCheck('y', { status: 'online' }, store).previous.r
+          ).toBe(out.record.r);
+        });
+      }
+    );
+
+    test.each([
+      ['1e300', 1e300],
+      ['Infinity', Infinity],
+      ['NaN', NaN],
+      ['string', '5'],
+    ])('recordCheck with a %s now stamps the real current time', (_n, bad) => {
       const store = memoryStorage();
       const A = loadInstance();
-      const now = Date.now();
-      const out = A.recordCheck('x', { status: 'online' }, store, bad);
-      expect(Number.isFinite(out.record.t)).toBe(true);
-      expect(out.record.t).toBeLessThan(now + SKEW + 1000);
-      expect(out.record.t).toBeGreaterThanOrEqual(now);
-      // A bad time that is already stored is also neutralised when merged.
-      store.setItem(key, JSON.stringify({ y: [{ t: bad, r: 'b', ok: true }] }));
-      const B = loadInstance();
-      const read = B.getHistory('y', store);
-      expect(read).toHaveLength(1);
-      expect(read[0].t == null || Number.isFinite(read[0].t)).toBe(true);
-      const real = B.recordCheck('y', { status: 'offline' }, store, now);
-      expect(real.previous.r).toBe('b');
-      B.flushHistory();
-      const stored = JSON.parse(store.getItem(key)).y;
-      expect(stored.every((r) => r.t == null || Number.isFinite(r.t))).toBe(
-        true
-      );
+      const out = A.recordCheck('z', { status: 'online' }, store, bad);
+      expect(out.record.t).toBe(BASE);
     });
 
-    test('a record within the allowed skew keeps its position', () => {
-      const store = memoryStorage();
-      const now = Date.now();
-      const ahead = now + SKEW - 1000; // fast clock, still trusted
-      const behind = now - 10 * 60 * 1000; // slow clock
-      store.setItem(
-        key,
-        JSON.stringify({
-          x: [
-            { t: behind, r: 'b', ok: true },
-            { t: ahead, r: 'a', ok: true },
-          ],
-        })
-      );
-      const A = loadInstance();
-      const hist = A.getHistory('x', store);
-      expect(hist.map((r) => r.r)).toEqual(['b', 'a']);
-      expect(hist[1].t).toBe(ahead);
+    test('records inside the skew and a tab 10 minutes behind keep their position (50 clock gaps)', () => {
+      gaps.forEach((gap) => {
+        jest.setSystemTime(BASE);
+        const ahead = BASE + SKEW - 1000; // fast clock, still trusted
+        const behind = BASE - 10 * 60 * 1000; // slow clock
+        const store = memoryStorage();
+        store.setItem(
+          key,
+          JSON.stringify({
+            x: [
+              { t: ahead, r: 'a', ok: true },
+              { t: behind, r: 'b', ok: true },
+            ],
+          })
+        );
+        const A = loadInstance();
+        jest.setSystemTime(BASE + Math.min(gap, 900)); // ahead still trusted
+        expect(A.getHistory('x', store).map((r) => r.r)).toEqual(['b', 'a']);
+        const out = A.recordCheck('x', { status: 'online' }, store);
+        expect(out.previous.r).toBe('a');
+      });
     });
   });
 

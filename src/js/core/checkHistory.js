@@ -72,11 +72,12 @@ function recordKey(record) {
 }
 
 // A record time is trusted only if it is a finite number no later than
-// "now + MAX_CLOCK_SKEW_MS". Tabs/devices with a fast clock (or corrupt data)
-// would otherwise outrank every real record forever: the cap would drop the
-// real ones and `previous` would stay pinned to stale data. Five minutes
+// "Date.now() + MAX_CLOCK_SKEW_MS". A device with a fast clock (or corrupt
+// data) would otherwise outrank every real record forever: the cap would drop
+// the real ones and `previous` would stay pinned to stale data. Five minutes
 // tolerates ordinary clock drift; slow clocks are always fine (they only look
-// older).
+// older). The test is time-dependent: a record stamped now+6min is untrusted
+// at first and becomes trusted once the clock catches up. That is acceptable.
 const MAX_CLOCK_SKEW_MS = 5 * 60 * 1000;
 
 /** `now` if it is a sane time, else the real current time. */
@@ -86,48 +87,40 @@ function trustedNow(now) {
 }
 
 /**
- * Time used for ordering. Missing/null `t` (legacy or corrupt, includes
- * JSON-serialised NaN/Infinity) sorts oldest; any other untrusted `t`
- * (non-number, non-finite, too far in the future) counts as `ref`.
+ * Time used for ordering. A time that is missing, null (legacy, or JSON
+ * NaN/Infinity), not a number, non-finite or too far in the future means
+ * "unknown": it ranks OLDEST (stable by append order among such records), so
+ * real records always outrank it and the cap evicts it first. Stored records
+ * are never rewritten; only the ordering ignores the untrusted value.
  */
-function recordTime(record, ref) {
+function recordTime(record) {
   const t = record.t;
-  if (t === undefined || t === null) return -Infinity;
   if (
     typeof t === 'number' &&
     Number.isFinite(t) &&
-    t <= ref + MAX_CLOCK_SKEW_MS
+    t <= Date.now() + MAX_CLOCK_SKEW_MS
   )
     return t;
-  return ref;
-}
-
-/** Copy of `record` with an untrusted `t` replaced by `ref` (else same object). */
-function withTrustedTime(record, ref) {
-  const t = record.t;
-  if (t === undefined || t === null) return record;
-  return recordTime(record, ref) === t ? record : { ...record, t: ref };
+  return -Infinity;
 }
 
 /**
  * Merges `extra` into `base`, skipping duplicates, ordered by record time `t`
  * (stable: ties keep append order, so base precedes extra), then keeps the
- * newest HISTORY_LIMIT by time. Untrusted times are replaced (see recordTime)
- * so one bad clock cannot pin stale data. Ordering by time, not by flush
- * order, keeps the cap and "previous" correct when several tabs flush out of
- * order.
+ * newest HISTORY_LIMIT by time. Ordering by time, not by flush order, keeps
+ * the cap and "previous" correct when several tabs flush out of order.
  */
-function mergeRecords(base = [], extra = [], ref = Date.now()) {
+function mergeRecords(base = [], extra = []) {
   const seen = new Set(base.map(recordKey));
-  const merged = base.map((record) => withTrustedTime(record, ref));
+  const merged = [...base];
   extra.forEach((record) => {
     const key = recordKey(record);
     if (!seen.has(key)) {
       seen.add(key);
-      merged.push(withTrustedTime(record, ref));
+      merged.push(record);
     }
   });
-  const times = merged.map((record) => recordTime(record, ref));
+  const times = merged.map(recordTime);
   let sorted = true;
   for (let i = 1; i < times.length; i += 1) {
     if (times[i] < times[i - 1]) {
@@ -136,9 +129,9 @@ function mergeRecords(base = [], extra = [], ref = Date.now()) {
     }
   }
   if (!sorted) {
-    // Array.prototype.sort is stable (ES2019).
+    // Explicit index tie-break keeps the sort stable.
     const order = merged.map((_, i) => i);
-    order.sort((x, y) => times[x] - times[y] || x - y);
+    order.sort((x, y) => (times[x] === times[y] ? x - y : times[x] - times[y]));
     return order.slice(-HISTORY_LIMIT).map((i) => merged[i]);
   }
   return merged.slice(-HISTORY_LIMIT);
@@ -233,15 +226,14 @@ function scheduleFlush(target, entry) {
   }
 }
 
-function readRecords(id, storage, ref = Date.now()) {
+function readRecords(id, storage) {
   const target = getStorage(storage);
   if (!target) return [];
   const entry = getEntry(target);
   const fresh = loadFresh(target)[id];
   return mergeRecords(
     Array.isArray(fresh) ? fresh : [],
-    entry.pending.get(id) || [],
-    ref
+    entry.pending.get(id) || []
   );
 }
 
@@ -264,7 +256,7 @@ export function getHistory(id, storage) {
  */
 export function recordCheck(id, result, storage, nowArg = Date.now()) {
   const now = trustedNow(nowArg);
-  const records = readRecords(id, storage, now);
+  const records = readRecords(id, storage);
   const previous = records[records.length - 1] || null;
   const record = {
     t: now,
@@ -278,10 +270,7 @@ export function recordCheck(id, result, storage, nowArg = Date.now()) {
   const target = getStorage(storage);
   if (target) {
     const entry = getEntry(target);
-    entry.pending.set(
-      id,
-      mergeRecords(entry.pending.get(id) || [], [record], now)
-    );
+    entry.pending.set(id, mergeRecords(entry.pending.get(id) || [], [record]));
     scheduleFlush(target, entry);
   }
   return {
