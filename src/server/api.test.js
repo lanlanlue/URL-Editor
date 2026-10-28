@@ -319,5 +319,144 @@ describe('Pages API boundary', () => {
         expect((await response.json()).code).toBe('PAYLOAD_TOO_LARGE');
       });
     });
+
+    describe('B9: Google credential verification', () => {
+      const CLIENT_ID = 'test-client-id';
+      const toB64Url = (value) =>
+        base64Url(
+          typeof value === 'string' ? new TextEncoder().encode(value) : value
+        );
+      let keyPair;
+      let publicJwk;
+      let ipCounter = 0;
+      const loadApi = () => {
+        let api;
+        jest.isolateModules(() => {
+          api = require('./api.js');
+        });
+        return api;
+      };
+      const signedCredential = async (claimsOverride = {}, removeExp) => {
+        const header = toB64Url(JSON.stringify({ alg: 'RS256', kid: 'k1' }));
+        const claims = {
+          iss: 'https://accounts.google.com',
+          aud: CLIENT_ID,
+          email_verified: true,
+          sub: 'google-sub-1',
+          email: 'a@example.com',
+          exp: nowS() + 3600,
+          ...claimsOverride,
+        };
+        if (removeExp) delete claims.exp;
+        const payload = toB64Url(JSON.stringify(claims));
+        const signature = await crypto.subtle.sign(
+          { name: 'RSASSA-PKCS1-v1_5' },
+          keyPair.privateKey,
+          new TextEncoder().encode(`${header}.${payload}`)
+        );
+        return `${header}.${payload}.${toB64Url(new Uint8Array(signature))}`;
+      };
+      const jwksFetch = () =>
+        jest.fn(async () => ({
+          ok: true,
+          json: async () => ({ keys: [{ ...publicJwk, kid: 'k1' }] }),
+          headers: new Headers(),
+        }));
+      const loginWith = (api, credential) => {
+        const csrf = 'oauth-csrf';
+        const db = makeDb([
+          ['SELECT id FROM users', () => ({ id: 'user-1' })],
+          ['', () => ({ meta: { changes: 1 } })],
+        ]);
+        return api.handleApiRequest(
+          req('/api/auth/google', {
+            method: 'POST',
+            headers: {
+              Origin: ORIGIN,
+              Cookie: `__Host-ue_oauth_csrf=${csrf}`,
+              'CF-Connecting-IP': `b9-${++ipCounter}`,
+            },
+            body: JSON.stringify({ credential, csrfToken: csrf }),
+          }),
+          { DB: db, GOOGLE_CLIENT_ID: CLIENT_ID }
+        );
+      };
+      const realFetch = global.fetch;
+      afterEach(() => {
+        global.fetch = realFetch;
+        jest.useRealTimers();
+      });
+
+      beforeAll(async () => {
+        keyPair = await crypto.subtle.generateKey(
+          {
+            name: 'RSASSA-PKCS1-v1_5',
+            modulusLength: 2048,
+            publicExponent: new Uint8Array([1, 0, 1]),
+            hash: 'SHA-256',
+          },
+          true,
+          ['sign', 'verify']
+        );
+        publicJwk = await crypto.subtle.exportKey('jwk', keyPair.publicKey);
+      });
+
+      test('accepts a valid, unexpired credential (control)', async () => {
+        global.fetch = jwksFetch();
+        const response = await loginWith(loadApi(), await signedCredential());
+        expect(response.status).toBe(200);
+      });
+
+      test('rejects a credential with no exp claim', async () => {
+        global.fetch = jwksFetch();
+        const response = await loginWith(
+          loadApi(),
+          await signedCredential({}, true)
+        );
+        expect(response.status).toBe(401);
+        expect((await response.json()).code).toBe('GOOGLE_TOKEN_INVALID');
+      });
+
+      test('rejects a credential with a non-numeric exp claim', async () => {
+        global.fetch = jwksFetch();
+        const response = await loginWith(
+          loadApi(),
+          await signedCredential({ exp: 'never' })
+        );
+        expect(response.status).toBe(401);
+        expect((await response.json()).code).toBe('GOOGLE_TOKEN_INVALID');
+      });
+
+      test('rejects an expired credential', async () => {
+        global.fetch = jwksFetch();
+        const response = await loginWith(
+          loadApi(),
+          await signedCredential({ exp: nowS() - 10 })
+        );
+        expect(response.status).toBe(401);
+      });
+
+      test('JWKS fetch carries an abort signal that fires after 3s', async () => {
+        jest.useFakeTimers();
+        let seenSignal;
+        global.fetch = jest.fn(
+          (url, init) =>
+            new Promise((resolve, reject) => {
+              seenSignal = init?.signal;
+              seenSignal?.addEventListener('abort', () =>
+                reject(new Error('aborted'))
+              );
+            })
+        );
+        const pending = loginWith(loadApi(), await signedCredential());
+        await jest.advanceTimersByTimeAsync(2900);
+        expect(seenSignal).toBeDefined();
+        expect(seenSignal.aborted).toBe(false);
+        await jest.advanceTimersByTimeAsync(200);
+        expect(seenSignal.aborted).toBe(true);
+        const response = await pending;
+        expect(response.status).toBe(401);
+      });
+    });
   });
 });

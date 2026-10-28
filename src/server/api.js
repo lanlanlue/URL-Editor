@@ -6,6 +6,7 @@ const SESSION_ROTATION_DAYS = 7;
 const RECENT_AUTH_MINUTES = 10;
 const HISTORY_LIMIT = 20;
 const HISTORY_RETENTION_DAYS = 30;
+const JWKS_TIMEOUT_MS = 3000;
 const GOOGLE_JWKS_URL = 'https://www.googleapis.com/oauth2/v3/certs';
 
 let googleJwksCache = null;
@@ -185,9 +186,22 @@ function exactKeys(object, allowed) {
 async function getGoogleJwks() {
   if (googleJwksCache && googleJwksCache.expiresAt > Date.now())
     return googleJwksCache.keys;
-  const response = await fetch(GOOGLE_JWKS_URL, { cf: { cacheTtl: 3600 } });
-  if (!response.ok) throw new Error('GOOGLE_JWKS_UNAVAILABLE');
-  const payload = await response.json();
+  // AbortController + timer rather than AbortSignal.timeout so it also works
+  // where that static is missing (jsdom); the timer covers the body read too.
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), JWKS_TIMEOUT_MS);
+  let response;
+  let payload;
+  try {
+    response = await fetch(GOOGLE_JWKS_URL, {
+      cf: { cacheTtl: 3600 },
+      signal: controller.signal,
+    });
+    if (!response.ok) throw new Error('GOOGLE_JWKS_UNAVAILABLE');
+    payload = await response.json();
+  } finally {
+    clearTimeout(timer);
+  }
   const maxAge = /max-age=(\d+)/i.exec(
     response.headers.get('Cache-Control') || ''
   )?.[1];
@@ -238,6 +252,7 @@ async function verifyGoogleCredential(credential, env) {
     !validSignature ||
     !issuerValid ||
     !audienceValid ||
+    !Number.isFinite(Number(claims.exp)) ||
     Number(claims.exp) <= nowSeconds() ||
     claims.email_verified !== true ||
     typeof claims.sub !== 'string'
