@@ -254,6 +254,7 @@
     "historyRestoreBtn": "Restore and merge",
     "historyRevision": "Revision {{revision}}",
     "historyEmpty": "No historical revision is available.",
+    "placeholderUploadBlocked": "Local data could not be read and there is nothing to upload yet; upload skipped to avoid overwriting cloud data.",
     "historyRestoreSuccess": "Historical revision {{revision}} was merged; the next sync will create a new revision.",
     "historyRestoreError": "The historical revision could not be decrypted or restored.",
     "offline": "You are offline. Changes remain local and will sync when the connection returns.",

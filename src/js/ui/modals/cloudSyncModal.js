@@ -473,7 +473,17 @@ async function uploadCurrentData({ force = false, retry = true } = {}) {
   if (!session || !encryptionContext)
     throw new Error('請先登入並解鎖 Recovery Key。');
   if (firstUploadRequired && !force) return;
-  if (placeholderOnly) return;
+  if (placeholderOnly) {
+    if (force)
+      setStatus(
+        i18next.t('cloudSync.placeholderUploadBlocked', {
+          defaultValue:
+            '本機資料無法讀取，尚無可上傳的資料；已略過上傳以避免覆蓋雲端資料。',
+        }),
+        true
+      );
+    return;
+  }
   await refreshRemoteDocument();
   const nextRevision = Number(remoteDocument.revision || 0) + 1;
   const envelope = await encryptCloudPayload(
@@ -769,9 +779,15 @@ export function initCloudSyncModal(options = {}) {
   document
     .getElementById('cloud-sync-delete-account-btn')
     ?.addEventListener('click', handleDeleteAccount);
-  window.addEventListener('url-editor-data-change', () => {
-    // A real user change means the data is no longer just the placeholder.
-    if (!suppressAutomaticSync) placeholderOnly = false;
+  window.addEventListener('url-editor-data-change', (event) => {
+    // Only a save that carries user content (URLs or presets) means the data
+    // is no longer just the placeholder. View/sort saves and tombstones do not.
+    const detail = event?.detail;
+    if (
+      !suppressAutomaticSync &&
+      (detail?.urls?.length > 0 || detail?.presets?.length > 0)
+    )
+      placeholderOnly = false;
     scheduleAutomaticSync();
   });
   window.addEventListener('offline', handleNetworkChange);

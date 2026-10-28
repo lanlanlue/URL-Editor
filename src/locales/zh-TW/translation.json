@@ -254,6 +254,7 @@
     "historyRestoreBtn": "復原並合併",
     "historyRevision": "版本 {{revision}}",
     "historyEmpty": "目前沒有可復原的歷史版本。",
+    "placeholderUploadBlocked": "本機資料無法讀取，尚無可上傳的資料；已略過上傳以避免覆蓋雲端資料。",
     "historyRestoreSuccess": "已合併歷史版本 {{revision}}；下一次同步會建立新版本。",
     "historyRestoreError": "無法解密或復原歷史版本。",
     "offline": "目前離線；修改會保留在本機，恢復連線後自動同步。",

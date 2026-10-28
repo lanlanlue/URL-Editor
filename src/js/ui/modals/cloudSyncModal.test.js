@@ -90,7 +90,7 @@ async function setup({ unreadableGuest, localUrls, remoteUrls }) {
   document.getElementById('cloud-sync-recovery-input').value = 'KEY';
   document.getElementById('cloud-sync-unlock-btn').click();
   await flush();
-  return { secure, api, onRestore, getData };
+  return { secure, api, vault, onRestore, getData };
 }
 
 const urlIds = (call) => call[0].urls.map((u) => u.id).sort();
@@ -126,15 +126,82 @@ describe('cloudSyncModal unlock with unreadable guest record', () => {
     expect(api.putSyncDocument).not.toHaveBeenCalled();
   });
 
-  test('uploads again once the user makes a real change', async () => {
-    const { api } = await setup({
+  const dataChange = (detail) =>
+    window.dispatchEvent(new CustomEvent('url-editor-data-change', { detail }));
+  const placeholderSetup = () =>
+    setup({
       unreadableGuest: true,
       localUrls: [PLACEHOLDER],
       remoteUrls: null,
     });
+
+  test('a non-data save (empty urls/presets) keeps the upload blocked with a status', async () => {
+    const { api } = await placeholderSetup();
+    dataChange({
+      schemaVersion: 1,
+      urls: [],
+      presets: [],
+      tombstones: [{ id: 'url:x', deletedAt: 1 }],
+      sortMode: 'name',
+      viewMode: 'list',
+    });
+    await upload();
+    expect(api.putSyncDocument).not.toHaveBeenCalled();
+    expect(document.getElementById('cloud-sync-status').textContent).not.toBe(
+      ''
+    );
+  });
+
+  test('a bare event without detail keeps the upload blocked', async () => {
+    const { api } = await placeholderSetup();
     window.dispatchEvent(new Event('url-editor-data-change'));
     await upload();
+    expect(api.putSyncDocument).not.toHaveBeenCalled();
+  });
+
+  test('a save containing a real URL unblocks the upload', async () => {
+    const { api } = await placeholderSetup();
+    dataChange({ schemaVersion: 1, urls: [GUEST], presets: [] });
+    await upload();
     expect(api.putSyncDocument).toHaveBeenCalledTimes(1);
+  });
+
+  test('a save containing a real preset unblocks the upload', async () => {
+    const { api } = await placeholderSetup();
+    dataChange({ schemaVersion: 1, urls: [], presets: [{ id: 'p1' }] });
+    await upload();
+    expect(api.putSyncDocument).toHaveBeenCalledTimes(1);
+  });
+
+  test('a failed unlock restores the placeholder guard', async () => {
+    const { api, vault, onRestore } = await placeholderSetup();
+    // Second unlock finds remote data; restoreData clears the guard, then
+    // onRestore throws, so the catch path must put the guard back.
+    api.getSyncDocument.mockResolvedValue({
+      document: {
+        revision: 1,
+        keyVersion: 1,
+        kdfSalt: 'salt',
+        iv: 'iv',
+        ciphertext: 'ct',
+      },
+      etag: '"rev-1"',
+      revision: 1,
+    });
+    vault.decryptJson.mockResolvedValue({ urls: [REMOTE], presets: [] });
+    onRestore.mockImplementationOnce(() => {
+      throw new Error('restore failed');
+    });
+    document.getElementById('cloud-sync-recovery-input').value = 'KEY';
+    document.getElementById('cloud-sync-unlock-btn').click();
+    await flush();
+    api.getSyncDocument.mockResolvedValue({
+      document: null,
+      etag: '"rev-0"',
+      revision: 0,
+    });
+    await upload();
+    expect(api.putSyncDocument).not.toHaveBeenCalled();
   });
 });
 
