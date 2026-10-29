@@ -914,7 +914,11 @@ function importUrlJson(file) {
           })
         );
         const settingsDialog = document.getElementById('settings-modal');
-        if (settingsDialog && typeof settingsDialog.close === 'function' && settingsDialog.open) {
+        if (
+          settingsDialog &&
+          typeof settingsDialog.close === 'function' &&
+          settingsDialog.open
+        ) {
           settingsDialog.close();
         }
       } else {
@@ -975,7 +979,11 @@ function importUrlCsv(file) {
         renderUrlList();
         alert(i18next.t('urlList.importSuccess', { count }));
         const settingsDialog = document.getElementById('settings-modal');
-        if (settingsDialog && typeof settingsDialog.close === 'function' && settingsDialog.open) {
+        if (
+          settingsDialog &&
+          typeof settingsDialog.close === 'function' &&
+          settingsDialog.open
+        ) {
           settingsDialog.close();
         }
       } else {
@@ -1553,7 +1561,10 @@ async function bootstrap() {
   if (batchAddTagBtn) {
     batchAddTagBtn.addEventListener('click', () => {
       if (appState.selectedIds.size === 0) {
-        alert(i18next.t('urlList.batch.noSelection') || '請先勾選要新增標籤的網址項目。');
+        alert(
+          i18next.t('urlList.batch.noSelection') ||
+            '請先勾選要新增標籤的網址項目。'
+        );
         return;
       }
       const newTag = prompt(i18next.t('urlList.batch.promptAddTag'));
@@ -1588,7 +1599,9 @@ async function bootstrap() {
       }
       exportUrlJson(
         targets,
-        appState.selectedIds.size > 0 ? 'selected-urls.json' : 'urls-export.json'
+        appState.selectedIds.size > 0
+          ? 'selected-urls.json'
+          : 'urls-export.json'
       );
     });
   }

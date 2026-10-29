@@ -236,7 +236,10 @@ export function initializeSecureStorage() {
         };
       }
     } catch (err) {
-      console.warn('[SecureStorage IndexedDB Init Failed, falling back to legacy]:', err);
+      console.warn(
+        '[SecureStorage IndexedDB Init Failed, falling back to legacy]:',
+        err
+      );
       database = null;
       backend = 'legacy';
       return legacyState;
