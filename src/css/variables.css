@@ -49,10 +49,10 @@
   --shadow-lg: 0 8px 20px rgba(0, 0, 0, 0.6);
 
   /* Layout dimensions */
-  --topnav-height: 48px;
+  --topnav-height: 3.25rem;
   --editor-width-ratio: 1.15;
-  --sidebar-min-width: 360px;
-  --sidebar-max-width: 680px;
+  --sidebar-min-width: min(100%, 22rem);
+  --sidebar-max-width: 44rem;
 
   /* Legacy aliases (used by JS-generated cards/modals) */
   --bg-color:    var(--bg);
@@ -88,6 +88,10 @@ body.light,
   --card-border: var(--border);
   --btn-bg:      var(--surface-hover);
   --btn-hover:   #e2e8f0;
+  --neutral-700: #e2e8f0;
+  --neutral-800: #f1f5f9;
+  --neutral-900: #f8fafc;
+  --neutral-950: #ffffff;
   --btn-text:    var(--text-primary);
 }
 

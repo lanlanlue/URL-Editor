@@ -20,9 +20,22 @@ function openDialog(dialog) {
   else dialog.setAttribute('open', 'true');
 }
 
-function copyText(value) {
+function copyText(value, buttonEl) {
   if (!value || !navigator.clipboard?.writeText) return;
-  navigator.clipboard.writeText(value).catch(() => {});
+  navigator.clipboard
+    .writeText(value)
+    .then(() => {
+      if (buttonEl) {
+        const originalText = buttonEl.textContent;
+        buttonEl.textContent = i18next.t('urlList.card.copied') || '已複製';
+        setTimeout(() => {
+          buttonEl.textContent = originalText;
+        }, 1000);
+      }
+    })
+    .catch((err) => {
+      console.warn('[BatchStripper Clipboard Copy Failed]:', err);
+    });
 }
 
 function renderResults() {
@@ -60,8 +73,11 @@ export function initBatchStripperModal() {
     ?.addEventListener('input', renderResults);
   document
     .getElementById('batch-stripper-copy-btn')
-    ?.addEventListener('click', () => {
-      copyText(document.getElementById('batch-stripper-output')?.value || '');
+    ?.addEventListener('click', (event) => {
+      copyText(
+        document.getElementById('batch-stripper-output')?.value || '',
+        event.currentTarget
+      );
     });
   initialized = true;
 }

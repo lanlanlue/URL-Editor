@@ -202,7 +202,14 @@
       "cloudflare": "Cloudflare end-to-end encrypted sync",
       "webdav": "WebDAV (reserved)"
     },
-    "doneBtn": "Done"
+    "doneBtn": "Done",
+    "featuresTitle": "Preferences",
+    "backupTitle": "Data Backup & Restore",
+    "backupDesc": "Export or import your saved URLs for cross-device migration or offline backup.",
+    "jsonBackupLabel": "JSON Format",
+    "csvBackupLabel": "CSV Format",
+    "exportBtn": "↑ Export",
+    "importBtn": "↓ Import"
   },
   "urlDiff": {
     "btn": "⇄ URL Diff",
@@ -218,6 +225,41 @@
     "removed": "Removed parameters",
     "modified": "Modified parameters",
     "copyBtn": "Copy diff JSON"
+  },
+  "dualEditor": {
+    "btn": "⫽ Dual URL Editor",
+    "title": "⫽ Dual URL Editor Workspace",
+    "desc": "Inspect two URLs side-by-side, freely copy/paste, compare and adjust parameters.",
+    "colATitle": "URL A",
+    "colBTitle": "URL B",
+    "urlPlaceholder": "Enter or paste complete URL...",
+    "loadFromEditor": "Load from Editor",
+    "selectCardPlaceholder": "Choose saved card...",
+    "domain": "Domain:",
+    "path": "Path:",
+    "paramsTitle": "Query Parameters",
+    "addParam": "+ Add Parameter",
+    "paramKeyPlaceholder": "Key",
+    "paramValPlaceholder": "Value",
+    "copyValueTooltip": "Copy value",
+    "copiedValueTooltip": "Copied!",
+    "sendToOppositeTooltip": "Send to other side",
+    "deleteParamTooltip": "Delete parameter",
+    "rebuiltLabel": "Rebuilt URL:",
+    "rebuiltEmpty": "(Enter a valid URL)",
+    "invalidUrl": "(Invalid URL format)",
+    "noParams": "(No Query parameters)",
+    "copyUrl": "📋 Copy URL",
+    "copiedUrl": "✅ Copied",
+    "applyToEditor": "⬇️ Apply to Editor",
+    "appliedToEditor": "✅ Applied",
+    "saveAsCard": "⭐ Save Card",
+    "savedAsCard": "✅ Saved",
+    "swapBtn": "⇄ Swap A / B",
+    "clearAllBtn": "🔄 Clear Both",
+    "maximizeBtn": "Maximize window",
+    "restoreBtn": "Restore window size",
+    "doneBtn": "Done"
   },
   "redirect": {
     "btn": "↪ Redirect Rules",
@@ -267,7 +309,9 @@
     "noRemoteData": "There is no cloud backup yet.",
     "restoreSuccess": "Encrypted data downloaded and merged.",
     "rotationSuccess": "Recovery Key rotated. Back up the new key.",
-    "deletePrompt": "Type DELETE to permanently delete the account and ciphertext:"
+    "deletePrompt": "Type DELETE to permanently delete the account and ciphertext:",
+    "recoveryPlaceholder": "Paste Recovery Key (e.g. URE1-...)",
+    "recoveryInputRequired": "Please paste the Recovery Key into the input field below."
   },
   "marketing": {
     "title": "Marketing Toolkit",
@@ -360,5 +404,25 @@
       "offlineWarn": "⚠️ Unable to connect to this website! Please verify the URL format, network, or server status."
     },
     "emptySelection": "No URLs currently selected for live testing."
+  },
+  "login": {
+    "title": "Sign in to URL Editor",
+    "desc": "Sign in with Google to sync your client-side encrypted URL list across devices.",
+    "continueLocal": "Continue as Guest",
+    "statusLoading": "Loading…",
+    "statusVerifying": "Verifying Google account…",
+    "statusFailed": "Google sign-in failed.",
+    "statusStartFailed": "Failed to start Google sign-in.",
+    "statusNoClient": "Google OAuth Client ID is not configured.",
+    "statusScriptError": "Failed to load Google Sign-In component."
+  },
+  "scale": {
+    "title": "UI & Font Scale",
+    "compact": "Font: Compact (13px)",
+    "small": "Font: Small (14.5px)",
+    "normal": "Font: Standard (16px Base)",
+    "medium": "Font: Medium (17.5px)",
+    "large": "Font: Large (19px / 2K)",
+    "xlarge": "Font: Extra Large (21px / 4K)"
   }
 }

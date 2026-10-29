@@ -41,6 +41,10 @@ import {
   openUrlDiffModal,
 } from './ui/modals/urlDiffModal.js';
 import {
+  initDualEditorModal,
+  openDualEditorModal,
+} from './ui/modals/dualEditorModal.js';
+import {
   initRedirectModal,
   openRedirectModal,
 } from './ui/modals/redirectModal.js';
@@ -68,6 +72,7 @@ const editorBatchImportBtn = document.getElementById('editor-batch-import-btn');
 const openTagManagerBtn = document.getElementById('open-tag-manager-btn');
 const openSettingsBtn = document.getElementById('open-settings-btn');
 const openUrlDiffBtn = document.getElementById('open-url-diff-btn');
+const openDualEditorBtn = document.getElementById('open-dual-editor-btn');
 const openRedirectBtn = document.getElementById('open-redirect-btn');
 let openCloudSyncBtn = document.getElementById('open-cloud-sync-btn');
 const openBatchStripperBtn = document.getElementById('open-batch-stripper-btn');
@@ -537,12 +542,14 @@ function updateBatchActionBar(urlsToRender = []) {
   }
 
   const hasSelection = count > 0;
-  if (batchLiveTestBtn) batchLiveTestBtn.disabled = !hasSelection;
-  if (batchReplaceDomainBtn) batchReplaceDomainBtn.disabled = !hasSelection;
+  const filtered = getFilteredUrls();
+  const hasUrls = filtered.length > 0;
+  if (batchLiveTestBtn) batchLiveTestBtn.disabled = !hasUrls;
+  if (batchReplaceDomainBtn) batchReplaceDomainBtn.disabled = !hasUrls;
   if (batchAddTagBtn) batchAddTagBtn.disabled = !hasSelection;
-  if (batchExportBtn) batchExportBtn.disabled = !hasSelection;
+  if (batchExportBtn) batchExportBtn.disabled = !hasUrls;
   if (batchDeleteBtn) batchDeleteBtn.disabled = !hasSelection;
-  if (batchCheckHealthBtn) batchCheckHealthBtn.disabled = !hasSelection;
+  if (batchCheckHealthBtn) batchCheckHealthBtn.disabled = !hasUrls;
 }
 
 function getFilteredUrls() {
@@ -810,10 +817,15 @@ function importUrlJson(file) {
             count: appState.urls.length,
           })
         );
+        const settingsDialog = document.getElementById('settings-modal');
+        if (settingsDialog && typeof settingsDialog.close === 'function' && settingsDialog.open) {
+          settingsDialog.close();
+        }
       } else {
         throw new Error(i18next.t('urlList.importError'));
       }
     } catch (err) {
+      console.warn('[Import JSON Failed]:', err);
       alert(i18next.t('urlList.importError'));
     }
   };
@@ -866,10 +878,15 @@ function importUrlCsv(file) {
         saveState();
         renderUrlList();
         alert(i18next.t('urlList.importSuccess', { count }));
+        const settingsDialog = document.getElementById('settings-modal');
+        if (settingsDialog && typeof settingsDialog.close === 'function' && settingsDialog.open) {
+          settingsDialog.close();
+        }
       } else {
         alert(i18next.t('urlList.importError'));
       }
     } catch (err) {
+      console.warn('[Import CSV Failed]:', err);
       alert(i18next.t('urlList.importError'));
     }
   };
@@ -903,6 +920,7 @@ function initUiScale() {
   const applyScale = (scale) => {
     document.documentElement.classList.remove(
       'scale-compact',
+      'scale-small',
       'scale-normal',
       'scale-medium',
       'scale-large',
@@ -1059,6 +1077,14 @@ async function bootstrap() {
   initTagManagerModal();
   initLiveTestModal();
   initUrlDiffModal();
+  initDualEditorModal({
+    onApplyToEditor: (url) => {
+      const input = document.getElementById('url-main-input');
+      if (input) input.value = url;
+      document.getElementById('parse-btn')?.click();
+    },
+    onSaveUrl: saveUrlToHistory,
+  });
   initRedirectModal();
   if (initCloudSyncModal) {
     initCloudSyncModal({
@@ -1145,6 +1171,23 @@ async function bootstrap() {
       const rebuiltValue =
         document.getElementById('rebuilt-url')?.textContent || '';
       openUrlDiffModal(editorValue, rebuiltValue);
+    });
+  }
+
+  if (openDualEditorBtn) {
+    openDualEditorBtn.addEventListener('click', () => {
+      const editorValue =
+        document.getElementById('url-main-input')?.value || '';
+      openDualEditorModal({
+        urls: appState.urls,
+        initialUrlA: editorValue,
+        onApplyToEditor: (url) => {
+          const input = document.getElementById('url-main-input');
+          if (input) input.value = url;
+          document.getElementById('parse-btn')?.click();
+        },
+        onSaveUrl: saveUrlToHistory,
+      });
     });
   }
 
@@ -1314,21 +1357,31 @@ async function bootstrap() {
 
   if (batchLiveTestBtn) {
     batchLiveTestBtn.addEventListener('click', () => {
-      if (appState.selectedIds.size === 0) return;
-      const selected = appState.urls.filter((u) =>
-        appState.selectedIds.has(u.id)
-      );
-      openLiveTestModal({ urls: selected });
+      const filtered = getFilteredUrls();
+      const targets =
+        appState.selectedIds.size > 0
+          ? appState.urls.filter((u) => appState.selectedIds.has(u.id))
+          : filtered;
+      if (targets.length === 0) {
+        alert(i18next.t('urlList.noUrls') || '清單中沒有網址可進行即時測試。');
+        return;
+      }
+      openLiveTestModal({ urls: targets });
     });
   }
 
   if (batchCheckHealthBtn) {
     batchCheckHealthBtn.addEventListener('click', () => {
-      if (appState.selectedIds.size === 0) return;
-      const selected = appState.urls.filter((u) =>
-        appState.selectedIds.has(u.id)
-      );
-      selected.forEach((entry) => {
+      const filtered = getFilteredUrls();
+      const targets =
+        appState.selectedIds.size > 0
+          ? appState.urls.filter((u) => appState.selectedIds.has(u.id))
+          : filtered;
+      if (targets.length === 0) {
+        alert(i18next.t('urlList.noUrls') || '清單中沒有網址可進行連線檢查。');
+        return;
+      }
+      targets.forEach((entry) => {
         runSingleHealthCheck(entry.url, entry.id);
       });
     });
@@ -1336,12 +1389,19 @@ async function bootstrap() {
 
   if (batchReplaceDomainBtn) {
     batchReplaceDomainBtn.addEventListener('click', () => {
-      if (appState.selectedIds.size === 0) return;
       const filtered = getFilteredUrls();
+      const targetIds =
+        appState.selectedIds.size > 0
+          ? appState.selectedIds
+          : new Set(filtered.map((u) => u.id));
+      if (targetIds.size === 0) {
+        alert(i18next.t('urlList.noUrls') || '清單中沒有網址可進行替換。');
+        return;
+      }
       openMaintenanceModal({
         urls: appState.urls,
         filteredIds: new Set(filtered.map((u) => u.id)),
-        selectedIds: appState.selectedIds,
+        selectedIds: targetIds,
         initialTab: 'domain',
         callbacks: {
           onBatchUpdate: (updatedUrls) => {
@@ -1362,7 +1422,10 @@ async function bootstrap() {
 
   if (batchAddTagBtn) {
     batchAddTagBtn.addEventListener('click', () => {
-      if (appState.selectedIds.size === 0) return;
+      if (appState.selectedIds.size === 0) {
+        alert(i18next.t('urlList.batch.noSelection') || '請先勾選要新增標籤的網址項目。');
+        return;
+      }
       const newTag = prompt(i18next.t('urlList.batch.promptAddTag'));
       if (!newTag || !newTag.trim()) return;
 
@@ -1384,11 +1447,19 @@ async function bootstrap() {
 
   if (batchExportBtn) {
     batchExportBtn.addEventListener('click', () => {
-      if (appState.selectedIds.size === 0) return;
-      const selectedEntries = appState.urls.filter((entry) =>
-        appState.selectedIds.has(entry.id)
+      const filtered = getFilteredUrls();
+      const targets =
+        appState.selectedIds.size > 0
+          ? appState.urls.filter((entry) => appState.selectedIds.has(entry.id))
+          : filtered;
+      if (targets.length === 0) {
+        alert(i18next.t('urlList.noUrls') || '清單中沒有網址可供匯出。');
+        return;
+      }
+      exportUrlJson(
+        targets,
+        appState.selectedIds.size > 0 ? 'selected-urls.json' : 'urls-export.json'
       );
-      exportUrlJson(selectedEntries, 'selected-urls.json');
     });
   }
 

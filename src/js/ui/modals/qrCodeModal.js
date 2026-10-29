@@ -91,7 +91,9 @@ export function initQrCodeModal() {
             copyBtn.textContent = i18next.t('qrcode.copyBtn');
           }, 1000);
         })
-        .catch(() => {});
+        .catch((err) => {
+          console.warn('[QRCode Copy URL Failed]:', err);
+        });
     });
   }
 
@@ -123,7 +125,8 @@ export function initQrCodeModal() {
         link.href = canvas.toDataURL('image/png');
         link.download = `${(currentTitle || 'url-editor-qr').replace(/[^a-z0-9_-]+/gi, '-')}.png`;
         link.click();
-      } catch {
+      } catch (err) {
+        console.warn('[QRCode Canvas Export Failed]:', err);
         // Canvas export can be unavailable in restricted browser contexts.
       }
     });

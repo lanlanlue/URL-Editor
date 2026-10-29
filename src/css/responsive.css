@@ -17,8 +17,8 @@
   }
 
   .param-row input:first-child {
-    flex: 0 0 130px;
-    min-width: 110px;
+    flex: 0 0 8.5rem;
+    min-width: 7rem;
   }
 }
 

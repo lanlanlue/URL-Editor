@@ -202,7 +202,14 @@
       "cloudflare": "Cloudflare 端到端加密同步",
       "webdav": "WebDAV (預留)"
     },
-    "doneBtn": "完成"
+    "doneBtn": "完成",
+    "featuresTitle": "功能偏好",
+    "backupTitle": "資料備份與還原",
+    "backupDesc": "匯出或匯入已儲存的 URL 清單，適合用於跨裝置遷移或本機離線備份。",
+    "jsonBackupLabel": "JSON 格式",
+    "csvBackupLabel": "CSV 格式",
+    "exportBtn": "↑ 匯出",
+    "importBtn": "↓ 匯入"
   },
   "urlDiff": {
     "btn": "⇄ URL 比對",
@@ -218,6 +225,41 @@
     "removed": "刪除參數",
     "modified": "修改參數",
     "copyBtn": "複製差異 JSON"
+  },
+  "dualEditor": {
+    "btn": "⫽ 雙網址對照編輯",
+    "title": "⫽ 雙網址對照編輯工作台",
+    "desc": "在同一個畫面拆解兩組 URL，直觀對照、自由複製貼上與微調參數。",
+    "colATitle": "網址 A",
+    "colBTitle": "網址 B",
+    "urlPlaceholder": "輸入或貼上完整網址...",
+    "loadFromEditor": "載入主編輯器",
+    "selectCardPlaceholder": "選取已儲存卡片...",
+    "domain": "網域:",
+    "path": "路徑:",
+    "paramsTitle": "Query 參數清單",
+    "addParam": "＋ 新增參數",
+    "paramKeyPlaceholder": "Key",
+    "paramValPlaceholder": "Value",
+    "copyValueTooltip": "複製值",
+    "copiedValueTooltip": "已複製！",
+    "sendToOppositeTooltip": "送至對面",
+    "deleteParamTooltip": "刪除參數",
+    "rebuiltLabel": "即時重組網址：",
+    "rebuiltEmpty": "(請輸入有效網址)",
+    "invalidUrl": "(無效 URL 格式)",
+    "noParams": "(無 Query 參數)",
+    "copyUrl": "📋 複製網址",
+    "copiedUrl": "✅ 已複製",
+    "applyToEditor": "⬇️ 套用至主編輯器",
+    "appliedToEditor": "✅ 已套用",
+    "saveAsCard": "⭐ 存為卡片",
+    "savedAsCard": "✅ 已儲存",
+    "swapBtn": "⇄ 互換 A / B",
+    "clearAllBtn": "🔄 清空兩側",
+    "maximizeBtn": "最大化視窗",
+    "restoreBtn": "還原視窗大小",
+    "doneBtn": "完成"
   },
   "redirect": {
     "btn": "↪ 重新導向規則",
@@ -267,7 +309,9 @@
     "noRemoteData": "目前沒有雲端備份。",
     "restoreSuccess": "已下載並合併加密資料。",
     "rotationSuccess": "Recovery Key 已旋轉，請重新備份新 Key。",
-    "deletePrompt": "輸入 DELETE 確認刪除帳戶與雲端密文："
+    "deletePrompt": "輸入 DELETE 確認刪除帳戶與雲端密文：",
+    "recoveryPlaceholder": "貼上 Recovery Key (例如 URE1-...)",
+    "recoveryInputRequired": "請先在下方輸入框貼上 Recovery Key。"
   },
   "marketing": {
     "title": "行銷工具箱",
@@ -360,5 +404,25 @@
       "offlineWarn": "⚠️ 無法連線至此網站！請確認網址格式、網路連線或伺服器運作狀態"
     },
     "emptySelection": "目前未選取任何 URL 進行測試。"
+  },
+  "login": {
+    "title": "登入 URL Editor",
+    "desc": "使用 Google 登入，跨裝置同步瀏覽器端加密的 URL 清單。",
+    "continueLocal": "繼續使用訪客模式",
+    "statusLoading": "正在載入…",
+    "statusVerifying": "正在驗證 Google 帳戶…",
+    "statusFailed": "Google 登入失敗。",
+    "statusStartFailed": "無法啟動 Google 登入。",
+    "statusNoClient": "尚未設定 Google OAuth Client ID。",
+    "statusScriptError": "Google 登入元件載入失敗。"
+  },
+  "scale": {
+    "title": "介面與字體大小",
+    "compact": "字體: 極小 (13px)",
+    "small": "字體: 較小 (14.5px)",
+    "normal": "字體: 標準 (16px 基準)",
+    "medium": "字體: 適中 (17.5px)",
+    "large": "字體: 放大 (19px / 2K推薦)",
+    "xlarge": "字體: 特大 (21px / 4K推薦)"
   }
 }

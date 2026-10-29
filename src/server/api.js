@@ -319,7 +319,8 @@ async function requireCsrf(request, session) {
 }
 
 function parseEtag(value) {
-  const match = /^"rev-(\d+)"$/.exec(value || '');
+  if (value === null || value === undefined) return null;
+  const match = /^(?:W\/)?"?(?:rev-)?(\d+)"?$/i.exec(String(value).trim());
   return match ? Number(match[1]) : null;
 }
 
@@ -414,7 +415,11 @@ async function authenticateGoogle(request, env) {
   let claims;
   try {
     claims = await verifyGoogleCredential(body.credential, env);
-  } catch {
+  } catch (error) {
+    console.warn(
+      '[Google Credential Verification Failed]:',
+      error?.message || error
+    );
     return errorResponse(
       401,
       'GOOGLE_TOKEN_INVALID',
@@ -422,38 +427,24 @@ async function authenticateGoogle(request, env) {
     );
   }
   const currentTime = nowSeconds();
-  let user = await env.DB.prepare(
+  const newUserId = crypto.randomUUID();
+  await env.DB.prepare(
+    'INSERT INTO users (id, google_sub, email, display_name, created_at, last_login_at) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(google_sub) DO UPDATE SET email = excluded.email, display_name = excluded.display_name, last_login_at = excluded.last_login_at'
+  )
+    .bind(
+      newUserId,
+      claims.sub,
+      String(claims.email || '').slice(0, 320),
+      String(claims.name || '').slice(0, 200),
+      currentTime,
+      currentTime
+    )
+    .run();
+  const user = await env.DB.prepare(
     'SELECT id FROM users WHERE google_sub = ? LIMIT 1'
   )
     .bind(claims.sub)
     .first();
-  if (!user) {
-    const id = crypto.randomUUID();
-    await env.DB.prepare(
-      'INSERT INTO users (id, google_sub, email, display_name, created_at, last_login_at) VALUES (?, ?, ?, ?, ?, ?)'
-    )
-      .bind(
-        id,
-        claims.sub,
-        String(claims.email || '').slice(0, 320),
-        String(claims.name || '').slice(0, 200),
-        currentTime,
-        currentTime
-      )
-      .run();
-    user = { id };
-  } else {
-    await env.DB.prepare(
-      'UPDATE users SET email = ?, display_name = ?, last_login_at = ? WHERE id = ?'
-    )
-      .bind(
-        String(claims.email || '').slice(0, 320),
-        String(claims.name || '').slice(0, 200),
-        currentTime,
-        user.id
-      )
-      .run();
-  }
   const created = await createSession(env, user.id);
   return json(
     {
@@ -475,20 +466,35 @@ async function handleSyncGet(request, env) {
     .bind(session.account_id)
     .first();
   const envelope = documentEnvelope(document);
+  const revision = envelope?.revision || 0;
   return json(
-    { document: envelope, revision: envelope?.revision || 0 },
+    { document: envelope, revision, etag: `"rev-${revision}"` },
     200,
     responseHeaders(session, { ETag: `"rev-${envelope?.revision || 0}"` })
   );
 }
 
 async function cleanupHistory(env, userId) {
-  const cutoff = nowSeconds() - HISTORY_RETENTION_DAYS * 86400;
-  await env.DB.prepare(
-    `DELETE FROM sync_revisions WHERE user_id = ? AND (created_at < ? OR revision NOT IN (SELECT revision FROM sync_revisions WHERE user_id = ? ORDER BY revision DESC LIMIT ${HISTORY_LIMIT}))`
-  )
-    .bind(userId, cutoff, userId)
-    .run();
+  try {
+    const cutoff = nowSeconds() - HISTORY_RETENTION_DAYS * 86400;
+    const rows = await env.DB.prepare(
+      'SELECT revision FROM sync_revisions WHERE user_id = ? ORDER BY revision DESC LIMIT ?'
+    )
+      .bind(userId, HISTORY_LIMIT)
+      .all();
+
+    const revisions = (rows?.results || []).map((r) => r.revision);
+    if (revisions.length >= HISTORY_LIMIT) {
+      const minKeptRevision = Math.min(...revisions);
+      await env.DB.prepare(
+        'DELETE FROM sync_revisions WHERE user_id = ? AND revision < ? AND created_at < ?'
+      )
+        .bind(userId, minKeptRevision, cutoff)
+        .run();
+    }
+  } catch (err) {
+    console.warn('[cleanupHistory warning]:', err?.message || err);
+  }
 }
 
 async function handleSyncPut(request, env) {
@@ -514,7 +520,16 @@ async function handleSyncPut(request, env) {
       'INVALID_ENVELOPE',
       'Invalid encrypted envelope.'
     );
-  const expectedRevision = parseEtag(request.headers.get('If-Match'));
+  let expectedRevision = parseEtag(
+    request.headers.get('If-Match') || request.headers.get('X-If-Match')
+  );
+  if (
+    expectedRevision === null &&
+    Number.isInteger(body.revision) &&
+    body.revision >= 1
+  ) {
+    expectedRevision = body.revision - 1;
+  }
   if (expectedRevision === null)
     return errorResponse(
       422,
@@ -541,7 +556,7 @@ async function handleSyncPut(request, env) {
     if (current) {
       const results = await env.DB.batch([
         env.DB.prepare(
-          'INSERT INTO sync_revisions (user_id, revision, payload_schema_version, key_version, kdf_salt, iv, ciphertext, created_at) SELECT user_id, revision, payload_schema_version, key_version, kdf_salt, iv, ciphertext, created_at FROM sync_documents WHERE user_id = ? AND revision = ?'
+          'INSERT OR REPLACE INTO sync_revisions (user_id, revision, payload_schema_version, key_version, kdf_salt, iv, ciphertext, created_at) SELECT user_id, revision, payload_schema_version, key_version, kdf_salt, iv, ciphertext, updated_at FROM sync_documents WHERE user_id = ? AND revision = ?'
         ).bind(session.account_id, currentRevision),
         env.DB.prepare(
           'UPDATE sync_documents SET revision = ?, payload_schema_version = ?, key_version = ?, kdf_salt = ?, iv = ?, ciphertext = ?, updated_at = ? WHERE user_id = ? AND revision = ?'
@@ -565,7 +580,7 @@ async function handleSyncPut(request, env) {
         );
     } else {
       await env.DB.prepare(
-        'INSERT INTO sync_documents (user_id, revision, payload_schema_version, key_version, kdf_salt, iv, ciphertext, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+        'INSERT OR REPLACE INTO sync_documents (user_id, revision, payload_schema_version, key_version, kdf_salt, iv, ciphertext, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
       )
         .bind(
           session.account_id,
@@ -580,15 +595,20 @@ async function handleSyncPut(request, env) {
         .run();
     }
     await cleanupHistory(env, session.account_id);
-  } catch {
+  } catch (error) {
+    console.error('Failed to update sync document:', error);
     return errorResponse(
-      409,
-      'SYNC_CONFLICT',
-      'The encrypted document has changed.'
+      500,
+      'DATABASE_ERROR',
+      error.message || 'Failed to update sync document.'
     );
   }
   return json(
-    { document: body, revision: body.revision },
+    {
+      document: body,
+      revision: body.revision,
+      etag: `"rev-${body.revision}"`,
+    },
     200,
     responseHeaders(session, { ETag: `"rev-${body.revision}"` })
   );
@@ -745,6 +765,7 @@ export async function handleApiRequest(request, env) {
         'INVALID_JSON',
         'Request body must be valid JSON.'
       );
+    console.error('[API Router Unhandled Error]:', error);
     return errorResponse(500, 'INTERNAL_ERROR', 'An internal error occurred.');
   }
 }

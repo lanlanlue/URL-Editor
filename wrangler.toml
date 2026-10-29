@@ -1,6 +1,12 @@
 name = "url-editor"
-compatibility_date = "2026-09-08"
-pages_build_output_dir = "./dist"
+compatibility_date = "2026-09-10"
+main = "src/worker.js"
+
+[assets]
+directory = "./dist"
+binding = "ASSETS"
+html_handling = "none"
+run_worker_first = ["/", "/api", "/api/*", "/app", "/app/", "/login", "/login/"]
 
 [[d1_databases]]
 binding = "DB"
@@ -10,5 +16,5 @@ migrations_dir = "migrations"
 
 [vars]
 # The Google OAuth Client ID is public configuration. Set the production value
-# in Cloudflare Pages environment variables; never put a client secret here.
-GOOGLE_CLIENT_ID = "369326172769-t9ne61in2g0ffqlqc01r0orpjtmm6vvt.apps.googleusercontent.com"
+# in the Cloudflare Worker environment; never put a client secret here.
+GOOGLE_CLIENT_ID = "523370321902-3fm83vlvm6s7vf2sv41b1a7vjp8o1hr4.apps.googleusercontent.com"

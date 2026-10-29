@@ -13,6 +13,7 @@
     "build": "node scripts/build.mjs runtime",
     "build:cloud": "node scripts/build.mjs cloud",
     "build:gh": "node scripts/build.mjs local gh",
+    "deploy:cloud": "npm run build:cloud && npx wrangler deploy",
     "security:check": "node scripts/security-check.mjs",
     "build:extension": "parcel build src/index.html --dist-dir dist-extension && copyfiles -u 2 src/static/manifest.json dist-extension",
     "prepare": "husky install",
