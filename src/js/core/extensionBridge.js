@@ -66,4 +66,71 @@ export async function initExtensionBridge(options = {}) {
   return url;
 }
 
+function getPermissionsApi() {
+  const chromeApi =
+    typeof globalThis !== 'undefined' ? globalThis.chrome : undefined;
+  const api = chromeApi?.permissions;
+  return api && typeof api.contains === 'function' ? api : null;
+}
+
+/**
+ * Converts a URL to the origin match pattern used for optional host
+ * permissions (e.g. "https://staging.example.com/*"). Null if not http(s).
+ * @param {string} url
+ * @returns {string|null}
+ */
+export function toOriginPattern(url) {
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      return null;
+    }
+    return `${parsed.protocol}//${parsed.hostname}/*`;
+  } catch {
+    return null;
+  }
+}
+
+function callPermissions(method, origins) {
+  const api = getPermissionsApi();
+  if (!api || typeof api[method] !== 'function') return Promise.resolve(false);
+  return new Promise((resolve) => {
+    try {
+      const result = api[method]({ origins }, (granted) => resolve(!!granted));
+      if (result && typeof result.then === 'function') {
+        result
+          .then((granted) => resolve(!!granted))
+          .catch(() => resolve(false));
+      }
+    } catch {
+      resolve(false);
+    }
+  });
+}
+
+/**
+ * True when the extension already holds host access for the URL's origin.
+ * @param {string} url
+ * @returns {Promise<boolean>}
+ */
+export function hasHostPermission(url) {
+  const pattern = toOriginPattern(url);
+  return pattern
+    ? callPermissions('contains', [pattern])
+    : Promise.resolve(false);
+}
+
+/**
+ * Asks the user to grant host access for the given URLs' origins in a single
+ * prompt. Must be called from a user gesture (click handler).
+ * @param {string[]} urls
+ * @returns {Promise<boolean>}
+ */
+export function requestHostPermissions(urls) {
+  const origins = [...new Set(urls.map(toOriginPattern).filter(Boolean))];
+  return origins.length
+    ? callPermissions('request', origins)
+    : Promise.resolve(false);
+}
+
 export default initExtensionBridge;

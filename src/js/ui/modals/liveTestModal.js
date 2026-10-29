@@ -1,5 +1,9 @@
 import i18next from '../../core/i18n';
-import { checkUrlHealth } from '../../utils/healthCheck';
+import { checkManyUrls, checkUrlHealth } from '../../utils/healthCheck';
+import { requestHostPermissions } from '../../core/extensionBridge';
+import { normalizeAssertions } from '../../core/assertions';
+import { buildResultsCsv, getHistory } from '../../core/checkHistory';
+import { runEntryCheck } from '../../core/entryCheck';
 import { createFaviconImg } from '../../utils/faviconService';
 
 let currentUrls = [];
@@ -7,6 +11,42 @@ let healthResults = new Map(); // id -> { status: 'checking'|'online'|'offline',
 let currentFilter = 'all'; // 'all' | 'offline' | 'online'
 let currentCols = 'auto'; // 'auto' | '1' | '2' | '3'
 let currentDevice = 'desktop'; // 'desktop' | 'tablet' | 'mobile'
+let onEntryChange = () => {};
+// id -> token object of the newest check for that entry. A result is applied
+// only while its token is still the current one, so overlapping runs, single
+// card rechecks and results arriving after close/reopen are ignored.
+const checkTokens = new Map();
+const RELOAD_BLANK_MS = 100;
+
+function _claimCheck(id) {
+  const token = {};
+  checkTokens.set(id, token);
+  return token;
+}
+
+function _isCurrentCheck(id, token) {
+  return checkTokens.get(id) === token;
+}
+
+/** Invalidates every in-flight check (close, reopen). */
+function _cancelChecks() {
+  checkTokens.clear();
+}
+
+/**
+ * Reloads an iframe from the source stored at creation (never from the live
+ * `src`, which is about:blank while a previous reload is pending).
+ */
+function _reloadIframe(iframe) {
+  const target = iframe.dataset.liveSrc;
+  if (!target) return;
+  clearTimeout(iframe._liveReloadTimer);
+  iframe.src = 'about:blank';
+  iframe._liveReloadTimer = setTimeout(() => {
+    iframe._liveReloadTimer = null;
+    if (iframe.isConnected) iframe.src = target;
+  }, RELOAD_BLANK_MS);
+}
 
 /**
  * Initializes the Live Test Modal listeners and controls.
@@ -28,7 +68,12 @@ export function initLiveTestModal() {
       dialog.removeAttribute('open');
       dialog.classList.add('hidden');
     }
-    // Stop all running iframes to free memory
+    stopAndClear();
+  };
+
+  // Stop all running iframes to free memory and cancel in-flight checks.
+  const stopAndClear = () => {
+    _cancelChecks();
     const grid = document.getElementById('live-test-grid');
     if (grid) grid.innerHTML = '';
   };
@@ -39,9 +84,16 @@ export function initLiveTestModal() {
     if (e.target === dialog) handleClose();
   });
 
-  dialog.addEventListener('cancel', () => {
-    const grid = document.getElementById('live-test-grid');
-    if (grid) grid.innerHTML = '';
+  dialog.addEventListener('cancel', stopAndClear);
+
+  // Any other close path (programmatic dialog.close(), a skipped `cancel`)
+  // still ends with an async `close` event. It may be delivered AFTER the
+  // dialog was reopened for a new run (openLiveTestModal already cancelled the
+  // old run and rebuilt the grid), so only act while the dialog is really
+  // closed: a still-open dialog means a newer run owns the grid.
+  dialog.addEventListener('close', () => {
+    if (dialog.open) return;
+    stopAndClear();
   });
 
   // Filter Buttons
@@ -82,14 +134,20 @@ export function initLiveTestModal() {
   if (reloadAllBtn) {
     reloadAllBtn.addEventListener('click', () => {
       reloadAllIframes();
-      checkAllHealth();
+      recheckWithPermissions();
     });
+  }
+
+  // Export latest results as CSV
+  const exportBtn = document.getElementById('live-export-btn');
+  if (exportBtn) {
+    exportBtn.addEventListener('click', exportResults);
   }
 
   // Recheck Health Button
   if (recheckHealthBtn) {
     recheckHealthBtn.addEventListener('click', () => {
-      checkAllHealth();
+      recheckWithPermissions();
     });
   }
 }
@@ -98,15 +156,18 @@ export function initLiveTestModal() {
  * Opens the Live Test Modal with the given URLs.
  * @param {object} params
  * @param {Array<object>} params.urls - Array of URL entry objects
+ * @param {function} [params.onChange] - called after an entry's assertions change
  */
-export function openLiveTestModal({ urls = [] }) {
+export function openLiveTestModal({ urls = [], onChange } = {}) {
   currentUrls = Array.isArray(urls) ? urls : [];
+  onEntryChange = typeof onChange === 'function' ? onChange : () => {};
   healthResults.clear();
+  _cancelChecks();
 
-  // Populate initial health status from entry data if available
+  // Health status is runtime-only; every entry starts as 'checking'.
   currentUrls.forEach((entry) => {
     healthResults.set(entry.id, {
-      status: entry.healthStatus || 'checking',
+      status: 'checking',
       code: null,
       error: null,
     });
@@ -147,7 +208,7 @@ function renderGrid() {
 
   const filteredUrls = currentUrls.filter((entry) => {
     const result = healthResults.get(entry.id) || {};
-    const status = result.status || entry.healthStatus;
+    const status = result.status;
     if (currentFilter === 'offline') return status === 'offline';
     if (currentFilter === 'online') return status === 'online';
     return true;
@@ -160,14 +221,27 @@ function renderGrid() {
     noMatch.className = 'live-test-empty';
     noMatch.textContent =
       currentFilter === 'offline'
-        ? '🎉 太棒了！沒有任何連線異常的 URL。'
-        : '沒有符合篩選條件的項目。';
+        ? i18next.t('liveTest.empty.noOffline', {
+            defaultValue: '🎉 太棒了！沒有任何連線異常的 URL。',
+          })
+        : i18next.t('liveTest.empty.noMatch', {
+            defaultValue: '沒有符合篩選條件的項目。',
+          });
     grid.appendChild(noMatch);
     return;
   }
 
   filteredUrls.forEach((entry) => {
     grid.appendChild(_createLiveTestCard(entry));
+  });
+
+  // Cards are rebuilt: restore badge details, history tags, grant buttons and
+  // embedding-blocked notices from the cached results.
+  filteredUrls.forEach((entry) => {
+    const cached = healthResults.get(entry.id);
+    if (cached && cached.status && cached.status !== 'checking') {
+      _applyResultDetails(entry, cached);
+    }
   });
 }
 
@@ -216,7 +290,9 @@ function _createLiveTestCard(entry) {
   urlEl.addEventListener('click', () => {
     navigator.clipboard.writeText(url).then(() => {
       const orig = urlEl.textContent;
-      urlEl.textContent = '✅ 已複製！';
+      urlEl.textContent = i18next.t('liveTest.actions.copied', {
+        defaultValue: '✅ 已複製！',
+      });
       setTimeout(() => {
         urlEl.textContent = orig;
       }, 1200);
@@ -268,13 +344,33 @@ function _createLiveTestCard(entry) {
     window.open(url, '_blank', 'noopener,noreferrer');
   });
 
+  const assertBtn = document.createElement('button');
+  assertBtn.className = 'live-card-btn';
+  assertBtn.textContent = normalizeAssertions(entry.assertions) ? '🎯' : '⚙';
+  assertBtn.id = `live-assert-btn-${id}`;
+  assertBtn.title = i18next.t('liveTest.assert.title', {
+    defaultValue: '測試斷言',
+  });
+  assertBtn.addEventListener('click', () => {
+    const panel = card.querySelector('.live-assert-panel');
+    if (panel) panel.remove();
+    else header.after(_createAssertionPanel(entry, card, assertBtn));
+  });
+
   actions.appendChild(badge);
+  actions.appendChild(assertBtn);
   actions.appendChild(reloadBtn);
   actions.appendChild(openBtn);
 
   header.appendChild(info);
   header.appendChild(actions);
   card.appendChild(header);
+
+  const historyEl = document.createElement('div');
+  historyEl.className = 'live-card-history';
+  historyEl.id = `live-history-${id}`;
+  card.appendChild(historyEl);
+  _renderHistory(id);
 
   // ── Offline Warning Alert (if offline) ────────────────────────
   if (status === 'offline') {
@@ -310,6 +406,7 @@ function _createLiveTestCard(entry) {
   if (!/^https?:\/\//i.test(formattedUrl)) {
     formattedUrl = 'https://' + formattedUrl;
   }
+  iframe.dataset.liveSrc = formattedUrl;
   iframe.src = formattedUrl;
 
   frameHolder.appendChild(iframe);
@@ -324,21 +421,26 @@ function _createLiveTestCard(entry) {
  * Reloads a single card's iframe and re-runs its connectivity check.
  */
 async function _reloadSingleCard(card, entry) {
-  const { id, url } = entry;
+  const { id } = entry;
   const iframe = card.querySelector('iframe');
-  if (iframe) {
-    const currentSrc = iframe.src;
-    iframe.src = 'about:blank';
-    setTimeout(() => {
-      iframe.src = currentSrc;
-    }, 100);
-  }
+  if (iframe) _reloadIframe(iframe);
 
   // Update badge to checking
+  const token = _claimCheck(id);
   _updateCardStatus(id, 'checking');
-  const res = await checkUrlHealth(url);
+  let res;
+  try {
+    res = await runEntryCheck(entry, (u, t, o) => checkUrlHealth(u, t, o), {
+      isCurrent: () => _isCurrentCheck(id, token),
+    });
+  } catch (err) {
+    // Never leave the card on 'checking' when the check itself rejects.
+    res = { status: 'offline', error: err?.message || String(err) };
+  }
+  if (!_isCurrentCheck(id, token)) return;
   healthResults.set(id, res);
   _updateCardStatus(id, res.status);
+  _applyResultDetails(entry, res);
   updateStatsCounters();
 }
 
@@ -347,45 +449,148 @@ async function _reloadSingleCard(card, entry) {
  */
 function reloadAllIframes() {
   const iframes = document.querySelectorAll('.live-test-iframe');
-  iframes.forEach((iframe) => {
-    const src = iframe.src;
-    iframe.src = 'about:blank';
-    setTimeout(() => {
-      iframe.src = src;
-    }, 100);
-  });
+  iframes.forEach(_reloadIframe);
 }
 
 /**
- * Runs connectivity check for all URLs in parallel and updates badges in real time.
+ * Called from a click handler. In the extension, asks once for host access to
+ * every origin that could only be checked in limited mode, then rechecks.
+ */
+async function recheckWithPermissions() {
+  const missing = currentUrls.filter(
+    (entry) => healthResults.get(entry.id)?.needsPermission
+  );
+  // Must run before any await so the click's user gesture is still valid.
+  const pending = missing.length
+    ? requestHostPermissions(missing.map((entry) => entry.url))
+    : null;
+  if (pending) await pending;
+  await checkAllHealth();
+}
+
+/**
+ * Runs connectivity checks (capped concurrency) and updates cards live.
  */
 async function checkAllHealth() {
-  currentUrls.forEach((entry) => {
+  const entries = currentUrls;
+  const tokens = new Map();
+  entries.forEach((entry) => {
+    tokens.set(entry.id, _claimCheck(entry.id));
     healthResults.set(entry.id, { status: 'checking' });
     _updateCardStatus(entry.id, 'checking');
   });
 
   updateStatsCounters();
 
-  // Run all health checks concurrently
-  await Promise.allSettled(
-    currentUrls.map(async (entry) => {
-      try {
-        const res = await checkUrlHealth(entry.url);
-        healthResults.set(entry.id, res);
-        _updateCardStatus(entry.id, res.status);
-      } catch (err) {
-        healthResults.set(entry.id, { status: 'offline', error: err.message });
-        _updateCardStatus(entry.id, 'offline');
+  await checkManyUrls(entries, {
+    run: (entry) => {
+      // Superseded or cancelled: don't start (or record) another request.
+      if (!_isCurrentCheck(entry.id, tokens.get(entry.id))) {
+        return Promise.resolve({ status: 'checking', stale: true });
       }
+      return runEntryCheck(
+        entry,
+        (url, timeoutMs, options) => checkUrlHealth(url, timeoutMs, options),
+        { isCurrent: () => _isCurrentCheck(entry.id, tokens.get(entry.id)) }
+      );
+    },
+    onResult: (entry, res) => {
+      if (!_isCurrentCheck(entry.id, tokens.get(entry.id))) return;
+      healthResults.set(entry.id, res);
+      _updateCardStatus(entry.id, res.status);
+      _applyResultDetails(entry, res);
       updateStatsCounters();
-    })
-  );
+    },
+  });
 
   // If in filtered mode, re-render to reflect new offline/online statuses
-  if (currentFilter !== 'all') {
+  const stillCurrent = entries.some((entry) =>
+    _isCurrentCheck(entry.id, tokens.get(entry.id))
+  );
+  if (stillCurrent && currentFilter !== 'all') {
     renderGrid();
   }
+}
+
+/**
+ * Adds status code / timing to the badge, a grant-access button when the
+ * extension could give exact results, and a notice when embedding is blocked.
+ */
+function _applyResultDetails(entry, res) {
+  const { id, url } = entry;
+  const card = document.querySelector(`[data-url-id="${id}"].live-test-card`);
+  const badge = document.getElementById(`live-badge-${id}`);
+  if (!card || !badge || res.status === 'checking') return;
+
+  const textSpan = badge.querySelector('.live-badge__text');
+  const parts = [_getStatusText(res.status)];
+  if (res.code) parts.push(String(res.code));
+  if (res.timeMs != null) parts.push(`${res.timeMs}ms`);
+  if (textSpan) textSpan.textContent = parts.join(' · ');
+  if (res.assertion?.passed && textSpan) textSpan.textContent += ' ✓';
+  if (res.mode === 'limited') {
+    badge.title = i18next.t('liveTest.status.limitedHint', {
+      defaultValue: '僅能確認主機有回應，無法取得 HTTP 狀態碼。',
+    });
+  } else if (res.mode === 'server') {
+    badge.title = i18next.t('liveTest.status.serverHint', {
+      defaultValue: '由伺服器檢測（無法連到內網網址）。',
+    });
+  } else {
+    badge.title = res.error || '';
+  }
+
+  const banner = card.querySelector(
+    '.live-card-alert:not(.live-embed-blocked) span'
+  );
+  if (banner && res.error && res.mode !== 'limited') {
+    banner.textContent = `⚠️ ${res.error}`;
+  }
+  _renderHistory(id, res);
+
+  const actions = card.querySelector('.live-test-card__actions');
+  const grantId = `live-grant-${id}`;
+  const oldGrant = document.getElementById(grantId);
+  if (oldGrant) oldGrant.remove();
+  if (res.needsPermission && actions) {
+    const grantBtn = document.createElement('button');
+    grantBtn.className = 'live-card-btn';
+    grantBtn.id = grantId;
+    grantBtn.textContent = '🔑';
+    grantBtn.title = i18next.t('liveTest.actions.grantAccess', {
+      defaultValue: '授權此網域以取得真實 HTTP 狀態',
+    });
+    grantBtn.addEventListener('click', async () => {
+      if (await requestHostPermissions([url])) {
+        _reloadSingleCard(card, entry);
+      }
+    });
+    actions.insertBefore(grantBtn, actions.firstChild.nextSibling);
+  }
+
+  if (res.embeddable === false) _showEmbedBlocked(card, url);
+}
+
+function _showEmbedBlocked(card, url) {
+  const wrapper = card.querySelector('.live-test-iframe-wrapper');
+  if (!wrapper || wrapper.querySelector('.live-embed-blocked')) return;
+  wrapper.innerHTML = '';
+  const notice = document.createElement('div');
+  notice.className = 'live-embed-blocked live-card-alert';
+  const msg = document.createElement('span');
+  msg.textContent = i18next.t('liveTest.status.xframeWarn', {
+    defaultValue:
+      '🔒 此網站禁止內嵌 (X-Frame-Options / CSP)，但連線正常。請在新分頁開啟。',
+  });
+  const openBtn = document.createElement('button');
+  openBtn.className = 'live-card-btn';
+  openBtn.textContent = '↗';
+  openBtn.addEventListener('click', () =>
+    window.open(url, '_blank', 'noopener,noreferrer')
+  );
+  notice.appendChild(msg);
+  notice.appendChild(openBtn);
+  wrapper.appendChild(notice);
 }
 
 /**
@@ -477,7 +682,7 @@ function updateStatsCounters() {
 
   currentUrls.forEach((entry) => {
     const res = healthResults.get(entry.id) || {};
-    const status = res.status || entry.healthStatus;
+    const status = res.status;
     if (status === 'online') onlineCount++;
     else if (status === 'offline') offlineCount++;
   });
@@ -526,6 +731,139 @@ function updateStatsCounters() {
       defaultValue: `🟢 僅顯示正常 (${onlineCount})`,
     });
   }
+}
+
+function _renderHistory(id, latest) {
+  const el = document.getElementById(`live-history-${id}`);
+  if (!el) return;
+  el.innerHTML = '';
+  const records = getHistory(id)
+    .filter((record) => record && typeof record === 'object')
+    .slice(-10);
+  if (!records.length) return;
+
+  const dots = document.createElement('span');
+  dots.className = 'live-history-dots';
+  records.forEach((record) => {
+    const dot = document.createElement('span');
+    dot.className = `live-history-dot live-history-dot--${record.ok ? 'ok' : 'fail'}`;
+    dot.title = [
+      new Date(record.t).toLocaleString(),
+      record.code,
+      record.ms != null ? `${record.ms}ms` : '',
+      record.err,
+    ]
+      .filter(Boolean)
+      .join(' · ');
+    dots.appendChild(dot);
+  });
+  el.appendChild(dots);
+
+  if (latest?.regression || latest?.recovered) {
+    const tag = document.createElement('span');
+    tag.className = `live-history-tag live-history-tag--${latest.regression ? 'fail' : 'ok'}`;
+    tag.textContent = latest.regression
+      ? i18next.t('liveTest.history.regression', {
+          defaultValue: '⬇ 上次正常，本次異常',
+        })
+      : i18next.t('liveTest.history.recovered', {
+          defaultValue: '⬆ 上次異常，本次已恢復',
+        });
+    el.appendChild(tag);
+  }
+}
+
+/**
+ * Inline editor for an entry's assertions. Saving mutates the entry and
+ * notifies the owner (which persists and syncs it).
+ */
+function _createAssertionPanel(entry, card, assertBtn) {
+  const current = normalizeAssertions(entry.assertions) || {};
+  const panel = document.createElement('form');
+  panel.className = 'live-assert-panel';
+
+  const field = (labelKey, labelDefault, type, value, placeholder) => {
+    const label = document.createElement('label');
+    label.className = 'live-assert-field';
+    const text = document.createElement('span');
+    text.textContent = i18next.t(labelKey, { defaultValue: labelDefault });
+    const input = document.createElement('input');
+    input.type = type;
+    input.value = value ?? '';
+    if (placeholder) input.placeholder = placeholder;
+    if (type === 'number') input.min = '1';
+    label.appendChild(text);
+    label.appendChild(input);
+    panel.appendChild(label);
+    return input;
+  };
+
+  const statusInput = field(
+    'liveTest.assert.expectedStatus',
+    '預期狀態碼',
+    'text',
+    current.expectedStatus,
+    '200 / 2xx / 200,301 / 200-299'
+  );
+  const keywordInput = field(
+    'liveTest.assert.keyword',
+    '必須包含文字',
+    'text',
+    current.keyword,
+    ''
+  );
+  const timeInput = field(
+    'liveTest.assert.maxTime',
+    '最大回應時間 (ms)',
+    'number',
+    current.maxTimeMs,
+    '1500'
+  );
+
+  const hint = document.createElement('small');
+  hint.className = 'live-assert-hint';
+  hint.textContent = i18next.t('liveTest.assert.hint', {
+    defaultValue:
+      '狀態碼與內文檢查需要擴充功能授權或登入後的伺服器檢測；一般網頁的有限模式會略過。',
+  });
+  panel.appendChild(hint);
+
+  const saveBtn = document.createElement('button');
+  saveBtn.type = 'submit';
+  saveBtn.className = 'live-ctrl-btn';
+  saveBtn.textContent = i18next.t('liveTest.assert.save', {
+    defaultValue: '儲存並重新檢測',
+  });
+  panel.appendChild(saveBtn);
+
+  panel.addEventListener('submit', (event) => {
+    event.preventDefault();
+    const next = normalizeAssertions({
+      expectedStatus: statusInput.value,
+      keyword: keywordInput.value,
+      maxTimeMs: timeInput.value,
+    });
+    if (next) entry.assertions = next;
+    else delete entry.assertions;
+    onEntryChange(entry);
+    assertBtn.textContent = next ? '🎯' : '⚙';
+    panel.remove();
+    _reloadSingleCard(card, entry);
+  });
+  return panel;
+}
+
+function exportResults() {
+  if (!currentUrls.length) return;
+  const csv = buildResultsCsv(currentUrls, healthResults);
+  const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8' });
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = `url-check-${new Date().toISOString().slice(0, 10)}.csv`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(link.href), 1000);
 }
 
 function _getStatusText(status) {

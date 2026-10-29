@@ -1,3 +1,4 @@
+import i18next from '../../core/i18n.js';
 import {
   buildUtmUrl,
   getUtmPreset,
@@ -106,12 +107,14 @@ export function initUtmModal() {
   document.querySelectorAll('[data-utm-key]').forEach((input) => {
     input.addEventListener('input', renderUtm);
   });
-  document.getElementById('utm-copy-btn')?.addEventListener('click', (event) => {
-    copyText(
-      document.getElementById('utm-output')?.value || '',
-      event.currentTarget
-    );
-  });
+  document
+    .getElementById('utm-copy-btn')
+    ?.addEventListener('click', (event) => {
+      copyText(
+        document.getElementById('utm-output')?.value || '',
+        event.currentTarget
+      );
+    });
   initialized = true;
   if (presetSelect)
     fillPreset(presetSelect.value || Object.keys(UTM_PRESETS)[0]);

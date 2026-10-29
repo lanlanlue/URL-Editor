@@ -278,6 +278,15 @@ export function findDuplicateUrls(urls = []) {
   };
 }
 
+/** decodeURIComponent that keeps the raw text when the escape is malformed. */
+function safeDecodeURIComponent(value) {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
 /**
  * Analyzes a URL and generates a suggested human-readable label.
  * @param {URL|string} urlInput
@@ -310,7 +319,7 @@ export function generateSuggestedLabel(urlInput, explicitName = '') {
   // 2. Extract from pathname
   const pathParts = url.pathname
     .split('/')
-    .map((p) => decodeURIComponent(p).trim())
+    .map((p) => safeDecodeURIComponent(p).trim())
     .filter(Boolean);
 
   if (pathParts.length > 0) {

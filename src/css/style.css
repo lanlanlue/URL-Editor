@@ -10,3 +10,17 @@
 @import './modals.css';
 @import './live-test.css';
 @import './responsive.css';
+
+/* Persistent notice shown while the stored record is unreadable (main.js) */
+.storage-unreadable-notice {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 10000;
+  padding: 10px 16px;
+  background: #7f1d1d;
+  color: #ffffff;
+  font-size: 14px;
+  text-align: center;
+}

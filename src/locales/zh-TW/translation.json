@@ -296,6 +296,7 @@
     "historyRestoreBtn": "復原並合併",
     "historyRevision": "版本 {{revision}}",
     "historyEmpty": "目前沒有可復原的歷史版本。",
+    "placeholderUploadBlocked": "本機資料無法讀取，尚無可上傳的資料；已略過上傳以避免覆蓋雲端資料。",
     "historyRestoreSuccess": "已合併歷史版本 {{revision}}；下一次同步會建立新版本。",
     "historyRestoreError": "無法解密或復原歷史版本。",
     "offline": "目前離線；修改會保留在本機，恢復連線後自動同步。",
@@ -306,6 +307,7 @@
     "recoveryConfirmError": "Recovery Key 確認不一致。",
     "unlocked": "已解鎖端到端加密同步。",
     "syncSuccess": "加密資料已同步。",
+    "autoSyncConflictStopped": "自動同步因反覆衝突而暫停；請稍後再試，或手動按「立即同步」。",
     "noRemoteData": "目前沒有雲端備份。",
     "restoreSuccess": "已下載並合併加密資料。",
     "rotationSuccess": "Recovery Key 已旋轉，請重新備份新 Key。",
@@ -355,6 +357,10 @@
     "renamePrompt": "請輸入標籤「{{tag}}」的新名稱：",
     "deleteConfirm": "確定要將標籤「{{tag}}」從 {{count}} 筆 URL 中移除嗎？"
   },
+  "storage": {
+    "unreadableWarning": "無法解密您已儲存的資料。資料並未被修改，且本次操作的變更將不會被儲存。請重新載入頁面再試一次，或從備份或雲端同步還原。",
+    "unreadableNotice": "由於無法解密您已儲存的資料，目前的變更不會被儲存。請從備份或雲端同步還原後再繼續。"
+  },
   "healthCheck": {
     "btn": "📡 連線檢查",
     "btnTooltip": "測試目標網址連通狀態",
@@ -394,16 +400,37 @@
       "reloadIframe": "重新載入此頁面",
       "openNewTab": "在新分頁開啟",
       "copyUrl": "複製網址",
-      "close": "✕ 關閉 (ESC)"
+      "close": "✕ 關閉 (ESC)",
+      "copied": "✅ 已複製！",
+      "grantAccess": "授權此網域以取得真實 HTTP 狀態",
+      "exportResults": "📥 匯出結果 (CSV)"
     },
     "status": {
       "online": "🟢 連線正常",
       "offline": "🔴 連線異常 / 無法連通",
       "checking": "⏳ 正在檢測連線...",
       "xframeWarn": "🔒 此網站設有限制嵌入保護 (X-Frame-Options)，連線狀態正常，建議直接點擊新分頁開啟瀏覽",
-      "offlineWarn": "⚠️ 無法連線至此網站！請確認網址格式、網路連線或伺服器運作狀態"
+      "offlineWarn": "⚠️ 無法連線至此網站！請確認網址格式、網路連線或伺服器運作狀態",
+      "limitedHint": "僅能確認主機有回應，無法取得 HTTP 狀態碼。",
+      "serverHint": "由伺服器檢測（無法連到內網網址）。"
     },
-    "emptySelection": "目前未選取任何 URL 進行測試。"
+    "emptySelection": "目前未選取任何 URL 進行測試。",
+    "empty": {
+      "noOffline": "🎉 太棒了！沒有任何連線異常的 URL。",
+      "noMatch": "沒有符合篩選條件的項目。"
+    },
+    "assert": {
+      "title": "測試斷言",
+      "expectedStatus": "預期狀態碼",
+      "keyword": "必須包含文字",
+      "maxTime": "最大回應時間 (ms)",
+      "save": "儲存並重新檢測",
+      "hint": "狀態碼與內文檢查需要擴充功能授權或登入後的伺服器檢測；一般網頁的有限模式會略過。"
+    },
+    "history": {
+      "regression": "⬇ 上次正常，本次異常",
+      "recovered": "⬆ 上次異常，本次已恢復"
+    }
   },
   "login": {
     "title": "登入 URL Editor",

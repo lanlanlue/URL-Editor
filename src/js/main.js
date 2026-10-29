@@ -30,6 +30,9 @@ import {
 } from './ui/modals/liveTestModal.js';
 import { exportToCsvString, parseCsvString } from './utils/csvParser.js';
 import { checkUrlHealth } from './utils/healthCheck.js';
+import { runEntryCheck } from './core/entryCheck.js';
+import { pruneHistory } from './core/checkHistory.js';
+import { normalizeAssertions } from './core/assertions.js';
 import { initExtensionBridge } from './core/extensionBridge.js';
 import { loadSettings } from './core/settings.js';
 import {
@@ -50,6 +53,8 @@ import {
 } from './ui/modals/redirectModal.js';
 import {
   initializeSecureStorage,
+  isStorageUnreadable,
+  markStorageRecovered,
   saveSecureState,
 } from './core/secureStorage.js';
 import { createSyncMetadata, getDeviceId } from './core/syncMerge.js';
@@ -120,6 +125,9 @@ let appState = {
 let appSettings = loadSettings();
 let marketingToolkitModulesPromise = null;
 let lastPersistedEntities = new Map();
+// Transient per-entry health status (id -> 'checking' | 'online' | 'offline').
+// Kept out of appState.urls so it is never persisted, synced or stamped.
+const runtimeHealthStatus = new Map();
 let lastPersistedPresetIds = new Set();
 let lastPersistedPresetSnapshots = new Map();
 const syncDeviceId = getDeviceId();
@@ -156,7 +164,7 @@ function normalizeUrlEntries(entries = []) {
         return null;
       }
       const source = typeof entry === 'object' && entry ? entry : {};
-      return {
+      const normalized = {
         ...source,
         id: createEntryId(source.id),
         url: rawUrl.trim(),
@@ -175,6 +183,12 @@ function normalizeUrlEntries(entries = []) {
         createdAt: Number.isFinite(source.createdAt) ? source.createdAt : now,
         isPinned: source.isPinned === true,
       };
+      // Health status is runtime-only; drop it from older persisted/cloud data.
+      delete normalized.healthStatus;
+      const assertions = normalizeAssertions(source.assertions);
+      if (assertions) normalized.assertions = assertions;
+      else delete normalized.assertions;
+      return normalized;
     })
     .filter(Boolean);
 }
@@ -257,6 +271,14 @@ function applyLoadedState(data) {
     : [];
   appState.syncMetadata =
     nextData.syncMetadata || createSyncMetadata(syncDeviceId);
+  refreshPersistedSnapshots();
+}
+
+/**
+ * Marks the current entities and presets as already persisted, so the next
+ * saveState() stamps only genuine local edits (and keeps remote stamps).
+ */
+function refreshPersistedSnapshots() {
   lastPersistedEntities = new Map(
     appState.urls.map((entry) => [entry.id, JSON.stringify(entry)])
   );
@@ -323,7 +345,51 @@ function markDeletedEntries(ids = []) {
   appState.tombstones = [...known.values()];
 }
 
+// Persistent, non-blocking notice shown while the stored record is unreadable
+// and saves are being skipped.
+function unreadableNoticeText() {
+  return i18next.t('storage.unreadableNotice', {
+    defaultValue:
+      'Changes are not being saved because your stored data could not be decrypted. Restore from a backup or cloud sync to continue.',
+  });
+}
+
+function showUnreadableNotice() {
+  if (document.querySelector('[data-storage-unreadable-notice]')) return;
+  const notice = document.createElement('div');
+  notice.setAttribute('data-storage-unreadable-notice', '');
+  notice.setAttribute('role', 'alert');
+  notice.className = 'storage-unreadable-notice';
+  notice.textContent = unreadableNoticeText();
+  document.body.appendChild(notice);
+}
+
+// Re-translate a visible notice on language change. Only updates an existing
+// element, so a removed notice is never resurrected. Registered once.
+i18next.on('languageChanged', () => {
+  const notice = document.querySelector('[data-storage-unreadable-notice]');
+  if (notice) notice.textContent = unreadableNoticeText();
+});
+
+function hideUnreadableNotice() {
+  document.querySelector('[data-storage-unreadable-notice]')?.remove();
+}
+
+// The notice is a pure function of the storage state; call after any event
+// that can change it (save attempts, restores, scope switches).
+function syncUnreadableNotice() {
+  if (isStorageUnreadable()) showUnreadableNotice();
+  else hideUnreadableNotice();
+}
+
 function saveState() {
+  syncUnreadableNotice();
+  if (isStorageUnreadable()) {
+    // Persisting now would overwrite the unreadable record with placeholder
+    // data (and broadcast it to sync listeners). Skip, but tell the user.
+    console.warn('Skipped saving: the stored data could not be decrypted.');
+    return;
+  }
   stampChangedEntities();
   const now = Date.now();
   const rawPresets = getPersistedPresets();
@@ -571,17 +637,34 @@ function getFilteredUrls() {
   return getSortedUrls(urlsToRender);
 }
 
-// User-triggered single URL health check
+// User-triggered single URL health check. The status is runtime-only (see
+// runtimeHealthStatus) so it is never persisted, synced or counted as an edit.
 async function runSingleHealthCheck(targetUrl, targetId) {
   const entry = appState.urls.find((u) => u.id === targetId);
-  if (entry) {
-    entry.healthStatus = 'checking';
-    renderUrlList();
-
-    const res = await checkUrlHealth(targetUrl);
-    entry.healthStatus = res.status;
+  if (!entry) return;
+  runtimeHealthStatus.set(targetId, 'checking');
+  renderUrlList();
+  try {
+    const res = await runEntryCheck(entry, (u, t, o) =>
+      checkUrlHealth(u, t, o)
+    );
+    runtimeHealthStatus.set(targetId, res.status);
+  } catch (error) {
+    console.error('Health check failed.', error);
+    runtimeHealthStatus.set(targetId, 'offline');
+  } finally {
+    // Never leave a card stuck on 'checking'.
+    if (runtimeHealthStatus.get(targetId) === 'checking') {
+      runtimeHealthStatus.delete(targetId);
+    }
     renderUrlList();
   }
+}
+
+// Overlays the transient health status for display only.
+function _withRuntimeHealth(entry) {
+  const status = runtimeHealthStatus.get(entry.id);
+  return status ? { ...entry, healthStatus: status } : entry;
 }
 
 // 建立共用 callbacks 物件（卡片與表格行列共用）
@@ -631,7 +714,11 @@ function _makeCallbacks(urlsToRender) {
 
 function createCardElement(entry, urlsToRender) {
   const isSelected = appState.selectedIds.has(entry.id);
-  return createUrlCard(entry, _makeCallbacks(urlsToRender), isSelected);
+  return createUrlCard(
+    _withRuntimeHealth(entry),
+    _makeCallbacks(urlsToRender),
+    isSelected
+  );
 }
 
 // 更新 workspace count badge 與 sidebar 統計欄
@@ -661,6 +748,11 @@ function renderUrlList() {
   const existingIds = new Set(appState.urls.map((u) => u.id));
   appState.selectedIds.forEach((id) => {
     if (!existingIds.has(id)) appState.selectedIds.delete(id);
+  });
+  // Runtime health status of deleted/replaced entries must not linger (it
+  // would resurface if the same id returns, e.g. via a sync restore).
+  runtimeHealthStatus.forEach((_status, id) => {
+    if (!existingIds.has(id)) runtimeHealthStatus.delete(id);
   });
 
   // 更新統計 Badge
@@ -708,7 +800,11 @@ function renderUrlList() {
     urlsToRender.forEach((entry) => {
       const isSelected = appState.selectedIds.has(entry.id);
       tbody.appendChild(
-        createUrlRow(entry, _makeCallbacks(urlsToRender), isSelected)
+        createUrlRow(
+          _withRuntimeHealth(entry),
+          _makeCallbacks(urlsToRender),
+          isSelected
+        )
       );
     });
     table.appendChild(tbody);
@@ -818,7 +914,11 @@ function importUrlJson(file) {
           })
         );
         const settingsDialog = document.getElementById('settings-modal');
-        if (settingsDialog && typeof settingsDialog.close === 'function' && settingsDialog.open) {
+        if (
+          settingsDialog &&
+          typeof settingsDialog.close === 'function' &&
+          settingsDialog.open
+        ) {
           settingsDialog.close();
         }
       } else {
@@ -879,7 +979,11 @@ function importUrlCsv(file) {
         renderUrlList();
         alert(i18next.t('urlList.importSuccess', { count }));
         const settingsDialog = document.getElementById('settings-modal');
-        if (settingsDialog && typeof settingsDialog.close === 'function' && settingsDialog.open) {
+        if (
+          settingsDialog &&
+          typeof settingsDialog.close === 'function' &&
+          settingsDialog.open
+        ) {
           settingsDialog.close();
         }
       } else {
@@ -995,7 +1099,7 @@ function initPanelResizer() {
   window.addEventListener('touchend', stopDragging);
 }
 
-function restoreCloudData(data) {
+function restoreCloudData(data, options = {}) {
   if (!data || !Array.isArray(data.urls)) return;
   appState.urls = normalizeUrlEntries(data.urls);
   if (Array.isArray(data.presets)) appState.presets = data.presets;
@@ -1010,7 +1114,17 @@ function restoreCloudData(data) {
   if (['cards', 'table', 'grouped'].includes(data.viewMode)) {
     appState.viewMode = data.viewMode;
   }
-  saveState();
+  // The restored data already carries the stamps of the device that wrote it.
+  // Treat it as persisted so saveState() does not re-stamp it as a local edit.
+  refreshPersistedSnapshots();
+  if (options.confirmedRecovery === true && isStorageUnreadable()) {
+    // Only a caller that explicitly confirms recovery may replace an
+    // unreadable record (a copy of it is kept by secureStorage). Restored data
+    // alone cannot tell a placeholder from genuinely empty remote data.
+    markStorageRecovered();
+  }
+  saveState(); // also re-evaluates the notice
+  syncUnreadableNotice();
   renderUrlList();
 }
 
@@ -1031,6 +1145,19 @@ function getCurrentState() {
 async function bootstrap() {
   const stateLoading = loadState();
   if (stateLoading) await stateLoading;
+  if (isStorageUnreadable()) {
+    // An empty id list would wipe every check history, and a bootstrap save
+    // would replace the unreadable record. Leave both untouched and warn.
+    alert(
+      i18next.t('storage.unreadableWarning', {
+        defaultValue:
+          'Your saved data could not be decrypted. It has not been modified, and changes made in this session will not be saved. Reload to retry, or restore from a backup or cloud sync.',
+      })
+    );
+    showUnreadableNotice();
+  } else {
+    pruneHistory(appState.urls.map((entry) => entry.id));
+  }
   if (CLOUD_ENABLED) {
     const cloudSync = await loadCloudSyncModule();
     initCloudSyncModal = cloudSync.initCloudSyncModal;
@@ -1056,7 +1183,7 @@ async function bootstrap() {
     },
   });
   // Persist a freshly encrypted record before removing any legacy plaintext.
-  saveState();
+  if (!isStorageUnreadable()) saveState();
   migrateDataToV3();
   initSettingsModal({
     settings: appSettings,
@@ -1366,7 +1493,18 @@ async function bootstrap() {
         alert(i18next.t('urlList.noUrls') || '清單中沒有網址可進行即時測試。');
         return;
       }
-      openLiveTestModal({ urls: targets });
+      openLiveTestModal({
+        urls: targets,
+        // saveState() swaps appState.urls for stamped copies, so write the
+        // change onto the live entry instead of the modal's reference.
+        onChange: (changed) => {
+          const target = appState.urls.find((u) => u.id === changed.id);
+          if (!target) return;
+          if (changed.assertions) target.assertions = changed.assertions;
+          else delete target.assertions;
+          saveState();
+        },
+      });
     });
   }
 
@@ -1423,7 +1561,10 @@ async function bootstrap() {
   if (batchAddTagBtn) {
     batchAddTagBtn.addEventListener('click', () => {
       if (appState.selectedIds.size === 0) {
-        alert(i18next.t('urlList.batch.noSelection') || '請先勾選要新增標籤的網址項目。');
+        alert(
+          i18next.t('urlList.batch.noSelection') ||
+            '請先勾選要新增標籤的網址項目。'
+        );
         return;
       }
       const newTag = prompt(i18next.t('urlList.batch.promptAddTag'));
@@ -1458,7 +1599,9 @@ async function bootstrap() {
       }
       exportUrlJson(
         targets,
-        appState.selectedIds.size > 0 ? 'selected-urls.json' : 'urls-export.json'
+        appState.selectedIds.size > 0
+          ? 'selected-urls.json'
+          : 'urls-export.json'
       );
     });
   }

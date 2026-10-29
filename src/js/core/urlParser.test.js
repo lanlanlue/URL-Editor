@@ -266,5 +266,25 @@ describe('urlParser', () => {
       expect(items[2].tags).toContain('localhost');
       expect(items[2].tags).toContain('admin');
     });
+
+    test('malformed percent sequences do not abort the whole batch', () => {
+      const text = [
+        'https://a.example.com/%E0%A4%A',
+        'https://b.example.com/100%',
+        'https://c.example.com/orders',
+      ].join('\n');
+      let res;
+      expect(() => {
+        res = parseBatchUrlText(text);
+      }).not.toThrow();
+      expect(res.items).toHaveLength(3);
+      expect(res.items[2].label).toBe('orders');
+    });
+
+    test('generateSuggestedLabel tolerates malformed percent sequences', () => {
+      expect(() =>
+        generateSuggestedLabel('https://a.example.com/100%')
+      ).not.toThrow();
+    });
   });
 });
