@@ -1,9 +1,12 @@
+import { PROBE_LIMITS, runProbe } from './probe.js';
+
 const MAX_BODY_BYTES = 1024 * 1024;
 const SESSION_DAYS = 30;
 const SESSION_ROTATION_DAYS = 7;
 const RECENT_AUTH_MINUTES = 10;
 const HISTORY_LIMIT = 20;
 const HISTORY_RETENTION_DAYS = 30;
+const JWKS_TIMEOUT_MS = 3000;
 const GOOGLE_JWKS_URL = 'https://www.googleapis.com/oauth2/v3/certs';
 
 let googleJwksCache = null;
@@ -117,6 +120,7 @@ function isOAuthOriginAllowed(request, env) {
     hostname === 'url-editor.ointw.com' ||
     hostname === 'localhost' ||
     hostname === '127.0.0.1' ||
+    hostname === '[::1]' ||
     hostname === '::1'
   );
 }
@@ -160,6 +164,17 @@ async function readJson(request) {
   }
 }
 
+// Only these sentinels thrown by readJson may reach the client as a code; any
+// other error (e.g. a stream failure) is reported as INVALID_BODY so internal
+// messages are never echoed.
+function bodyErrorResponse(error, message) {
+  if (error?.message === 'PAYLOAD_TOO_LARGE')
+    return errorResponse(413, 'PAYLOAD_TOO_LARGE', message);
+  if (error?.message === 'INVALID_JSON')
+    return errorResponse(422, 'INVALID_JSON', message);
+  return errorResponse(422, 'INVALID_BODY', message);
+}
+
 function exactKeys(object, allowed) {
   return (
     object &&
@@ -172,9 +187,22 @@ function exactKeys(object, allowed) {
 async function getGoogleJwks() {
   if (googleJwksCache && googleJwksCache.expiresAt > Date.now())
     return googleJwksCache.keys;
-  const response = await fetch(GOOGLE_JWKS_URL, { cf: { cacheTtl: 3600 } });
-  if (!response.ok) throw new Error('GOOGLE_JWKS_UNAVAILABLE');
-  const payload = await response.json();
+  // AbortController + timer rather than AbortSignal.timeout so it also works
+  // where that static is missing (jsdom); the timer covers the body read too.
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), JWKS_TIMEOUT_MS);
+  let response;
+  let payload;
+  try {
+    response = await fetch(GOOGLE_JWKS_URL, {
+      cf: { cacheTtl: 3600 },
+      signal: controller.signal,
+    });
+    if (!response.ok) throw new Error('GOOGLE_JWKS_UNAVAILABLE');
+    payload = await response.json();
+  } finally {
+    clearTimeout(timer);
+  }
   const maxAge = /max-age=(\d+)/i.exec(
     response.headers.get('Cache-Control') || ''
   )?.[1];
@@ -225,7 +253,9 @@ async function verifyGoogleCredential(credential, env) {
     !validSignature ||
     !issuerValid ||
     !audienceValid ||
-    Number(claims.exp) <= nowSeconds() ||
+    typeof claims.exp !== 'number' ||
+    !Number.isFinite(claims.exp) ||
+    claims.exp <= nowSeconds() ||
     claims.email_verified !== true ||
     typeof claims.sub !== 'string'
   ) {
@@ -254,6 +284,26 @@ async function createSession(env, userId) {
   return { token, csrfToken };
 }
 
+// Re-resolves a session row whose token_hash was changed by a concurrent
+// rotation, using only columns that no UPDATE in this file ever changes
+// (user_id, created_at, last_authenticated_at, expires_at); csrf_hash is NOT
+// stable (the winner usually re-issues it). The winner has a strictly newer
+// last_rotated_at than the stale row, which excludes unrotated look-alike
+// sessions; ORDER BY picks the most recently rotated row if several match.
+async function findRotatedSession(env, session) {
+  return env.DB.prepare(
+    'SELECT token_hash FROM sessions WHERE user_id = ? AND created_at = ? AND last_authenticated_at = ? AND expires_at = ? AND last_rotated_at > ? ORDER BY last_rotated_at DESC LIMIT 1'
+  )
+    .bind(
+      session.user_id,
+      session.created_at,
+      session.last_authenticated_at,
+      session.expires_at,
+      session.last_rotated_at
+    )
+    .first();
+}
+
 async function getSession(request, env, { rotate = true } = {}) {
   const token = parseCookies(request)['__Host-ue_session'];
   if (!token) return null;
@@ -270,16 +320,34 @@ async function getSession(request, env, { rotate = true } = {}) {
       SESSION_ROTATION_DAYS * 86400
   ) {
     const rotatedToken = randomToken(32);
-    await env.DB.prepare(
+    const rotatedHash = await sha256(rotatedToken);
+    const result = await env.DB.prepare(
       'UPDATE sessions SET token_hash = ?, last_rotated_at = ? WHERE token_hash = ?'
     )
-      .bind(await sha256(rotatedToken), nowSeconds(), session.token_hash)
+      .bind(rotatedHash, nowSeconds(), session.token_hash)
       .run();
-    session.token_hash = await sha256(rotatedToken);
-    session.setCookie = sessionCookie(
-      rotatedToken,
-      Math.max(0, Number(session.expires_at) - nowSeconds())
-    );
+    // A concurrent request with the same old token may have rotated first; its
+    // UPDATE then matches 0 rows. Only the winner may hand out the new cookie,
+    // otherwise the browser would hold a token that is not in the DB.
+    if (result?.meta?.changes === 1) {
+      session.token_hash = rotatedHash;
+      session.setCookie = sessionCookie(
+        rotatedToken,
+        Math.max(0, Number(session.expires_at) - nowSeconds())
+      );
+    } else {
+      // Lost the race: the row now lives under the winner's token hash, so
+      // the stale hash would make later UPDATE/DELETE statements match 0 rows.
+      // Re-resolve the same row using only columns that no UPDATE in this file
+      // ever changes (user_id, created_at, last_authenticated_at, expires_at);
+      // csrf_hash is NOT stable (the winner usually re-issues it). The winner
+      // has a strictly newer last_rotated_at than the stale row, which
+      // excludes unrotated look-alike sessions; ORDER BY picks the most
+      // recently rotated row if several still match.
+      const current = await findRotatedSession(env, session);
+      if (!current?.token_hash) return null;
+      session.token_hash = current.token_hash;
+    }
   }
   return session;
 }
@@ -319,8 +387,7 @@ async function requireCsrf(request, session) {
 }
 
 function parseEtag(value) {
-  if (value === null || value === undefined) return null;
-  const match = /^(?:W\/)?"?(?:rev-)?(\d+)"?$/i.exec(String(value).trim());
+  const match = /^"rev-(\d+)"$/.exec(value || '');
   return match ? Number(match[1]) : null;
 }
 
@@ -395,11 +462,7 @@ async function authenticateGoogle(request, env) {
   try {
     body = await readJson(request);
   } catch (error) {
-    return errorResponse(
-      error.message === 'PAYLOAD_TOO_LARGE' ? 413 : 422,
-      error.message,
-      'Invalid request body.'
-    );
+    return bodyErrorResponse(error, 'Invalid request body.');
   }
   if (
     !exactKeys(body, new Set(['credential', 'csrfToken'])) ||
@@ -415,11 +478,7 @@ async function authenticateGoogle(request, env) {
   let claims;
   try {
     claims = await verifyGoogleCredential(body.credential, env);
-  } catch (error) {
-    console.warn(
-      '[Google Credential Verification Failed]:',
-      error?.message || error
-    );
+  } catch {
     return errorResponse(
       401,
       'GOOGLE_TOKEN_INVALID',
@@ -427,24 +486,38 @@ async function authenticateGoogle(request, env) {
     );
   }
   const currentTime = nowSeconds();
-  const newUserId = crypto.randomUUID();
-  await env.DB.prepare(
-    'INSERT INTO users (id, google_sub, email, display_name, created_at, last_login_at) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(google_sub) DO UPDATE SET email = excluded.email, display_name = excluded.display_name, last_login_at = excluded.last_login_at'
-  )
-    .bind(
-      newUserId,
-      claims.sub,
-      String(claims.email || '').slice(0, 320),
-      String(claims.name || '').slice(0, 200),
-      currentTime,
-      currentTime
-    )
-    .run();
-  const user = await env.DB.prepare(
+  let user = await env.DB.prepare(
     'SELECT id FROM users WHERE google_sub = ? LIMIT 1'
   )
     .bind(claims.sub)
     .first();
+  if (!user) {
+    const id = crypto.randomUUID();
+    await env.DB.prepare(
+      'INSERT INTO users (id, google_sub, email, display_name, created_at, last_login_at) VALUES (?, ?, ?, ?, ?, ?)'
+    )
+      .bind(
+        id,
+        claims.sub,
+        String(claims.email || '').slice(0, 320),
+        String(claims.name || '').slice(0, 200),
+        currentTime,
+        currentTime
+      )
+      .run();
+    user = { id };
+  } else {
+    await env.DB.prepare(
+      'UPDATE users SET email = ?, display_name = ?, last_login_at = ? WHERE id = ?'
+    )
+      .bind(
+        String(claims.email || '').slice(0, 320),
+        String(claims.name || '').slice(0, 200),
+        currentTime,
+        user.id
+      )
+      .run();
+  }
   const created = await createSession(env, user.id);
   return json(
     {
@@ -466,35 +539,20 @@ async function handleSyncGet(request, env) {
     .bind(session.account_id)
     .first();
   const envelope = documentEnvelope(document);
-  const revision = envelope?.revision || 0;
   return json(
-    { document: envelope, revision, etag: `"rev-${revision}"` },
+    { document: envelope, revision: envelope?.revision || 0 },
     200,
     responseHeaders(session, { ETag: `"rev-${envelope?.revision || 0}"` })
   );
 }
 
 async function cleanupHistory(env, userId) {
-  try {
-    const cutoff = nowSeconds() - HISTORY_RETENTION_DAYS * 86400;
-    const rows = await env.DB.prepare(
-      'SELECT revision FROM sync_revisions WHERE user_id = ? ORDER BY revision DESC LIMIT ?'
-    )
-      .bind(userId, HISTORY_LIMIT)
-      .all();
-
-    const revisions = (rows?.results || []).map((r) => r.revision);
-    if (revisions.length >= HISTORY_LIMIT) {
-      const minKeptRevision = Math.min(...revisions);
-      await env.DB.prepare(
-        'DELETE FROM sync_revisions WHERE user_id = ? AND revision < ? AND created_at < ?'
-      )
-        .bind(userId, minKeptRevision, cutoff)
-        .run();
-    }
-  } catch (err) {
-    console.warn('[cleanupHistory warning]:', err?.message || err);
-  }
+  const cutoff = nowSeconds() - HISTORY_RETENTION_DAYS * 86400;
+  await env.DB.prepare(
+    `DELETE FROM sync_revisions WHERE user_id = ? AND (created_at < ? OR revision NOT IN (SELECT revision FROM sync_revisions WHERE user_id = ? ORDER BY revision DESC LIMIT ${HISTORY_LIMIT}))`
+  )
+    .bind(userId, cutoff, userId)
+    .run();
 }
 
 async function handleSyncPut(request, env) {
@@ -508,11 +566,7 @@ async function handleSyncPut(request, env) {
   try {
     body = await readJson(request);
   } catch (error) {
-    return errorResponse(
-      error.message === 'PAYLOAD_TOO_LARGE' ? 413 : 422,
-      error.message,
-      'Invalid sync body.'
-    );
+    return bodyErrorResponse(error, 'Invalid sync body.');
   }
   if (!validateEnvelope(body))
     return errorResponse(
@@ -520,16 +574,7 @@ async function handleSyncPut(request, env) {
       'INVALID_ENVELOPE',
       'Invalid encrypted envelope.'
     );
-  let expectedRevision = parseEtag(
-    request.headers.get('If-Match') || request.headers.get('X-If-Match')
-  );
-  if (
-    expectedRevision === null &&
-    Number.isInteger(body.revision) &&
-    body.revision >= 1
-  ) {
-    expectedRevision = body.revision - 1;
-  }
+  const expectedRevision = parseEtag(request.headers.get('If-Match'));
   if (expectedRevision === null)
     return errorResponse(
       422,
@@ -556,7 +601,7 @@ async function handleSyncPut(request, env) {
     if (current) {
       const results = await env.DB.batch([
         env.DB.prepare(
-          'INSERT OR REPLACE INTO sync_revisions (user_id, revision, payload_schema_version, key_version, kdf_salt, iv, ciphertext, created_at) SELECT user_id, revision, payload_schema_version, key_version, kdf_salt, iv, ciphertext, updated_at FROM sync_documents WHERE user_id = ? AND revision = ?'
+          'INSERT INTO sync_revisions (user_id, revision, payload_schema_version, key_version, kdf_salt, iv, ciphertext, created_at) SELECT user_id, revision, payload_schema_version, key_version, kdf_salt, iv, ciphertext, updated_at FROM sync_documents WHERE user_id = ? AND revision = ?'
         ).bind(session.account_id, currentRevision),
         env.DB.prepare(
           'UPDATE sync_documents SET revision = ?, payload_schema_version = ?, key_version = ?, kdf_salt = ?, iv = ?, ciphertext = ?, updated_at = ? WHERE user_id = ? AND revision = ?'
@@ -580,7 +625,7 @@ async function handleSyncPut(request, env) {
         );
     } else {
       await env.DB.prepare(
-        'INSERT OR REPLACE INTO sync_documents (user_id, revision, payload_schema_version, key_version, kdf_salt, iv, ciphertext, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+        'INSERT INTO sync_documents (user_id, revision, payload_schema_version, key_version, kdf_salt, iv, ciphertext, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
       )
         .bind(
           session.account_id,
@@ -594,21 +639,23 @@ async function handleSyncPut(request, env) {
         )
         .run();
     }
-    await cleanupHistory(env, session.account_id);
-  } catch (error) {
-    console.error('Failed to update sync document:', error);
+  } catch {
     return errorResponse(
-      500,
-      'DATABASE_ERROR',
-      error.message || 'Failed to update sync document.'
+      409,
+      'SYNC_CONFLICT',
+      'The encrypted document has changed.'
     );
   }
+  // The write is committed; a failed history cleanup must not be reported as a
+  // conflict. It is retried on the next successful write.
+  try {
+    await cleanupHistory(env, session.account_id);
+  } catch {
+    // best effort; fixed message only so no user data reaches the logs
+    console.warn('Sync history cleanup failed');
+  }
   return json(
-    {
-      document: body,
-      revision: body.revision,
-      etag: `"rev-${body.revision}"`,
-    },
+    { document: body, revision: body.revision },
     200,
     responseHeaders(session, { ETag: `"rev-${body.revision}"` })
   );
@@ -650,9 +697,21 @@ async function handleLogout(request, env) {
     return errorResponse(403, 'ORIGIN_INVALID', 'Origin is not allowed.');
   const session = await requireSession(request, env, { rotate: false });
   await requireCsrf(request, session);
-  await env.DB.prepare('DELETE FROM sessions WHERE token_hash = ?')
-    .bind(session.token_hash)
-    .run();
+  // A rotation by another request may land between getSession and this DELETE,
+  // leaving the row under a new hash (0 rows deleted). Re-resolve and retry a
+  // bounded number of times so the user is not left logged in.
+  let current = session;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const result = await env.DB.prepare(
+      'DELETE FROM sessions WHERE token_hash = ?'
+    )
+      .bind(current.token_hash)
+      .run();
+    if (result?.meta?.changes !== 0) break;
+    const rotated = await findRotatedSession(env, current);
+    if (!rotated?.token_hash) break; // already gone
+    current = { ...current, token_hash: rotated.token_hash };
+  }
   return json({ ok: true }, 200, { 'Set-Cookie': clearSessionCookie() });
 }
 
@@ -673,8 +732,11 @@ async function handleDeleteAccount(request, env) {
   let body;
   try {
     body = await readJson(request);
-  } catch {
-    return errorResponse(422, 'INVALID_BODY', 'Invalid delete request.');
+  } catch (error) {
+    // Malformed JSON has always been INVALID_BODY here; keep that code.
+    if (error?.message === 'INVALID_JSON')
+      return errorResponse(422, 'INVALID_BODY', 'Invalid delete request.');
+    return bodyErrorResponse(error, 'Invalid delete request.');
   }
   if (
     !exactKeys(body, new Set(['confirmation'])) ||
@@ -700,6 +762,33 @@ async function handleDeleteAccount(request, env) {
   return json({ ok: true }, 200, { 'Set-Cookie': clearSessionCookie() });
 }
 
+// Side-effect free, so session cookie + same-origin check + rate limit is used
+// instead of a CSRF token (issuing one would invalidate the sync client's).
+async function handleProbe(request, env) {
+  if (!assertMutationOrigin(request))
+    return errorResponse(403, 'ORIGIN_INVALID', 'Origin is not allowed.');
+  const session = await requireSession(request, env, { rotate: false });
+  if (!rateLimit(`probe:${session.account_id}`, 120, 60 * 1000))
+    return errorResponse(429, 'RATE_LIMITED', 'Too many probe requests.');
+  let body;
+  try {
+    body = await readJson(request);
+  } catch (error) {
+    return bodyErrorResponse(error, 'Invalid probe request.');
+  }
+  if (
+    !exactKeys(body, new Set(['url', 'keyword'])) ||
+    typeof body.url !== 'string' ||
+    (body.keyword !== undefined &&
+      (typeof body.keyword !== 'string' ||
+        body.keyword.length > PROBE_LIMITS.maxKeywordLength))
+  )
+    return errorResponse(422, 'INVALID_BODY', 'Invalid probe request.');
+  const result = await runProbe(body.url, { keyword: body.keyword || '' });
+  if (result.blocked) return errorResponse(422, 'URL_BLOCKED', result.reason);
+  return json(result);
+}
+
 export async function handleApiRequest(request, env) {
   const url = new URL(request.url);
   const path = url.pathname.replace(/^\/api\/?/, '').replace(/\/$/, '');
@@ -720,7 +809,7 @@ export async function handleApiRequest(request, env) {
       });
     }
     if (request.method === 'POST' && path === 'auth/google')
-      return authenticateGoogle(request, env);
+      return await authenticateGoogle(request, env);
     if (request.method === 'GET' && path === 'session') {
       const session = await requireSession(request, env);
       const csrfToken = await issueCsrfToken(env, session);
@@ -739,17 +828,19 @@ export async function handleApiRequest(request, env) {
       );
     }
     if (request.method === 'POST' && path === 'logout')
-      return handleLogout(request, env);
+      return await handleLogout(request, env);
     if (request.method === 'GET' && path === 'sync')
-      return handleSyncGet(request, env);
+      return await handleSyncGet(request, env);
     if (request.method === 'PUT' && path === 'sync')
-      return handleSyncPut(request, env);
+      return await handleSyncPut(request, env);
     if (request.method === 'GET' && path === 'sync/revisions')
-      return handleRevisions(request, env);
+      return await handleRevisions(request, env);
     if (request.method === 'GET' && path.startsWith('sync/revisions/'))
-      return handleRevisions(request, env, path.split('/').pop());
+      return await handleRevisions(request, env, path.split('/').pop());
+    if (request.method === 'POST' && path === 'probe')
+      return await handleProbe(request, env);
     if (request.method === 'DELETE' && path === 'account')
-      return handleDeleteAccount(request, env);
+      return await handleDeleteAccount(request, env);
     return errorResponse(404, 'NOT_FOUND', 'API route not found.');
   } catch (error) {
     if (error instanceof Response) return error;
@@ -765,7 +856,6 @@ export async function handleApiRequest(request, env) {
         'INVALID_JSON',
         'Request body must be valid JSON.'
       );
-    console.error('[API Router Unhandled Error]:', error);
     return errorResponse(500, 'INTERNAL_ERROR', 'An internal error occurred.');
   }
 }
