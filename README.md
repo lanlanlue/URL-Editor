@@ -160,7 +160,8 @@ URL 仍可能含有使用者自行輸入的敏感 Query，這些內容在使用�
 
 網址加上 `?agent=1`（預設關閉）後，頁面提供 `window.urlEditorAgent`，讓 LLM 以函式呼叫新增、
 查詢、修改、刪除 URL，並可 `undo()`。寫入沿用既有加密儲存與雲端同步，Recovery Key 不會離開瀏覽器。
-API、安全限制與後續規劃見 [docs/agent-bridge.md](docs/agent-bridge.md)。
+若要讓 LLM 以 MCP 工具操作（不需瀏覽器自動化），可啟動本機中繼：`npm run agent:relay`。
+API、配對步驟與安全模型見 [docs/agent-bridge.md](docs/agent-bridge.md)。
 
 ---
 

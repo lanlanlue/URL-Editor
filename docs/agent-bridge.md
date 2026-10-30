@@ -13,7 +13,7 @@
 | 階段 | 內容 | 狀態 |
 |---|---|---|
 | A | 頁面內 `window.urlEditorAgent`，由瀏覽器工具以單次 JS 呼叫 | 已完成 |
-| B | 本機中繼 + MCP server，LLM 以工具呼叫，不需瀏覽器自動化工具 | 規劃中 |
+| B | 本機中繼 + MCP server，LLM 以工具呼叫，不需瀏覽器自動化工具 | 已完成 |
 
 ## 啟用（A）
 
@@ -72,7 +72,69 @@ a.update(id, { label: 'Staging API v2' });
 a.undo();
 ```
 
+## 本機中繼 + MCP（B）
+
+```
+LLM client ──stdio MCP──▶ cli.cjs（MCP + 127.0.0.1 中繼）◀──HTTP long-poll── 已解鎖的分頁
+                                                                       └─▶ window.urlEditorAgent
+```
+
+頁面**主動連出**到本機中繼，因此瀏覽器端不需開任何埠；加密與金鑰仍只在分頁內。
+整條路徑不需要截圖、讀 DOM 或點擊，LLM 只看到下列工具。
+
+### 設定
+
+1. 註冊 MCP server（以 Claude Code 為例，路徑換成你的 repo）：
+
+   ```bash
+   claude mcp add url-editor -- node /path/to/URL-Editor/src/agent-relay/cli.cjs
+   ```
+
+2. MCP client 啟動後，中繼會在 **stderr** 印出一次性的配對網址：
+   `https://url-editor.ointw.com/?agent=1#agent-relay=<port>:<token>`
+3. 在**已登入、已解鎖**的分頁開啟該網址。頁面讀取 fragment 後立即從網址列移除，
+   並把配對存在 `sessionStorage`（關閉分頁即失效）。
+4. 呼叫 `bridge_status` 確認 `connected: true`。
+
+登入頁若導向 `/login` 而丟失 fragment，請先登入並解鎖，再開配對網址。
+
+### 工具
+
+`bridge_status`、`list_urls`、`get_url`、`add_urls`、`update_url`、`remove_urls`、
+`undo_last_change`，語意與上方 API 一一對應。失敗時 `isError: true`，內容為
+`{ ok: false, error: { code, message } }`；中繼層額外的錯誤碼：
+`no_client`（沒有配對分頁）、`timeout`（頁面逾時未回應）、`unknown_method`、`shutdown`。
+
+### 環境變數
+
+| 變數 | 預設 | 說明 |
+|---|---|---|
+| `URL_EDITOR_RELAY_PORT` | `17891` | 監聽埠（1024–65535，僅 127.0.0.1） |
+| `URL_EDITOR_APP_ORIGIN` | `https://url-editor.ointw.com` | 配對網址與 CORS 允許的來源 |
+| `URL_EDITOR_ALLOWED_ORIGINS` | 空 | 額外允許的來源，逗號分隔；`localhost:1234` 預設已允許 |
+| `URL_EDITOR_RELAY_TOKEN` | 每次啟動隨機 | 固定 token 可免重新配對，但降低安全性 |
+
+### 安全模型
+
+- 僅綁定 `127.0.0.1`；每個請求都需 `Authorization: Bearer <token>`（常數時間比對）。
+- 檢查 `Host`（擋 DNS rebinding）與 `Origin` 白名單；預檢回應含 `Access-Control-Allow-Private-Network`。
+- 頁面只連 `http://127.0.0.1:<port>`，配對只提供埠與 token，不能指定其他主機。
+- 方法白名單：中繼與頁面兩端各自檢查，只能呼叫橋接層的 8 個方法，沒有任何 eval 或任意函式存取。
+- token 走 URL fragment，不會送到任何伺服器，且配對後立即清除。
+- 請求本文上限 1 MB；單次批次上限 200 筆。
+- 零新增依賴；MCP 為自行實作的最小 stdio 子集（`initialize`、`ping`、`tools/list`、`tools/call`）。
+
+### 已知限制
+
+- 分頁必須維持開啟且已解鎖；背景分頁亦可，但瀏覽器可能節流計時器，回應會變慢。
+- 寫入仍是直接生效（尚無核准機制），安全網是 `undo_last_change`。
+- 中繼結束後，頁面會以最長 10 秒的退避持續重試，主控台會出現 `ERR_CONNECTION_REFUSED`，屬預期行為。
+- 一個中繼對應一個分頁；重新整理或開第二個分頁時，較新的連線會取代舊的。
+- 正式站（HTTPS）連到 `http://127.0.0.1` 依賴瀏覽器對 loopback 的混合內容豁免；較新版 Chrome
+  的 Local Network Access 可能跳出授權提示。這部分**尚未在正式站實測**，僅在 `localhost:1234` 驗證。
+
 ## 測試
 
-- 單元：`src/js/core/agentBridge.test.js`
+- 橋接層：`src/js/core/agentBridge.test.js`
+- 中繼／MCP／端到端：`src/agent-relay/*.test.js`、`src/js/core/agentRelayClient.test.js`
 - 儲存競態回歸：`src/js/core/secureStorage.test.js`（`concurrent saves`）
