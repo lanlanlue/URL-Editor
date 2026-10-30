@@ -34,6 +34,7 @@ import { runEntryCheck } from './core/entryCheck.js';
 import { pruneHistory } from './core/checkHistory.js';
 import { normalizeAssertions } from './core/assertions.js';
 import { initExtensionBridge } from './core/extensionBridge.js';
+import { createAgentBridge, isAgentBridgeEnabled } from './core/agentBridge.js';
 import { loadSettings } from './core/settings.js';
 import {
   initSettingsModal,
@@ -1141,6 +1142,30 @@ function getCurrentState() {
   };
 }
 
+// Opt-in machine interface for an LLM driving this page (window.urlEditorAgent).
+// Writes go through saveState(), so encryption and cloud sync are unchanged.
+function installAgentBridge() {
+  if (typeof window === 'undefined' || !isAgentBridgeEnabled()) return;
+  window.urlEditorAgent = createAgentBridge({
+    getUrls: () => appState.urls,
+    normalize: normalizeUrlEntries,
+    commit: (next, deletedIds) => {
+      if (isStorageUnreadable()) {
+        throw new Error('Stored data is unreadable; changes are not saved.');
+      }
+      const nextIds = new Set(next.map((entry) => entry.id));
+      appState.tombstones = appState.tombstones.filter(
+        (item) => !nextIds.has(item.id)
+      );
+      markDeletedEntries(deletedIds);
+      appState.urls = next;
+      deletedIds.forEach((id) => appState.selectedIds.delete(id));
+      saveState();
+      renderUrlList();
+    },
+  });
+}
+
 // 初始化所有功能
 async function bootstrap() {
   const stateLoading = loadState();
@@ -1221,6 +1246,7 @@ async function bootstrap() {
     openCloudSyncBtn = document.getElementById('open-cloud-sync-btn');
   }
   void initGuestAds();
+  installAgentBridge();
   if (appSettings.enableMarketingToolkit) ensureMarketingToolkitModules();
   initExtensionBridge({
     onUrl: (url) => {
