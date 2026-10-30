@@ -19,6 +19,7 @@ src/
 │   │   ├── cryptoVault.js         # [Phase 2] Web Crypto 端到端零知識加密 (PBKDF2 + AES-GCM)
 │   │   ├── secureStorage.js       # [Phase 2] 安全金鑰與本地憑據隔離管理
 │   │   ├── syncMerge.js           # [Phase 2] 雙向差異比對與三方合併引擎
+│   │   ├── agentBridge.js         # [Agent] 選用的 LLM 維護介面 (window.urlEditorAgent)
 │   │   ├── trackerStripper.js     # [Phase 3] 追蹤參數過濾核心
 │   │   ├── utmBuilder.js          # [Phase 3] UTM 組合核心
 │   │   └── settings.js            # [Phase 0] 全域偏好設定與 Feature Flag 管理
