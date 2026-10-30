@@ -35,6 +35,7 @@ import { pruneHistory } from './core/checkHistory.js';
 import { normalizeAssertions } from './core/assertions.js';
 import { initExtensionBridge } from './core/extensionBridge.js';
 import { createAgentBridge, isAgentBridgeEnabled } from './core/agentBridge.js';
+import { initAgentRelay } from './core/agentRelayClient.js';
 import { loadSettings } from './core/settings.js';
 import {
   initSettingsModal,
@@ -1146,7 +1147,7 @@ function getCurrentState() {
 // Writes go through saveState(), so encryption and cloud sync are unchanged.
 function installAgentBridge() {
   if (typeof window === 'undefined' || !isAgentBridgeEnabled()) return;
-  window.urlEditorAgent = createAgentBridge({
+  const bridge = createAgentBridge({
     getUrls: () => appState.urls,
     normalize: normalizeUrlEntries,
     commit: (next, deletedIds) => {
@@ -1163,6 +1164,11 @@ function installAgentBridge() {
       saveState();
       renderUrlList();
     },
+  });
+  window.urlEditorAgent = bridge;
+  initAgentRelay({
+    bridge,
+    onStatus: (status) => console.info(`[agent-relay] ${status}`),
   });
 }
 
