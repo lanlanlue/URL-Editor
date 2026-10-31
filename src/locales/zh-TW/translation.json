@@ -451,5 +451,8 @@
     "medium": "字體: 適中 (17.5px)",
     "large": "字體: 放大 (19px / 2K推薦)",
     "xlarge": "字體: 特大 (21px / 4K推薦)"
+  },
+  "validation": {
+    "unsupportedProtocol": "不支援或不安全的 URL 協議"
   }
 }

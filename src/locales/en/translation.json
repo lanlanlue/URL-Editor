@@ -451,5 +451,8 @@
     "medium": "Font: Medium (17.5px)",
     "large": "Font: Large (19px / 2K)",
     "xlarge": "Font: Extra Large (21px / 4K)"
+  },
+  "validation": {
+    "unsupportedProtocol": "Unsupported or unsafe URL protocol"
   }
 }

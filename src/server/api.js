@@ -110,7 +110,8 @@ function clearOauthCsrfCookie() {
 
 function assertMutationOrigin(request) {
   const origin = request.headers.get('Origin');
-  return Boolean(origin) && origin === new URL(request.url).origin;
+  if (!origin || origin === 'null') return false;
+  return origin === new URL(request.url).origin;
 }
 
 function isOAuthOriginAllowed(request, env) {
@@ -373,9 +374,20 @@ async function requireSession(request, env, options = {}) {
   return session;
 }
 
+function timingSafeEqual(a, b) {
+  if (typeof a !== 'string' || typeof b !== 'string') return false;
+  if (a.length !== b.length) return false;
+  let result = 0;
+  for (let index = 0; index < a.length; index += 1) {
+    result |= a.charCodeAt(index) ^ b.charCodeAt(index);
+  }
+  return result === 0;
+}
+
 async function requireCsrf(request, session) {
   const supplied = request.headers.get('X-CSRF-Token');
-  if (!supplied || !((await sha256(supplied)) === session.csrf_hash)) {
+  const suppliedHash = supplied ? await sha256(supplied) : '';
+  if (!supplied || !timingSafeEqual(suppliedHash, session.csrf_hash)) {
     throw new Response(
       JSON.stringify({
         error: 'CSRF validation failed.',
@@ -793,6 +805,14 @@ export async function handleApiRequest(request, env) {
   const url = new URL(request.url);
   const path = url.pathname.replace(/^\/api\/?/, '').replace(/\/$/, '');
   try {
+    const secFetchSite = request.headers.get('Sec-Fetch-Site');
+    if (secFetchSite === 'cross-site') {
+      return errorResponse(
+        403,
+        'CROSS_SITE_FORBIDDEN',
+        'Cross-site requests are forbidden.'
+      );
+    }
     if (request.method === 'OPTIONS')
       return new Response(null, { status: 204 });
     if (request.method === 'GET' && path === 'auth/csrf') {

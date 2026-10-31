@@ -1,3 +1,4 @@
+import { execSync } from 'node:child_process';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -75,8 +76,39 @@ for (const entry of readdirSync(projectRoot)) {
   )
     fail(`local secret file exists: ${entry}`);
 }
-if (existsSync(join(projectRoot, '.wrangler')))
-  fail('local deployment state path exists: .wrangler');
+function isTrackedOrStagedInGit(relativePath) {
+  try {
+    const tracked = execSync(`git ls-files -- "${relativePath}"`, {
+      cwd: projectRoot,
+      stdio: ['ignore', 'pipe', 'ignore'],
+      encoding: 'utf8',
+    }).trim();
+    if (tracked.length > 0) return true;
+
+    const staged = execSync(
+      `git diff --name-only --cached -- "${relativePath}"`,
+      {
+        cwd: projectRoot,
+        stdio: ['ignore', 'pipe', 'ignore'],
+        encoding: 'utf8',
+      }
+    ).trim();
+    return staged.length > 0;
+  } catch {
+    return false;
+  }
+}
+
+const wranglerPath = join(projectRoot, '.wrangler');
+if (existsSync(wranglerPath)) {
+  const isCI =
+    process.env.CI === 'true' || process.env.GITHUB_ACTIONS === 'true';
+  if (isTrackedOrStagedInGit('.wrangler')) {
+    fail('local deployment state path is tracked or staged in git: .wrangler');
+  } else if (isCI) {
+    fail('unexpected deployment state path in CI environment: .wrangler');
+  }
+}
 
 const files = collectFiles(projectRoot).filter((path) => path !== scriptPath);
 for (const path of files) {

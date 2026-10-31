@@ -5,6 +5,7 @@ import { normalizeAssertions } from '../../core/assertions';
 import { buildResultsCsv, getHistory } from '../../core/checkHistory';
 import { runEntryCheck } from '../../core/entryCheck';
 import { createFaviconImg } from '../../utils/faviconService';
+import { isSafeUrl } from '../../core/urlParser';
 
 let currentUrls = [];
 let healthResults = new Map(); // id -> { status: 'checking'|'online'|'offline', code, error }
@@ -341,6 +342,10 @@ function _createLiveTestCard(entry) {
     defaultValue: '在新分頁開啟',
   });
   openBtn.addEventListener('click', () => {
+    if (!isSafeUrl(url)) {
+      console.warn('[Security] Refused to open unsafe URL:', url);
+      return;
+    }
     window.open(url, '_blank', 'noopener,noreferrer');
   });
 

@@ -53,8 +53,12 @@ function base64UrlToBytes(value) {
   const padded =
     value.replace(/-/g, '+').replace(/_/g, '/') +
     '='.repeat((4 - (value.length % 4)) % 4);
-  const binary = atob(padded);
-  return Uint8Array.from(binary, (character) => character.charCodeAt(0));
+  try {
+    const binary = atob(padded);
+    return Uint8Array.from(binary, (character) => character.charCodeAt(0));
+  } catch {
+    throw new Error('Invalid base64url value.');
+  }
 }
 
 function constantTimeEqual(left, right) {

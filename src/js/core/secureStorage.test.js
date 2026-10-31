@@ -321,6 +321,30 @@ describe('secureStorage legacy (localStorage) backend', () => {
       ])
     );
   });
+
+  test('REFUSES plaintext fallback to localStorage when in account encryption scope', async () => {
+    const storage = loadStorage();
+    storage.initializeSecureStorage();
+    localStorage.clear();
+
+    const mockKey = { type: 'secret', algorithm: { name: 'AES-GCM' } };
+    await storage.useAccountEncryptionKey('acc-123', mockKey);
+    expect(storage.getStorageContext().scope).toBe('account:acc-123');
+
+    const sensitiveState = {
+      urls: [{ id: 'secret-1', url: 'https://confidential.internal' }],
+      presets: [{ id: 'secret-p', name: 'ConfidentialPreset' }],
+    };
+
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    await storage.saveSecureState(sensitiveState);
+
+    expect(localStorage.getItem('urlHistory')).toBeNull();
+    expect(localStorage.getItem('paramPresets')).toBeNull();
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining('Refusing plaintext fallback for account scope')
+    );
+  });
 });
 
 describe('secureStorage IndexedDB backend', () => {
@@ -447,6 +471,17 @@ describe('secureStorage IndexedDB backend', () => {
       salt: null,
       keyVersion: 1,
     });
+  });
+
+  test('useAccountEncryptionKey throws error if accountId or key is invalid', async () => {
+    const storage = loadStorage();
+    await storage.initializeSecureStorage();
+    await expect(storage.useAccountEncryptionKey('', {})).rejects.toThrow(
+      /valid account encryption context is required/
+    );
+    await expect(
+      storage.useAccountEncryptionKey('acc-1', null)
+    ).rejects.toThrow(/valid account encryption context is required/);
   });
 
   test('loadAccountState reads an account record without leaving the active scope', async () => {

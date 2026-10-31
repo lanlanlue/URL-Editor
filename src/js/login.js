@@ -14,9 +14,17 @@ function setStatus(message, isError = false) {
 
 function getReturnPath() {
   const value = new URLSearchParams(window.location.search).get('returnTo');
-  return value && value.startsWith('/') && !value.startsWith('//')
-    ? value
-    : '/app';
+  if (
+    value &&
+    value.startsWith('/') &&
+    !value.startsWith('//') &&
+    !value.startsWith('/\\') &&
+    !value.includes('\\') &&
+    (value.length === 1 || value.charCodeAt(1) > 32)
+  ) {
+    return value;
+  }
+  return '/app';
 }
 
 function loadGoogleScript() {

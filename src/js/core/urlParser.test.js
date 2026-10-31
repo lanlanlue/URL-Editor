@@ -9,6 +9,9 @@ import {
   generateSuggestedLabel,
   generateSuggestedTags,
   parseBatchUrlText,
+  isSafeProtocol,
+  isSafeUrl,
+  DEFAULT_ALLOWED_PROTOCOLS,
 } from './urlParser';
 
 describe('urlParser', () => {
@@ -23,6 +26,63 @@ describe('urlParser', () => {
       const result = validateUrl('not a url');
       expect(result.valid).toBe(false);
       expect(result.error).toBeDefined();
+    });
+
+    it('should reject dangerous pseudo-protocols like javascript:', () => {
+      const result = validateUrl('javascript:alert(1)');
+      expect(result.valid).toBe(false);
+      expect(result.error).toContain('不安全');
+    });
+
+    it('should reject dangerous pseudo-protocols like data: and vbscript:', () => {
+      expect(
+        validateUrl('data:text/html,<script>alert(1)</script>').valid
+      ).toBe(false);
+      expect(validateUrl('vbscript:msgbox(1)').valid).toBe(false);
+    });
+
+    it('should accept standard protocols: http, https, ftp, file', () => {
+      expect(validateUrl('http://example.com').valid).toBe(true);
+      expect(validateUrl('https://example.com').valid).toBe(true);
+      expect(validateUrl('ftp://ftp.example.com').valid).toBe(true);
+      expect(validateUrl('file:///path/to/doc.pdf').valid).toBe(true);
+    });
+
+    it('should support custom allowedProtocols option', () => {
+      const customResult = validateUrl('customapp://path', {
+        allowedProtocols: ['customapp:'],
+      });
+      expect(customResult.valid).toBe(true);
+
+      const blockedResult = validateUrl('https://example.com', {
+        allowedProtocols: ['customapp:'],
+      });
+      expect(blockedResult.valid).toBe(false);
+    });
+  });
+
+  describe('isSafeProtocol & isSafeUrl', () => {
+    it('should correctly identify safe and unsafe protocols', () => {
+      expect(DEFAULT_ALLOWED_PROTOCOLS).toBeInstanceOf(Set);
+      expect(DEFAULT_ALLOWED_PROTOCOLS.has('https:')).toBe(true);
+      expect(isSafeProtocol('https:')).toBe(true);
+      expect(isSafeProtocol('HTTP')).toBe(true);
+      expect(isSafeProtocol('ftp:')).toBe(true);
+      expect(isSafeProtocol('file:')).toBe(true);
+      expect(isSafeProtocol('javascript:')).toBe(false);
+      expect(isSafeProtocol('data:')).toBe(false);
+      expect(isSafeProtocol('vbscript:')).toBe(false);
+      expect(isSafeProtocol('')).toBe(false);
+      expect(isSafeProtocol(null)).toBe(false);
+    });
+
+    it('should correctly validate URLs via isSafeUrl', () => {
+      expect(isSafeUrl('https://google.com')).toBe(true);
+      expect(isSafeUrl('http://localhost:3000')).toBe(true);
+      expect(isSafeUrl('javascript:alert(1)')).toBe(false);
+      expect(isSafeUrl('data:text/plain;base64,SGVsbG8=')).toBe(false);
+      expect(isSafeUrl('not a url')).toBe(false);
+      expect(isSafeUrl(null)).toBe(false);
     });
   });
 

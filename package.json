@@ -6,8 +6,8 @@
   "license": "MIT",
   "source": "src/index.html",
   "scripts": {
-    "test": "jest --forceExit",
-    "test:worker": "jest --forceExit --runInBand src/server",
+    "test": "jest",
+    "test:worker": "jest --runInBand src/server",
     "test:coverage": "jest --coverage",
     "start": "parcel",
     "build": "node scripts/build.mjs runtime",

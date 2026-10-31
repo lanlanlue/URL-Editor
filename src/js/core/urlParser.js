@@ -1,6 +1,57 @@
-export function validateUrl(input) {
+export const DEFAULT_ALLOWED_PROTOCOLS = new Set([
+  'http:',
+  'https:',
+  'ftp:',
+  'file:',
+]);
+
+/**
+ * Checks if a given protocol string is safe.
+ * @param {string} protocol
+ * @param {Set<string>|Array<string>} [allowedProtocols=DEFAULT_ALLOWED_PROTOCOLS]
+ * @returns {boolean}
+ */
+export function isSafeProtocol(
+  protocol,
+  allowedProtocols = DEFAULT_ALLOWED_PROTOCOLS
+) {
+  if (typeof protocol !== 'string' || !protocol.trim()) return false;
+  const normalized = protocol.trim().toLowerCase();
+  const protoWithColon = normalized.endsWith(':')
+    ? normalized
+    : `${normalized}:`;
+  const set =
+    allowedProtocols instanceof Set
+      ? allowedProtocols
+      : new Set(allowedProtocols);
+  return set.has(protoWithColon);
+}
+
+/**
+ * Checks if a URL string or URL object has a safe protocol.
+ * @param {string|URL} input
+ * @param {Set<string>|Array<string>} [allowedProtocols=DEFAULT_ALLOWED_PROTOCOLS]
+ * @returns {boolean}
+ */
+export function isSafeUrl(input, allowedProtocols = DEFAULT_ALLOWED_PROTOCOLS) {
+  if (!input) return false;
+  try {
+    const url = input instanceof URL ? input : new URL(String(input).trim());
+    return isSafeProtocol(url.protocol, allowedProtocols);
+  } catch {
+    return false;
+  }
+}
+
+export function validateUrl(
+  input,
+  { allowedProtocols = DEFAULT_ALLOWED_PROTOCOLS } = {}
+) {
   try {
     const url = new URL(input);
+    if (!isSafeProtocol(url.protocol, allowedProtocols)) {
+      return { valid: false, error: '不支援或不安全的 URL 協議' };
+    }
     return { valid: true, url };
   } catch (e) {
     return { valid: false, error: '無效的 URL 格式' };

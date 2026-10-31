@@ -303,4 +303,38 @@ describe('main.js - User Interaction Tests', () => {
     const stored = JSON.parse(localStorage.getItem('urlHistory'));
     expect(stored.urls[0].usageCount).toBe(1);
   });
+
+  test('filters out dangerous pseudo-protocols like javascript: from history on init', async () => {
+    const dangerousUrls = [
+      {
+        id: 'safe-1',
+        url: 'https://safe.com',
+        label: 'Safe',
+      },
+      {
+        id: 'bad-1',
+        url: 'javascript:alert(1)',
+        label: 'Bad JS',
+      },
+      {
+        id: 'bad-2',
+        url: 'data:text/html,<script>alert(1)</script>',
+        label: 'Bad Data',
+      },
+    ];
+    localStorage.setItem('urlHistory', JSON.stringify({ urls: dangerousUrls }));
+
+    jest.resetModules();
+    const html = fs.readFileSync(
+      path.resolve(__dirname, '../../src/index.html'),
+      'utf8'
+    );
+    document.body.innerHTML = html;
+    await import('./main.js');
+
+    const cards = document.querySelectorAll('.url-card');
+    expect(cards).toHaveLength(1);
+    expect(cards[0].textContent).toContain('https://safe.com');
+    expect(cards[0].textContent).not.toContain('javascript');
+  });
 });

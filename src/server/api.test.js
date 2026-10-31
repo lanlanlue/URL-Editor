@@ -6,10 +6,14 @@ global.TextEncoder = global.TextEncoder || TextEncoder;
 global.TextDecoder = global.TextDecoder || TextDecoder;
 
 function base64Url(bytes) {
-  return btoa(String.fromCharCode(...bytes))
+  let binary = '';
+  for (let index = 0; index < bytes.byteLength; index += 1) {
+    binary += String.fromCharCode(bytes[index]);
+  }
+  return btoa(binary)
     .replace(/\+/g, '-')
     .replace(/\//g, '_')
-    .replace(/=+$/g, '');
+    .replace(/=+$/, '');
 }
 
 describe('Pages API boundary', () => {
@@ -74,6 +78,29 @@ describe('Pages API boundary', () => {
     expect(response.status).toBe(403);
   });
 
+  test('rejects mutation requests with an explicit null Origin header', async () => {
+    const response = await handleApiRequest(
+      new Request('https://url-editor.ointw.com/api/auth/google', {
+        method: 'POST',
+        headers: { Origin: 'null' },
+        body: JSON.stringify({ credential: 'invalid', csrfToken: 'invalid' }),
+      }),
+      {}
+    );
+    expect(response.status).toBe(403);
+  });
+
+  test('rejects API requests coming from cross-site via Sec-Fetch-Site', async () => {
+    const response = await handleApiRequest(
+      new Request('https://url-editor.ointw.com/api/session', {
+        headers: { 'Sec-Fetch-Site': 'cross-site' },
+      }),
+      {}
+    );
+    expect(response.status).toBe(403);
+    const body = await response.json();
+    expect(body.code).toBe('CROSS_SITE_FORBIDDEN');
+  });
   describe('POST /api/probe', () => {
     const post = (headers = {}, body = { url: 'https://example.com' }) =>
       handleApiRequest(

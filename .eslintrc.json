@@ -22,5 +22,5 @@
       "extends": ["plugin:jest/recommended"]
     }
   ],
-  "ignorePatterns": ["dist/"]
+  "ignorePatterns": ["dist/", "dist-extension/", "coverage/", ".parcel-cache/", "android/", "ios/"]
 }

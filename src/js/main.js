@@ -1,5 +1,5 @@
 import { initDarkMode } from './core/darkMode.js';
-import i18next, { updateContent } from './core/i18n.js';
+import i18next, { updateContent, i18nReady } from './core/i18n.js';
 import { createUrlCard, createUrlRow } from './ui/components/urlCard.js';
 import {
   configureEditorStorage,
@@ -62,7 +62,11 @@ import { initGuestAds } from './core/guestAds.js';
 import { loadCloudSyncModule } from './core/cloudFeatureLoader.js';
 import { CLOUD_ENABLED } from './core/runtimeConfig.js';
 
-import { findDuplicateUrls } from './core/urlParser.js';
+import {
+  findDuplicateUrls,
+  isSafeProtocol,
+  isSafeUrl,
+} from './core/urlParser.js';
 
 // DOM references
 const exportBtn = document.getElementById('export-json-btn');
@@ -159,7 +163,10 @@ function normalizeUrlEntries(entries = []) {
         return null;
       }
       try {
-        new URL(rawUrl.trim());
+        const parsed = new URL(rawUrl.trim());
+        if (!isSafeProtocol(parsed.protocol)) {
+          return null;
+        }
       } catch {
         return null;
       }
@@ -517,6 +524,7 @@ function getSortedUrls(urls) {
 }
 
 function saveUrlToHistory(url) {
+  if (!isSafeUrl(url)) return;
   const existing = appState.urls.find((entry) => entry.url === url);
 
   if (!existing) {
@@ -679,6 +687,10 @@ function _makeCallbacks(urlsToRender) {
       trackUrlUsage(id);
     },
     onOpen: (url, id) => {
+      if (!isSafeUrl(url)) {
+        console.warn('[Security] Refused to open unsafe URL:', url);
+        return;
+      }
       trackUrlUsage(id);
       window.open(url, '_blank', 'noopener,noreferrer');
     },
@@ -1663,14 +1675,12 @@ async function bootstrap() {
     }
   });
 
-  i18next.init().then(() => {
+  const applyTranslations = () => {
     document.documentElement.lang = i18next.language;
     document.title = i18next.t('appTitle');
     updateContent();
 
     renderUrlList();
-
-    console.log('i18next initialized, rendering content...');
 
     const langSwitcher = document.getElementById('language-switcher');
     if (langSwitcher) {
@@ -1685,7 +1695,13 @@ async function bootstrap() {
         });
       });
     }
-  });
+  };
+
+  if (i18next.isInitialized) {
+    applyTranslations();
+  } else {
+    (i18nReady || Promise.resolve()).then(applyTranslations);
+  }
 
   console.log('🚀 頁面初始化完成');
 }

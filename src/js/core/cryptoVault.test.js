@@ -28,6 +28,12 @@ describe('cryptoVault Recovery Key format', () => {
     );
     expect(generated.secret).toHaveLength(32);
   });
+
+  test('handles malformed base64url inputs gracefully without crashing with uncaught DOMException', () => {
+    expect(() => decodeBytes('!@#$%^&*()')).toThrow(/Invalid base64url value/);
+    expect(() => decodeBytes('a')).toThrow(/Invalid base64url value/);
+    expect(() => decodeBytes(123)).toThrow(/Invalid base64url value/);
+  });
 });
 
 describe('cryptoVault parseRecoveryKey validation', () => {

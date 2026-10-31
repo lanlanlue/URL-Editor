@@ -251,6 +251,12 @@ export async function saveSecureState(state) {
   if (isStorageUnreadable()) return; // never replace an unreadable record
   const safeState = clone(state);
   if (backend !== 'indexeddb' || !database || !context.key) {
+    if (context.scope !== 'guest') {
+      console.warn(
+        '[SecureStorage] Refusing plaintext fallback for account scope.'
+      );
+      return;
+    }
     try {
       localStorage.setItem(
         'urlHistory',
@@ -309,25 +315,35 @@ export async function useAccountEncryptionKey(accountId, key, metadata = {}) {
     return;
   }
   const keyId = `account:${accountId}`;
-  await writeKey({
-    id: keyId,
-    key,
-    salt: metadata.salt ? encodeBytes(metadata.salt) : undefined,
-    keyVersion: metadata.keyVersion || 1,
-    updatedAt: Date.now(),
-  });
-  context = { scope: keyId, keyId, key };
+  try {
+    await writeKey({
+      id: keyId,
+      key,
+      salt: metadata.salt ? encodeBytes(metadata.salt) : undefined,
+      keyVersion: metadata.keyVersion || 1,
+      updatedAt: Date.now(),
+    });
+    context = { scope: keyId, keyId, key };
+  } catch (err) {
+    console.warn('[SecureStorage Use Account Key Failed]:', err);
+    throw err;
+  }
 }
 
 export async function getAccountEncryptionKey(accountId) {
   if (backend !== 'indexeddb' || !database || !accountId) return null;
-  const record = await readKey(`account:${accountId}`);
-  if (!record?.key) return null;
-  return {
-    key: record.key,
-    salt: record.salt ? decodeBytes(record.salt) : null,
-    keyVersion: record.keyVersion || 1,
-  };
+  try {
+    const record = await readKey(`account:${accountId}`);
+    if (!record?.key) return null;
+    return {
+      key: record.key,
+      salt: record.salt ? decodeBytes(record.salt) : null,
+      keyVersion: record.keyVersion || 1,
+    };
+  } catch (err) {
+    console.warn('[SecureStorage Get Account Encryption Key Failed]:', err);
+    return null;
+  }
 }
 
 export async function loadAccountState(accountId, key) {
@@ -351,21 +367,38 @@ export async function loadAccountState(accountId, key) {
 export async function deleteCurrentAccountLocalState(accountId) {
   if (backend !== 'indexeddb' || !database || !accountId) return;
   const keyId = `account:${accountId}`;
-  await deleteKey(keyId);
-  const record = await readRecord(recordId(keyId));
-  if (record?.scope === keyId) await deleteRecord(recordId(keyId));
-  await createGuestContext();
+  try {
+    await deleteKey(keyId);
+    const record = await readRecord(recordId(keyId));
+    if (record?.scope === keyId) await deleteRecord(recordId(keyId));
+  } catch (err) {
+    console.warn('[SecureStorage Delete Account Local State Failed]:', err);
+  } finally {
+    try {
+      await createGuestContext();
+    } catch (guestErr) {
+      console.warn('[SecureStorage Recreate Guest Context Failed]:', guestErr);
+    }
+  }
 }
 
 export async function clearGuestState() {
-  if (backend !== 'indexeddb' || !database) return;
+  if (backend !== 'indexeddb' || !database) {
+    legacyPending = false;
+    LEGACY_KEYS.forEach(removeLocalStorage);
+    return;
+  }
   // Sign-in migration calls this after copying guest data into the account.
   // An unreadable, unrecovered guest record was never copied (it could not be
   // read), so deleting it would destroy the only remaining copy.
   if (unreadableScope === 'guest') return;
-  await deleteRecord(recordId('guest'));
-  await deleteRecord('local');
-  if (context.scope === 'guest') await createGuestContext();
+  try {
+    await deleteRecord(recordId('guest'));
+    await deleteRecord('local');
+    if (context.scope === 'guest') await createGuestContext();
+  } catch (err) {
+    console.warn('[SecureStorage Clear Guest State Failed]:', err);
+  }
   legacyPending = false;
   LEGACY_KEYS.forEach(removeLocalStorage);
 }
