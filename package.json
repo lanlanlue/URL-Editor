@@ -5,6 +5,9 @@
   "author": "Darren Lan (梓恆)",
   "license": "MIT",
   "source": "src/index.html",
+  "bin": {
+    "url-editor-relay": "./src/agent-relay/cli.cjs"
+  },
   "scripts": {
     "test": "jest",
     "test:worker": "jest --runInBand src/server",
