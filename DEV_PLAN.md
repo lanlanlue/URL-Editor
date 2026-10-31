@@ -19,6 +19,8 @@ src/
 │   │   ├── cryptoVault.js         # [Phase 2] Web Crypto 端到端零知識加密 (PBKDF2 + AES-GCM)
 │   │   ├── secureStorage.js       # [Phase 2] 安全金鑰與本地憑據隔離管理
 │   │   ├── syncMerge.js           # [Phase 2] 雙向差異比對與三方合併引擎
+│   │   ├── agentBridge.js         # [Agent] 選用的 LLM 維護介面 (window.urlEditorAgent)
+│   │   ├── agentRelayClient.js    # [Agent] 頁面端 long-poll 客戶端，連本機中繼
 │   │   ├── trackerStripper.js     # [Phase 3] 追蹤參數過濾核心
 │   │   ├── utmBuilder.js          # [Phase 3] UTM 組合核心
 │   │   └── settings.js            # [Phase 0] 全域偏好設定與 Feature Flag 管理
@@ -32,6 +34,10 @@ src/
 │   │       ├── utmModal.js            # [Phase 3] UTM 參數產生器視窗
 │   │       ├── dualEditorModal.js     # [Phase 4] 雙網址對照與跨欄參數編輯工作台
 │   │       └── settingsModal.js       # [Phase 5] 包含資料備份中心 (JSON/CSV) 與 HiDPI 縮放設定
+├── agent-relay/               # [Agent] 本機中繼 + MCP stdio server（Node，CommonJS，零依賴）
+│   ├── relay.cjs
+│   ├── mcp.cjs
+│   └── cli.cjs
 ├── server/
 │   ├── auth.js                # Cloudflare Worker Google OAuth 驗證
 │   └── storage.js             # D1 SQL 儲存與並發版本控制

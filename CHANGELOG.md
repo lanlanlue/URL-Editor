@@ -4,6 +4,23 @@
 
 ---
 
+## [Unreleased]
+
+### 🚀 新增功能 (Features)
+
+#### 🤖 Agent Bridge（LLM 代理維護介面）
+- **`window.urlEditorAgent`**：提供 `list` / `get` / `add` / `addMany` / `update` / `remove` / `undo`，讓 LLM 以函式呼叫維護 URL 清單，不需模擬點擊。
+- **預設關閉**：僅在網址帶 `?agent=1` 或 `localStorage.urlEditorAgent = '1'` 時安裝。
+- **沿用既有儲存與同步**：寫入走 `saveState()`，加密儲存與雲端同步行為不變；僅可編輯 `url` / `label` / `tags` / `isPinned`。
+- **本機中繼 + MCP**：`npm run agent:relay`（或 `src/agent-relay/cli.cjs`）以 stdio 提供 MCP 工具，頁面以 long-poll 連到 `127.0.0.1` 中繼；零新增依賴，token 走 URL fragment、Origin/Host 驗證與方法白名單。
+- 詳見 [docs/agent-bridge.md](docs/agent-bridge.md)。
+
+### 🐛 修正 (Fixes)
+- **測試環境**：`jest.setup.js` 改用 `globalThis`，支援 `@jest-environment node` 測試。
+- **加密儲存競態**：`saveSecureState` 改為序列化執行，修正連續快速儲存時出現 `Encrypted local state verification failed`，並避免舊狀態最後才寫入而覆蓋新資料。
+
+---
+
 ## [2.1.3] - 2026-10-25
 
 ### 🚀 新增功能 (Features)

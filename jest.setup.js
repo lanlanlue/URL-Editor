@@ -2,8 +2,9 @@ const crypto = require('crypto');
 
 // JSDOM (the test environment used by Jest) does not implement crypto.randomUUID.
 // This polyfill exposes the Node.js crypto.randomUUID method on the `self`
-// object, which is what the application code expects.
-Object.defineProperty(self, 'crypto', {
+// object, which is what the application code expects. `globalThis` is used so the
+// same setup also loads in `@jest-environment node` suites.
+Object.defineProperty(globalThis, 'crypto', {
   value: {
     subtle: crypto.webcrypto.subtle,
     getRandomValues: crypto.webcrypto.getRandomValues.bind(crypto.webcrypto),

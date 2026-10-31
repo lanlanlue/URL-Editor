@@ -247,7 +247,24 @@ export function initializeSecureStorage() {
   })();
 }
 
+// Encrypted saves run one at a time. Concurrent saves interleave their async
+// encrypt / write / read-back steps, so an older state could land last or a
+// read-back could observe a newer write and fail verification. The legacy
+// localStorage path is synchronous and keeps writing immediately.
+let saveQueue = Promise.resolve();
+
 export async function saveSecureState(state) {
+  // Snapshot now: the caller may keep mutating the objects it passed in.
+  const snapshot = clone(state);
+  if (backend !== 'indexeddb' || !database || !context.key) {
+    return persistSecureState(snapshot);
+  }
+  const run = saveQueue.then(() => persistSecureState(snapshot));
+  saveQueue = run.catch(() => {});
+  return run;
+}
+
+async function persistSecureState(state) {
   if (isStorageUnreadable()) return; // never replace an unreadable record
   const safeState = clone(state);
   if (backend !== 'indexeddb' || !database || !context.key) {

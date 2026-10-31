@@ -602,3 +602,47 @@ describe('secureStorage IndexedDB backend', () => {
     );
   });
 });
+
+describe('secureStorage concurrent saves', () => {
+  beforeEach(() => {
+    global.indexedDB = createIndexedDbMock().indexedDB;
+    global.IDBKeyRange = {};
+  });
+
+  afterEach(() => {
+    delete global.indexedDB;
+    delete global.IDBKeyRange;
+    jest.dontMock('./cryptoVault.js');
+  });
+
+  test('a burst of saves all succeed and the last state wins', async () => {
+    const storage = loadStorage();
+    await storage.initializeSecureStorage();
+    expect(storage.getStorageMode()).toBe('indexeddb');
+
+    const saves = [1, 2, 3, 4].map((n) =>
+      storage.saveSecureState({ schemaVersion: 1, urls: [{ id: `u${n}` }] })
+    );
+    await expect(Promise.all(saves)).resolves.toBeDefined();
+
+    jest.resetModules();
+    const reloaded = loadStorage();
+    const state = await reloaded.initializeSecureStorage();
+    expect(state.urls).toEqual([{ id: 'u4' }]);
+  });
+
+  test('a failed save does not block later saves', async () => {
+    const storage = loadStorage();
+    await storage.initializeSecureStorage();
+    const failing = storage.saveSecureState({
+      schemaVersion: 1,
+      get urls() {
+        throw new Error('boom');
+      },
+    });
+    await expect(failing).rejects.toThrow();
+    await expect(
+      storage.saveSecureState({ schemaVersion: 1, urls: [] })
+    ).resolves.toBeUndefined();
+  });
+});
