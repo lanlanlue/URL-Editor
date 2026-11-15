@@ -203,3 +203,12 @@ src/
 * **Step 4.3：最終驗證清單**
   * 執行 `npm run test:coverage` 確保測試覆蓋率無明顯下降。
   * 檢查 Feature Flag 關閉時，行銷模組未載入且主介面效能不受影響。
+
+## ✨ Phase 6：AI 整理小幫手（Chrome Gemini Nano + Ask Gemini）[已完成 (Completed)]
+
+- **6.1 本機 AI 抽取**：`src/js/core/localAiAssistant.js`（可用性偵測、下載進度、JSON 防禦性解析、協定白名單、session 必定 destroy）。
+- **6.2 提示詞備援**：`src/js/ui/components/aiPromptHelper.js` 與 `urlParser.js` 的 `#tag` 解析。
+- **6.3 UI**：`aiAssistantModal.js`（預覽 / 編輯 / 勾選 / 分批匯入 / 復原）、`toast.js`、雙入口按鈕、中英 i18n、`modals.css`。
+- **6.4 Ask Gemini 語意提示**：`index.html` 的 `ai-agent-instructions` meta 與 JSON-LD。
+- **6.5 整合**：`main.js` 拆分 `getOrCreateAgentBridge()`（永遠建立）與 `initAgentRelay`（仍為 `?agent=1` opt-in）。
+- **驗證**：單元 / E2E / 對抗性測試、`npm run lint`、`security:check`、`build` 皆通過。

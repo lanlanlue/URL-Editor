@@ -8,6 +8,14 @@
 
 ### 🚀 新增功能 (Features)
 
+#### ✨ AI 整理小幫手（Chrome Gemini Nano + Ask Gemini 雙軌）
+- **本機 AI 抽取**：透過 Chrome 內建 `LanguageModel`（Gemini Nano Prompt API），在裝置端把雜亂文字整理成網址、名稱與標籤；資料不離開使用者裝置，不需 API Key、也無需開發者額外負擔 token 費用。
+- **預覽後匯入**：抽取結果先以清單呈現，可修改名稱 / 標籤、取消勾選，確認後經 `window.urlEditorAgent.addMany`（僅允許 http/https）寫入，並顯示含「復原」按鈕的 Toast。
+- **提示詞備援**：不支援本機 AI 的瀏覽器可一鍵複製通用提示詞到網頁版 Gemini / ChatGPT，再把回覆貼回批次匯入；`parseBatchUrlText` 新增行尾 `#tag` 解析。
+- **Ask Gemini 語意提示**：`index.html` 新增 `ai-agent-instructions` meta 與 JSON-LD，讓 Chrome 側邊欄的 Ask Gemini 能理解頁面操作方式。
+- **雙入口**：快速工具列 `#open-ai-assistant-btn` 與批次匯入視窗 `#batch-import-ai-btn`。
+- **內部調整**：`window.urlEditorAgent` 改為永遠建立（供 AI 匯入 / 復原使用），外部 relay 仍僅在 `?agent=1` 時啟用。
+
 #### 🤖 Agent Bridge（LLM 代理維護介面）
 - **`window.urlEditorAgent`**：提供 `list` / `get` / `add` / `addMany` / `update` / `remove` / `undo`，讓 LLM 以函式呼叫維護 URL 清單，不需模擬點擊。
 - **預設關閉**：僅在網址帶 `?agent=1` 或 `localStorage.urlEditorAgent = '1'` 時安裝。

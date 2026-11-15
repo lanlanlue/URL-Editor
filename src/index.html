@@ -15,6 +15,29 @@
     />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>URL Editor</title>
+    <meta
+      name="ai-agent-instructions"
+      content="When extracting or organizing URLs from this page or user input, format the output strictly as one item per line using Markdown link and hashtag syntax: [label](url) #tag1 #tag2 (例如：[標籤名稱](URL) #tag1 #tag2). Do not include numbered lists or extra commentary so it can be natively imported into URL-Editor."
+    />
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "WebApplication",
+        "name": "URL Editor",
+        "description": "Privacy-first web application for URL management, batch UTM tagging, and AI Smart Import with on-device Gemini Nano local extraction.",
+        "applicationCategory": "UtilityApplication",
+        "operatingSystem": "All",
+        "browserRequirements": "Requires JavaScript. Supports on-device AI in Chromium browsers with Prompt API.",
+        "featureList": [
+          "AI Smart Import",
+          "Gemini Nano local extraction",
+          "Batch UTM tagging",
+          "Trailing hashtag parsing",
+          "Client-side encrypted vault",
+          "Cloud ETag synchronization"
+        ]
+      }
+    </script>
     <link rel="stylesheet" href="css/popup.css" />
     <link rel="icon" href="./static/icons/icon.svg" type="image/svg+xml" />
     <script src="js/popup-init.js"></script>
@@ -290,6 +313,13 @@
                 data-i18n="batchImport.btn"
               >
                 <span>📥</span> 批次匯入
+              </button>
+              <button
+                id="open-ai-assistant-btn"
+                class="sidebar-tool-btn"
+                data-i18n="aiAssistant.btn"
+              >
+                <span>✨</span> AI 整理小幫手
               </button>
               <button
                 id="open-maintenance-btn"
@@ -831,6 +861,15 @@
           支援一次貼上多組 URL、Markdown 連結 <code>[名稱](網址)</code>、CSV
           或包含網址的文字。系統將自動分析並帶上建議名稱與標籤。
         </p>
+
+        <button
+          type="button"
+          id="batch-import-ai-btn"
+          class="btn-secondary batch-import-ai-btn"
+          data-i18n="aiAssistant.batchEntry"
+        >
+          ✨ 用 AI 整理雜亂文字
+        </button>
 
         <div class="form-group">
           <textarea
@@ -1775,6 +1814,74 @@
         >
           目前未選取任何 URL 進行測試。
         </div>
+      </div>
+    </dialog>
+
+    <!-- ================================================
+         AI 整理小幫手 Modal (Gemini Nano / Ask Gemini)
+         ================================================ -->
+    <dialog id="ai-assistant-modal" class="maintenance-modal ai-assistant-modal">
+      <div class="modal-header">
+        <h3 data-i18n="aiAssistant.title">AI 整理小幫手</h3>
+        <button
+          id="ai-assistant-close-btn"
+          class="modal-close-btn"
+          aria-label="關閉"
+        >
+          ✕
+        </button>
+      </div>
+      <div class="modal-body">
+        <div class="ai-status-row">
+          <span id="ai-status-indicator" class="ai-status-indicator status-checking"></span>
+          <span id="ai-status-text" role="status" aria-live="polite"></span>
+        </div>
+        <p class="panel-desc" data-i18n="aiAssistant.desc">
+          貼上任意文字，由瀏覽器內建的 Gemini Nano 在本機抽出網址、名稱與標籤；資料不會離開你的裝置。
+        </p>
+        <div class="form-group">
+          <textarea
+            id="ai-input-text"
+            class="batch-import-textarea"
+            rows="6"
+            data-i18n="[placeholder]aiAssistant.inputPlaceholder"
+            placeholder="貼上含有網址的文字…"
+          ></textarea>
+        </div>
+        <div id="ai-download-progress-wrapper" class="ai-download-progress hidden">
+          <progress id="ai-download-progress" max="100" value="0"></progress>
+          <span id="ai-download-percent">0%</span>
+        </div>
+        <div id="ai-fallback-section" class="ai-fallback-section hidden">
+          <p class="panel-desc" data-i18n="aiAssistant.fallbackDesc">
+            此瀏覽器無法使用本機 AI。可複製提示詞到 Gemini / ChatGPT 等網頁版 AI，再把回覆貼回「批次匯入」。
+          </p>
+          <button type="button" id="ai-copy-prompt-btn" class="btn-secondary" data-i18n="aiAssistant.copyPrompt">
+            複製通用提示詞
+          </button>
+          <span id="ai-copy-success-hint" class="ai-copy-hint hidden" data-i18n="aiAssistant.copySuccess">
+            已複製！
+          </span>
+        </div>
+        <div id="ai-preview-section" class="hidden">
+          <div class="batch-import-preview-header">
+            <label class="ai-select-all-label">
+              <input type="checkbox" id="ai-select-all" />
+              <span data-i18n="aiAssistant.selectAll">全選</span>
+            </label>
+            <span id="ai-preview-count-badge" class="batch-count-badge"></span>
+          </div>
+          <div id="ai-preview-container"></div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" id="ai-clear-btn" class="btn-secondary" data-i18n="aiAssistant.clear">清除</button>
+        <button type="button" id="ai-cancel-btn" class="btn-secondary" data-i18n="aiAssistant.cancel">取消</button>
+        <button type="button" id="ai-extract-btn" class="btn-secondary">
+          <span id="ai-extract-spinner" class="ai-spinner hidden" aria-hidden="true"></span>
+          <span data-i18n="aiAssistant.extract">AI 分析</span>
+        </button>
+        <button type="button" id="ai-confirm-import-btn" class="btn-primary" disabled></button>
       </div>
     </dialog>
 

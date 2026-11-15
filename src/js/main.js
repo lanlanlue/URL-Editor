@@ -16,6 +16,10 @@ import {
 } from './ui/modals/batchImportModal.js';
 import { initQrCodeModal, openQrCodeModal } from './ui/modals/qrCodeModal.js';
 import {
+  initAiAssistantModal,
+  openAiAssistantModal,
+} from './ui/modals/aiAssistantModal.js';
+import {
   configurePresetStorage,
   getPersistedPresets,
   initPresetModal,
@@ -1155,11 +1159,14 @@ function getCurrentState() {
   };
 }
 
-// Opt-in machine interface for an LLM driving this page (window.urlEditorAgent).
+// Machine interface (window.urlEditorAgent). The bridge itself is always
+// created because the in-app AI assistant ingests and undoes through it; only
+// the external relay stays opt-in (?agent=1).
 // Writes go through saveState(), so encryption and cloud sync are unchanged.
-function installAgentBridge() {
-  if (typeof window === 'undefined' || !isAgentBridgeEnabled()) return;
-  const bridge = createAgentBridge({
+let agentBridge = null;
+function getOrCreateAgentBridge() {
+  if (agentBridge) return agentBridge;
+  agentBridge = createAgentBridge({
     getUrls: () => appState.urls,
     normalize: normalizeUrlEntries,
     commit: (next, deletedIds) => {
@@ -1177,11 +1184,32 @@ function installAgentBridge() {
       renderUrlList();
     },
   });
-  window.urlEditorAgent = bridge;
+  if (typeof window !== 'undefined') window.urlEditorAgent = agentBridge;
+  return agentBridge;
+}
+
+function installAgentBridge() {
+  if (typeof window === 'undefined') return;
+  const bridge = getOrCreateAgentBridge();
+  if (!isAgentBridgeEnabled()) return;
   initAgentRelay({
     bridge,
     onStatus: (status) => console.info(`[agent-relay] ${status}`),
   });
+}
+
+function installAiAssistant() {
+  initAiAssistantModal({ bridge: getOrCreateAgentBridge() });
+  document
+    .getElementById('open-ai-assistant-btn')
+    ?.addEventListener('click', () => void openAiAssistantModal());
+  document
+    .getElementById('batch-import-ai-btn')
+    ?.addEventListener('click', () => {
+      const batchModal = document.getElementById('batch-import-modal');
+      if (batchModal?.open) batchModal.close();
+      void openAiAssistantModal();
+    });
 }
 
 // 初始化所有功能
@@ -1265,6 +1293,7 @@ async function bootstrap() {
   }
   void initGuestAds();
   installAgentBridge();
+  installAiAssistant();
   if (appSettings.enableMarketingToolkit) ensureMarketingToolkitModules();
   initExtensionBridge({
     onUrl: (url) => {

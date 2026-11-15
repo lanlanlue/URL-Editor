@@ -454,5 +454,38 @@
   },
   "validation": {
     "unsupportedProtocol": "不支援或不安全的 URL 協議"
+  },
+  "aiAssistant": {
+    "btn": "AI 整理小幫手",
+    "batchEntry": "✨ 用 AI 整理雜亂文字",
+    "title": "AI 整理小幫手",
+    "desc": "貼上任意文字，由瀏覽器內建的 Gemini Nano 在本機抽出網址、名稱與標籤；資料不會離開你的裝置。",
+    "inputPlaceholder": "貼上含有網址的文字…",
+    "fallbackDesc": "此瀏覽器無法使用本機 AI。可複製提示詞到 Gemini / ChatGPT 等網頁版 AI，再把回覆貼回「批次匯入」。",
+    "copyPrompt": "複製通用提示詞",
+    "copySuccess": "已複製！",
+    "copyFailed": "複製失敗，請手動複製",
+    "selectAll": "全選",
+    "clear": "清除",
+    "cancel": "取消",
+    "extract": "AI 分析",
+    "confirmImport": "匯入 {{count}} 筆",
+    "previewTitle": "找到 {{count}} 筆網址",
+    "colLabel": "名稱",
+    "colTags": "標籤（以逗號分隔）",
+    "statusChecking": "檢查本機 AI…",
+    "statusReady": "本機 AI 已就緒",
+    "statusDownloadable": "本機 AI 需先下載模型（首次分析時自動下載）",
+    "statusDownloading": "模型下載中…",
+    "statusUnavailable": "此瀏覽器不支援本機 AI，請使用提示詞方式",
+    "emptyInputAlert": "請先貼上文字",
+    "extracting": "分析中…",
+    "downloadProgress": "模型下載中 {{percent}}%",
+    "noItemsFound": "沒有找到可匯入的網址",
+    "errorUnavailable": "本機 AI 無法使用，請改用提示詞方式",
+    "errorGeneric": "分析失敗，請稍後再試",
+    "toastSuccess": "已匯入 {{count}} 筆網址",
+    "toastUndoAction": "復原",
+    "toastUndoSuccess": "已復原匯入"
   }
 }
