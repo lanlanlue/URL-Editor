@@ -454,5 +454,38 @@
   },
   "validation": {
     "unsupportedProtocol": "Unsupported or unsafe URL protocol"
+  },
+  "aiAssistant": {
+    "btn": "AI Organizer",
+    "batchEntry": "✨ Organize messy text with AI",
+    "title": "AI Organizer",
+    "desc": "Paste any text and Chrome's built-in Gemini Nano extracts URLs, labels and tags on-device. Nothing leaves your machine.",
+    "inputPlaceholder": "Paste text containing URLs…",
+    "fallbackDesc": "On-device AI is unavailable in this browser. Copy the prompt into a web AI such as Gemini or ChatGPT, then paste the reply into Batch Import.",
+    "copyPrompt": "Copy universal prompt",
+    "copySuccess": "Copied!",
+    "copyFailed": "Copy failed, please copy manually",
+    "selectAll": "Select all",
+    "clear": "Clear",
+    "cancel": "Cancel",
+    "extract": "Analyze",
+    "confirmImport": "Import {{count}}",
+    "previewTitle": "Found {{count}} URLs",
+    "colLabel": "Label",
+    "colTags": "Tags (comma separated)",
+    "statusChecking": "Checking on-device AI…",
+    "statusReady": "On-device AI ready",
+    "statusDownloadable": "Model download required (starts on first analysis)",
+    "statusDownloading": "Downloading model…",
+    "statusUnavailable": "On-device AI unsupported here; use the prompt method",
+    "emptyInputAlert": "Please paste some text first",
+    "extracting": "Analyzing…",
+    "downloadProgress": "Downloading model {{percent}}%",
+    "noItemsFound": "No importable URLs found",
+    "errorUnavailable": "On-device AI unavailable; use the prompt method",
+    "errorGeneric": "Analysis failed, please try again",
+    "toastSuccess": "Imported {{count}} URLs",
+    "toastUndoAction": "Undo",
+    "toastUndoSuccess": "Import undone"
   }
 }

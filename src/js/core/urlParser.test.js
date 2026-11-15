@@ -346,5 +346,132 @@ describe('urlParser', () => {
         generateSuggestedLabel('https://a.example.com/100%')
       ).not.toThrow();
     });
+
+    describe('Markdown Trailing Tags Compatibility (M2 / F08)', () => {
+      it('should extract trailing hashtag tokens from markdown lines', () => {
+        const input = '[Example](https://example.com) #tag1 #tag2';
+        const res = parseBatchUrlText(input);
+
+        expect(res.items).toHaveLength(1);
+        expect(res.items[0].url).toBe('https://example.com/');
+        expect(res.items[0].label).toBe('Example');
+        expect(res.items[0].tags).toEqual(['tag1', 'tag2']);
+      });
+
+      it('should extract single tag, dashed tags, and underscore tags', () => {
+        const input = `
+          [Single](https://example.com/single) #only-tag
+          [Dashed & Under](https://example.com/multi) #frontend-dev #data_pipeline
+        `;
+        const res = parseBatchUrlText(input);
+
+        expect(res.items).toHaveLength(2);
+        expect(res.items[0].tags).toEqual(['only-tag']);
+        expect(res.items[1].tags).toEqual(['frontend-dev', 'data_pipeline']);
+      });
+
+      it('should extract Chinese and Unicode hashtag tokens', () => {
+        const input =
+          '[開發工具](https://example.com/dev) #開發 #工具 #人工智慧';
+        const res = parseBatchUrlText(input);
+
+        expect(res.items).toHaveLength(1);
+        expect(res.items[0].label).toBe('開發工具');
+        expect(res.items[0].tags).toEqual(['開發', '工具', '人工智慧']);
+      });
+
+      it('should extract consecutive hashtags without spaces', () => {
+        const input = '[Consecutive](https://example.com/test) #tag1#tag2';
+        const res = parseBatchUrlText(input);
+
+        expect(res.items).toHaveLength(1);
+        expect(res.items[0].tags).toEqual(['tag1', 'tag2']);
+      });
+
+      it('should deduplicate repeating tags on the same line', () => {
+        const input = '[Dedup](https://example.com/dedup) #tag1 #tag2 #tag1';
+        const res = parseBatchUrlText(input);
+
+        expect(res.items).toHaveLength(1);
+        expect(res.items[0].tags).toEqual(['tag1', 'tag2']);
+      });
+
+      it('should preserve existing behavior when no trailing hashtags exist', () => {
+        const resUntagged = parseBatchUrlText('[Plain](https://example.com)', {
+          autoTag: false,
+        });
+        expect(resUntagged.items[0].tags).toEqual([]);
+
+        const resAuto = parseBatchUrlText('[Plain](https://example.com)', {
+          autoTag: true,
+        });
+        expect(resAuto.items[0].tags).toContain('example');
+      });
+
+      it('should preserve markdown label containing # without treating it as a tag', () => {
+        const input =
+          '[#1 Ranked Best Tool](https://example.com/ranking) #guide';
+        const res = parseBatchUrlText(input);
+
+        expect(res.items).toHaveLength(1);
+        expect(res.items[0].label).toBe('#1 Ranked Best Tool');
+        expect(res.items[0].tags).toEqual(['guide']);
+      });
+
+      it('should preserve URL fragment hash and extract trailing tags', () => {
+        const input =
+          '[Doc Anchor](https://example.com/guide#installation) #docs #setup';
+        const res = parseBatchUrlText(input);
+
+        expect(res.items).toHaveLength(1);
+        expect(res.items[0].url).toBe('https://example.com/guide#installation');
+        expect(res.items[0].label).toBe('Doc Anchor');
+        expect(res.items[0].tags).toEqual(['docs', 'setup']);
+      });
+
+      it('should ignore non-hashtag trailing commentary while extracting hashtags', () => {
+        const input =
+          '- [Site](https://example.com) - Highly recommended by Alice #must-read';
+        const res = parseBatchUrlText(input);
+
+        expect(res.items).toHaveLength(1);
+        expect(res.items[0].label).toBe('Site');
+        expect(res.items[0].tags).toEqual(['must-read']);
+      });
+
+      it('should combine explicit markdown tags with batch commonTags', () => {
+        const input = '[Combined](https://example.com) #custom-tag';
+        const res = parseBatchUrlText(input, { commonTags: ['global-batch'] });
+
+        expect(res.items).toHaveLength(1);
+        expect(res.items[0].tags).toEqual(['custom-tag', 'global-batch']);
+      });
+
+      it('should parse mixed batch of tagged markdown, untagged markdown, CSV, and plain URLs with zero regression', () => {
+        const batchText = `
+          [Markdown Tagged](https://tagged.example.com) #tag-a #tag-b
+          [Markdown Untagged](https://qa.example.com/orders)
+          CSV Item,https://csv.dev.example.com/login
+          https://plain.example.com/docs
+        `;
+        const res = parseBatchUrlText(batchText, { autoTag: true });
+
+        expect(res.stats.uniqueFound).toBe(4);
+        expect(res.items[0].label).toBe('Markdown Tagged');
+        expect(res.items[0].tags).toEqual(['tag-a', 'tag-b']);
+
+        expect(res.items[1].label).toBe('Markdown Untagged');
+        expect(res.items[1].tags).toContain('qa');
+        expect(res.items[1].tags).toContain('orders');
+
+        expect(res.items[2].label).toBe('CSV Item');
+        expect(res.items[2].tags).toContain('dev');
+        expect(res.items[2].tags).toContain('login');
+
+        expect(res.items[3].label).toBe('docs');
+        expect(res.items[3].tags).toContain('docs');
+        expect(res.items[3].tags).toContain('example');
+      });
+    });
   });
 });

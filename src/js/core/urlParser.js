@@ -560,9 +560,25 @@ export function parseBatchUrlText(rawText = '', options = {}) {
     if (mdMatch) {
       const explicitLabel = mdMatch[1].trim();
       const urlStr = mdMatch[2].trim();
+      const remainder = trimmedLine.slice(mdMatch[0].length);
+      const hashtagMatches = remainder.match(/#[\w\u4e00-\u9fa5-]+/g);
+      const explicitTags = hashtagMatches
+        ? Array.from(
+            new Set(
+              hashtagMatches
+                .map((t) => t.replace(/^#/, '').trim())
+                .filter(Boolean)
+            )
+          )
+        : [];
       try {
         const urlObj = new URL(urlStr);
-        foundEntries.push({ urlStr: urlObj.toString(), explicitLabel, urlObj });
+        foundEntries.push({
+          urlStr: urlObj.toString(),
+          explicitLabel,
+          explicitTags,
+          urlObj,
+        });
       } catch {
         // Ignore invalid URL
       }
@@ -607,37 +623,40 @@ export function parseBatchUrlText(rawText = '', options = {}) {
   const items = [];
   let existingCount = 0;
 
-  foundEntries.forEach(({ urlStr, explicitLabel, urlObj }) => {
-    if (seenUrlsInBatch.has(urlStr)) return;
-    seenUrlsInBatch.add(urlStr);
+  foundEntries.forEach(
+    ({ urlStr, explicitLabel, explicitTags = [], urlObj }) => {
+      if (seenUrlsInBatch.has(urlStr)) return;
+      seenUrlsInBatch.add(urlStr);
 
-    const isExisting = existingSet.has(urlStr);
-    if (isExisting) {
-      existingCount++;
+      const isExisting = existingSet.has(urlStr);
+      if (isExisting) {
+        existingCount++;
+      }
+
+      const label = autoName
+        ? generateSuggestedLabel(urlObj, explicitLabel)
+        : explicitLabel || '';
+      const suggestedTags = autoTag ? generateSuggestedTags(urlObj) : [];
+      const baseTags = explicitTags.length > 0 ? explicitTags : suggestedTags;
+      const combinedTags = Array.from(
+        new Set([
+          ...baseTags,
+          ...(commonTags || []).map((t) => t.trim()).filter(Boolean),
+        ])
+      );
+
+      items.push({
+        id: self.crypto?.randomUUID
+          ? self.crypto.randomUUID()
+          : `import-${Date.now()}-${Math.random()}`,
+        url: urlStr,
+        label,
+        tags: combinedTags,
+        isExisting,
+        selected: !isExisting, // Default unselect if already existing
+      });
     }
-
-    const label = autoName
-      ? generateSuggestedLabel(urlObj, explicitLabel)
-      : explicitLabel || '';
-    const suggestedTags = autoTag ? generateSuggestedTags(urlObj) : [];
-    const combinedTags = Array.from(
-      new Set([
-        ...suggestedTags,
-        ...(commonTags || []).map((t) => t.trim()).filter(Boolean),
-      ])
-    );
-
-    items.push({
-      id: self.crypto?.randomUUID
-        ? self.crypto.randomUUID()
-        : `import-${Date.now()}-${Math.random()}`,
-      url: urlStr,
-      label,
-      tags: combinedTags,
-      isExisting,
-      selected: !isExisting, // Default unselect if already existing
-    });
-  });
+  );
 
   return {
     items,
