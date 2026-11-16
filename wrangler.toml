@@ -18,3 +18,23 @@ migrations_dir = "migrations"
 # The Google OAuth Client ID is public configuration. Set the production value
 # in the Cloudflare Worker environment; never put a client secret here.
 GOOGLE_CLIENT_ID = "523370321902-3fm83vlvm6s7vf2sv41b1a7vjp8o1hr4.apps.googleusercontent.com"
+
+[env.dev]
+name = "url-editor-dev"
+workers_dev = true
+
+[env.dev.assets]
+directory = "./dist"
+binding = "ASSETS"
+html_handling = "none"
+run_worker_first = ["/", "/api", "/api/*", "/app", "/app/", "/login", "/login/"]
+
+[[env.dev.d1_databases]]
+binding = "DB"
+database_name = "url-editor-dev"
+database_id = "556a9059-7835-4d44-a51e-085add548078"
+migrations_dir = "migrations"
+
+[env.dev.vars]
+GOOGLE_CLIENT_ID = "523370321902-3fm83vlvm6s7vf2sv41b1a7vjp8o1hr4.apps.googleusercontent.com"
+ALLOW_PREVIEW_OAUTH = "true"

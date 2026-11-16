@@ -29,6 +29,20 @@ describe('cryptoVault Recovery Key format', () => {
     expect(generated.secret).toHaveLength(32);
   });
 
+  test('round trips secrets that encode "-" in payload or checksum', async () => {
+    // 0xfb produces '-' in Base64URL; verify 32 keys + deterministic '-' byte round-trip.
+    const hyphenHeavy = new Uint8Array(32).fill(0xfb);
+    const formatted = await formatRecoveryKey(hyphenHeavy);
+    const parsed = await parseRecoveryKey(formatted);
+    expect([...parsed]).toEqual([...hyphenHeavy]);
+
+    for (let i = 0; i < 32; i += 1) {
+      const generated = await createRecoveryKey();
+      const restored = await parseRecoveryKey(generated.display);
+      expect([...restored]).toEqual([...generated.secret]);
+    }
+  });
+
   test('handles malformed base64url inputs gracefully without crashing with uncaught DOMException', () => {
     expect(() => decodeBytes('!@#$%^&*()')).toThrow(/Invalid base64url value/);
     expect(() => decodeBytes('a')).toThrow(/Invalid base64url value/);
@@ -334,5 +348,162 @@ describe('cryptoVault TextDecoder fallback (B25)', () => {
     const big = { text: 'x'.repeat(600000) + 'é' };
     const envelope = await vault.encryptJson(big, key);
     await expect(vault.decryptJson(envelope, key)).resolves.toEqual(big);
+  });
+});
+
+describe('cryptoVault Option B DEK + dual key slots', () => {
+  let loaded;
+  beforeAll(() => {
+    loaded = loadVaultWithTextCodecs();
+  });
+  afterAll(() => loaded.restore());
+
+  test('wraps DEK with both custom password and recovery key, and unwraps identically', async () => {
+    const v = loaded.vault;
+    const dekBytes = v.generateDekBytes();
+    const recovery = await v.createRecoveryKey();
+    const slots = await v.createKeySlots({
+      dekBytes,
+      password: 'correct-horse-battery',
+      recoverySecret: recovery.secret,
+      accountId: 'user-1',
+      keyVersion: 1,
+      iterations: 100_000,
+    });
+
+    expect(slots.password.kdf).toBe('PBKDF2-SHA256');
+    expect(slots.password.iterations).toBe(100_000);
+    expect(slots.recovery.kdf).toBe('HKDF-SHA256');
+
+    const { dekBytes: fromPwd, dekKey: keyFromPwd } =
+      await v.unwrapDekFromPasswordSlot(
+        slots.password,
+        'correct-horse-battery',
+        'user-1',
+        1
+      );
+    const { dekBytes: fromRec, dekKey: keyFromRec } =
+      await v.unwrapDekFromRecoverySlot(
+        slots.recovery,
+        recovery.secret,
+        'user-1',
+        1
+      );
+
+    expect(fromPwd).toEqual(dekBytes);
+    expect(fromRec).toEqual(dekBytes);
+
+    const sealed = await v.encryptJson(
+      { urls: ['https://a.test'] },
+      keyFromPwd,
+      'aad-1'
+    );
+    await expect(v.decryptJson(sealed, keyFromRec, 'aad-1')).resolves.toEqual({
+      urls: ['https://a.test'],
+    });
+  });
+
+  test('rejects wrong password, wrong recovery key, or wrong accountId AAD', async () => {
+    const v = loaded.vault;
+    const dekBytes = v.generateDekBytes();
+    const recovery = await v.createRecoveryKey();
+    const otherRecovery = await v.createRecoveryKey();
+    const slots = await v.createKeySlots({
+      dekBytes,
+      password: 'my-secret-password',
+      recoverySecret: recovery.secret,
+      accountId: 'user-1',
+      keyVersion: 1,
+      iterations: 100_000,
+    });
+
+    await expect(
+      v.unwrapDekFromPasswordSlot(slots.password, 'wrong-password', 'user-1', 1)
+    ).rejects.toThrow();
+    await expect(
+      v.unwrapDekFromPasswordSlot(
+        slots.password,
+        'my-secret-password',
+        'user-2',
+        1
+      )
+    ).rejects.toThrow();
+    await expect(
+      v.unwrapDekFromRecoverySlot(
+        slots.recovery,
+        otherRecovery.secret,
+        'user-1',
+        1
+      )
+    ).rejects.toThrow();
+    await expect(
+      v.unwrapDekFromRecoverySlot(slots.recovery, recovery.secret, 'user-2', 1)
+    ).rejects.toThrow();
+  });
+
+  test('re-wrapping DEK with a new password preserves decryption of existing data and recovery slot', async () => {
+    const v = loaded.vault;
+    const dekBytes = v.generateDekBytes();
+    const recovery = await v.createRecoveryKey();
+    const initialSlots = await v.createKeySlots({
+      dekBytes,
+      password: 'old-password-1',
+      recoverySecret: recovery.secret,
+      accountId: 'user-1',
+      keyVersion: 1,
+      iterations: 100_000,
+    });
+    const dekKey = await v.importDekKey(dekBytes);
+    const oldSnapshot = await v.encryptJson({ rev: 1 }, dekKey, 'hist-1');
+
+    // User enters old password (or recovery key) -> unwraps same DEK -> re-wraps with new password.
+    const { dekBytes: unwrapped } = await v.unwrapDekFromPasswordSlot(
+      initialSlots.password,
+      'old-password-1',
+      'user-1',
+      1
+    );
+    const newPasswordOnly = await v.createKeySlots({
+      dekBytes: unwrapped,
+      password: 'new-password-2',
+      accountId: 'user-1',
+      keyVersion: 1,
+      iterations: 100_000,
+    });
+    const updatedSlots = {
+      ...initialSlots,
+      password: newPasswordOnly.password,
+    };
+
+    const { dekKey: newKey } = await v.unwrapDekFromPasswordSlot(
+      updatedSlots.password,
+      'new-password-2',
+      'user-1',
+      1
+    );
+    await expect(v.decryptJson(oldSnapshot, newKey, 'hist-1')).resolves.toEqual(
+      {
+        rev: 1,
+      }
+    );
+    await expect(
+      v.unwrapDekFromRecoverySlot(
+        updatedSlots.recovery,
+        recovery.secret,
+        'user-1',
+        1
+      )
+    ).resolves.toBeDefined();
+  });
+
+  test('enforces MIN_PASSWORD_LENGTH and scores password strength', () => {
+    const v = loaded.vault;
+    expect(v.evaluatePasswordStrength('short')).toEqual({
+      valid: false,
+      score: 0,
+      label: 'tooShort',
+    });
+    expect(v.evaluatePasswordStrength('12345678').valid).toBe(true);
+    expect(v.evaluatePasswordStrength('Correct!Horse99').label).toBe('strong');
   });
 });

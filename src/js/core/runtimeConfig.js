@@ -17,9 +17,11 @@ const queryMode =
 const localDevelopmentCloudOverride =
   isLocalDevelopmentHost && (runtimeMode === 'cloud' || queryMode === 'cloud');
 
+const isCloudBuild = buildMode === 'cloud';
+
 export const APP_MODE =
   buildMode === 'local' ||
-  (!isProductionCloudHost && !localDevelopmentCloudOverride)
+  (!isCloudBuild && !isProductionCloudHost && !localDevelopmentCloudOverride)
     ? 'local'
     : 'cloud';
 export const CLOUD_ENABLED = APP_MODE === 'cloud';

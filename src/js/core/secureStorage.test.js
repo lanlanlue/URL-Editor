@@ -471,6 +471,36 @@ describe('secureStorage IndexedDB backend', () => {
       salt: null,
       keyVersion: 1,
     });
+
+    const slots = {
+      v: 1,
+      password: {
+        alg: 'PBKDF2-SHA256',
+        iterations: 600000,
+        salt: 's1',
+        iv: 'i1',
+        wrappedKey: 'w1',
+      },
+      recovery: {
+        alg: 'HKDF-SHA256',
+        salt: 's2',
+        iv: 'i2',
+        wrappedKey: 'w2',
+      },
+    };
+    await storage.useAccountEncryptionKey('acct-v2', 'dek-key', {
+      salt: 'salt-v2',
+      keyVersion: 2,
+      payloadSchemaVersion: 2,
+      keySlots: slots,
+    });
+    await expect(storage.getAccountEncryptionKey('acct-v2')).resolves.toEqual({
+      key: 'dek-key',
+      salt: 'salt-v2',
+      keyVersion: 2,
+      payloadSchemaVersion: 2,
+      keySlots: slots,
+    });
   });
 
   test('useAccountEncryptionKey throws error if accountId or key is invalid', async () => {

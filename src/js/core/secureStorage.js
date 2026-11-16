@@ -338,6 +338,10 @@ export async function useAccountEncryptionKey(accountId, key, metadata = {}) {
       key,
       salt: metadata.salt ? encodeBytes(metadata.salt) : undefined,
       keyVersion: metadata.keyVersion || 1,
+      ...(metadata.payloadSchemaVersion
+        ? { payloadSchemaVersion: metadata.payloadSchemaVersion }
+        : {}),
+      ...(metadata.keySlots ? { keySlots: metadata.keySlots } : {}),
       updatedAt: Date.now(),
     });
     context = { scope: keyId, keyId, key };
@@ -356,6 +360,10 @@ export async function getAccountEncryptionKey(accountId) {
       key: record.key,
       salt: record.salt ? decodeBytes(record.salt) : null,
       keyVersion: record.keyVersion || 1,
+      ...(record.payloadSchemaVersion
+        ? { payloadSchemaVersion: record.payloadSchemaVersion }
+        : {}),
+      ...(record.keySlots ? { keySlots: record.keySlots } : {}),
     };
   } catch (err) {
     console.warn('[SecureStorage Get Account Encryption Key Failed]:', err);

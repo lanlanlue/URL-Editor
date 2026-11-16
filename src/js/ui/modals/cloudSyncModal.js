@@ -10,14 +10,20 @@ import {
   putSyncDocument,
 } from '../../core/cloudApi.js';
 import {
+  MIN_PASSWORD_LENGTH,
+  createKeySlots,
   createRecoveryKey,
   decodeBytes,
   decryptJson,
   deriveEncryptionKey,
   encryptJson,
   encodeBytes,
+  evaluatePasswordStrength,
+  importDekKey,
   parseRecoveryKey,
   randomBytes,
+  unwrapDekFromPasswordSlot,
+  unwrapDekFromRecoverySlot,
 } from '../../core/cryptoVault.js';
 import {
   clearGuestState,
@@ -50,6 +56,10 @@ let syncedEtag = null;
 let syncedRevision = 0;
 let encryptionContext = null;
 let pendingRecovery = null;
+let pendingSetup = null;
+let recoveryUnlockMode = false;
+let manageMode = null; // null | 'changePassword' | 'upgrade' | 'rotateRecovery'
+let rotatedRecoveryDisplay = '';
 let firstUploadRequired = false;
 let guestMigrationPending = false;
 // True while the in-memory data is only the empty placeholder shown for an
@@ -143,10 +153,20 @@ function setVisible(id, visible) {
 function setBusy(value) {
   busy = value;
   [
-    'cloud-sync-unlock-btn',
+    'cloud-sync-login-btn',
+    'cloud-sync-create-vault-btn',
+    'cloud-sync-activate-btn',
+    'cloud-sync-password-unlock-btn',
+    'cloud-sync-use-recovery-btn',
+    'cloud-sync-back-to-password-btn',
     'cloud-sync-generate-btn',
+    'cloud-sync-unlock-btn',
     'cloud-sync-upload-btn',
     'cloud-sync-download-btn',
+    'cloud-sync-open-password-btn',
+    'cloud-sync-open-upgrade-btn',
+    'cloud-sync-save-password-btn',
+    'cloud-sync-confirm-rotate-btn',
     'cloud-sync-rotate-btn',
     'cloud-sync-history-refresh-btn',
     'cloud-sync-history-restore-btn',
@@ -154,27 +174,30 @@ function setBusy(value) {
     'cloud-sync-delete-account-btn',
   ].forEach((id) => {
     const button = document.getElementById(id);
-    if (button) button.disabled = value;
+    if (!button) return;
+    if (id === 'cloud-sync-activate-btn') {
+      const confirmed = Boolean(
+        document.getElementById('cloud-sync-backup-confirmed')?.checked
+      );
+      button.disabled = value || !confirmed;
+      return;
+    }
+    button.disabled = value;
   });
 }
 
 function currentRecoveryDisplay() {
   return (
-    document
-      .getElementById('cloud-sync-recovery-display')
-      ?.textContent.trim() || ''
-  );
+    pendingRecovery?.display ||
+    document.getElementById('cloud-sync-recovery-display')?.textContent ||
+    ''
+  ).trim();
 }
 
-async function copyRecoveryKey() {
-  const value = currentRecoveryDisplay();
+async function copyTextValue(value) {
   if (!value) return;
   try {
     await navigator.clipboard.writeText(value);
-    const input = document.getElementById('cloud-sync-recovery-input');
-    if (input && pendingRecovery) {
-      input.value = value;
-    }
     setStatus(
       i18next.t('cloudSync.keyCopied', {
         defaultValue: 'Recovery Key 已複製。',
@@ -185,28 +208,42 @@ async function copyRecoveryKey() {
   }
 }
 
-function downloadRecoveryKey() {
-  const value = currentRecoveryDisplay();
+function downloadKeyFile(value) {
   if (!value) return;
+  const blob = new Blob([`${value}\n`], { type: 'text/plain;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
-  link.href = URL.createObjectURL(
-    new Blob([`${value}\n`], { type: 'text/plain;charset=utf-8' })
-  );
+  link.href = url;
   link.download = 'url-editor-recovery-key.txt';
+  document.body.appendChild(link);
   link.click();
-  URL.revokeObjectURL(link.href);
-  const input = document.getElementById('cloud-sync-recovery-input');
-  if (input && pendingRecovery) {
-    input.value = value;
-  }
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+function copyRecoveryKey() {
+  return copyTextValue(currentRecoveryDisplay());
+}
+
+function downloadRecoveryKey() {
+  downloadKeyFile(currentRecoveryDisplay());
 }
 
 function currentAccountId() {
-  return session?.user?.id || session?.accountId || '';
+  return session?.user?.id || '';
 }
 
 function currentKeyVersion() {
-  return encryptionContext?.keyVersion || 1;
+  return (
+    encryptionContext?.keyVersion || remoteDocument.envelope?.keyVersion || 1
+  );
+}
+
+function currentSchemaVersion() {
+  if (encryptionContext?.payloadSchemaVersion) {
+    return encryptionContext.payloadSchemaVersion;
+  }
+  return encryptionContext?.keySlots ? 2 : 1;
 }
 
 function requireEncryptedLocalStorage() {
@@ -229,10 +266,10 @@ function buildCloudPayload(data) {
   };
 }
 
-function aadFor(accountId, keyVersion, revision) {
+function aadFor(accountId, keyVersion, revision, payloadSchemaVersion = 1) {
   return JSON.stringify({
     accountId,
-    payloadSchemaVersion: 1,
+    payloadSchemaVersion,
     keyVersion,
     revision,
   });
@@ -240,32 +277,87 @@ function aadFor(accountId, keyVersion, revision) {
 
 async function encryptCloudPayload(payload, revision) {
   const keyVersion = currentKeyVersion();
-  const aad = aadFor(currentAccountId(), keyVersion, revision);
+  const payloadSchemaVersion = currentSchemaVersion();
+  const aad = aadFor(
+    currentAccountId(),
+    keyVersion,
+    revision,
+    payloadSchemaVersion
+  );
   const encrypted = await encryptJson(payload, encryptionContext.key, aad);
   return {
     revision,
-    payloadSchemaVersion: 1,
+    payloadSchemaVersion,
     keyVersion,
     kdfSalt: encodeBytes(encryptionContext.salt),
     iv: encrypted.iv,
     ciphertext: encrypted.ciphertext,
+    ...(payloadSchemaVersion === 2 && encryptionContext.keySlots
+      ? { keySlots: encryptionContext.keySlots }
+      : {}),
   };
 }
 
 async function decryptCloudEnvelope(envelope) {
   if (!envelope || !encryptionContext)
     throw new Error('Recovery Key is required.');
+  const payloadSchemaVersion = Number(envelope.payloadSchemaVersion || 1);
   const aad = aadFor(
     currentAccountId(),
     envelope.keyVersion,
-    envelope.revision
+    envelope.revision,
+    payloadSchemaVersion
   );
   return decryptJson({ ...envelope, aad }, encryptionContext.key, aad);
+}
+
+function togglePasswordInput(inputId, btnId) {
+  const input = document.getElementById(inputId);
+  const btn = document.getElementById(btnId);
+  if (!input) return;
+  const nextType = input.type === 'password' ? 'text' : 'password';
+  input.type = nextType;
+  if (btn) {
+    btn.textContent =
+      nextType === 'text'
+        ? i18next.t('cloudSync.hidePassword', { defaultValue: '隱藏' })
+        : i18next.t('cloudSync.showPassword', { defaultValue: '顯示' });
+  }
+}
+
+function updatePasswordStrengthDisplay() {
+  const input = document.getElementById('cloud-sync-new-password');
+  const label = document.getElementById('cloud-sync-password-strength');
+  if (!input || !label) return;
+  const value = input.value || '';
+  if (!value) {
+    label.textContent = '';
+    label.dataset.strength = '';
+    return;
+  }
+  const result = evaluatePasswordStrength(value);
+  label.dataset.strength = result.label;
+  const textMap = {
+    tooShort: i18next.t('cloudSync.strengthTooShort', {
+      defaultValue: `密碼至少需 ${MIN_PASSWORD_LENGTH} 個字元`,
+      min: MIN_PASSWORD_LENGTH,
+    }),
+    weak: i18next.t('cloudSync.strengthWeak', {
+      defaultValue: '強度：弱（建議加長或混用英數符號）',
+    }),
+    fair: i18next.t('cloudSync.strengthFair', { defaultValue: '強度：普通' }),
+    strong: i18next.t('cloudSync.strengthStrong', { defaultValue: '強度：高' }),
+  };
+  label.textContent = textMap[result.label] || '';
 }
 
 function updateControls() {
   const loggedIn = Boolean(session);
   const unlocked = Boolean(encryptionContext);
+  const hasRemote = Boolean(remoteDocument.envelope);
+  const hasV2Slots = Boolean(remoteDocument.envelope?.keySlots);
+  const isV2Unlocked = Boolean(encryptionContext?.keySlots);
+
   setVisible('cloud-sync-login-section', CLOUD_ENABLED && !loggedIn);
   setVisible('cloud-sync-account-section', CLOUD_ENABLED && loggedIn);
   setVisible(
@@ -277,11 +369,76 @@ function updateControls() {
     CLOUD_ENABLED && loggedIn && unlocked
   );
   setVisible('cloud-sync-first-upload-warning', firstUploadRequired);
+
+  if (loggedIn && !unlocked) {
+    const showSetup = !hasRemote;
+    const showPasswordUnlock = hasRemote && hasV2Slots && !recoveryUnlockMode;
+    const showLegacyUnlock =
+      (hasRemote && !hasV2Slots) || (hasV2Slots && recoveryUnlockMode);
+
+    setVisible('cloud-sync-setup-panel', showSetup);
+    setVisible('cloud-sync-backup-panel', showSetup && Boolean(pendingSetup));
+    setVisible('cloud-sync-password-unlock-panel', showPasswordUnlock);
+    setVisible('cloud-sync-legacy-panel', showLegacyUnlock);
+    setVisible(
+      'cloud-sync-back-to-password-btn',
+      hasV2Slots && recoveryUnlockMode
+    );
+    setVisible('cloud-sync-legacy-gen-wrap', Boolean(pendingRecovery));
+  }
+
+  if (loggedIn && unlocked) {
+    setVisible('cloud-sync-upgrade-banner', !isV2Unlocked);
+    setVisible('cloud-sync-open-password-btn', isV2Unlocked);
+    const showManagePwd =
+      manageMode === 'changePassword' || manageMode === 'upgrade';
+    setVisible('cloud-sync-password-manage-panel', showManagePwd);
+    setVisible(
+      'cloud-sync-current-secret-wrap',
+      manageMode === 'changePassword'
+    );
+    const manageTitle = document.getElementById('cloud-sync-manage-title');
+    if (manageTitle) {
+      manageTitle.textContent =
+        manageMode === 'upgrade'
+          ? i18next.t('cloudSync.upgradeTitle', {
+              defaultValue: '升級為「自訂密碼 + 備用 Key」模式',
+            })
+          : i18next.t('cloudSync.changePasswordTitle', {
+              defaultValue: '變更同步密碼',
+            });
+    }
+    setVisible(
+      'cloud-sync-rotate-panel',
+      manageMode === 'rotateRecovery' && isV2Unlocked
+    );
+    setVisible('cloud-sync-rotated-key-box', Boolean(rotatedRecoveryDisplay));
+    const rotatedEl = document.getElementById('cloud-sync-rotated-display');
+    if (rotatedEl) rotatedEl.textContent = rotatedRecoveryDisplay;
+  }
+
+  const email = session?.user?.email || '';
+  [
+    'cloud-sync-setup-username',
+    'cloud-sync-unlock-username',
+    'cloud-sync-manage-username',
+  ].forEach((id) => {
+    const el = document.getElementById(id);
+    if (el) el.value = email;
+  });
+
   const accountName = document.getElementById('cloud-sync-account-name');
   if (accountName)
     accountName.textContent = session?.user?.email || session?.user?.name || '';
   const loginButton = document.getElementById('cloud-sync-login-btn');
   if (loginButton) loginButton.disabled = !CLOUD_ENABLED || busy;
+  const activateBtn = document.getElementById('cloud-sync-activate-btn');
+  if (activateBtn) {
+    const confirmed = Boolean(
+      document.getElementById('cloud-sync-backup-confirmed')?.checked
+    );
+    activateBtn.disabled = busy || !confirmed;
+  }
 }
 
 async function refreshRemoteDocument() {
@@ -358,6 +515,10 @@ async function refreshSession() {
     csrfToken = session?.csrfToken || '';
     if (!session) {
       encryptionContext = null;
+      pendingSetup = null;
+      recoveryUnlockMode = false;
+      manageMode = null;
+      rotatedRecoveryDisplay = '';
       remoteDocument = { envelope: null, etag: '"rev-0"', revision: 0 };
       clearSyncedRemote();
       firstUploadRequired = false;
@@ -371,11 +532,16 @@ async function refreshSession() {
       await useAccountEncryptionKey(currentAccountId(), stored.key, {
         salt: stored.salt,
         keyVersion: stored.keyVersion || 1,
+        payloadSchemaVersion: stored.payloadSchemaVersion,
+        keySlots: stored.keySlots,
       });
       encryptionContext = {
         key: stored.key,
         salt: stored.salt,
         keyVersion: stored.keyVersion || 1,
+        payloadSchemaVersion:
+          stored.payloadSchemaVersion || (stored.keySlots ? 2 : 1),
+        keySlots: stored.keySlots || null,
       };
       const localAccountState = await loadAccountState(
         currentAccountId(),
@@ -385,8 +551,15 @@ async function refreshSession() {
         restoreData(mergeSyncData(callbacks.getData(), localAccountState));
       }
       await refreshRemoteDocument();
+      if (remoteDocument.envelope?.keySlots) {
+        encryptionContext.keySlots = remoteDocument.envelope.keySlots;
+        encryptionContext.payloadSchemaVersion =
+          remoteDocument.envelope.payloadSchemaVersion || 2;
+      }
       await mergeRemoteIntoLocal();
       await refreshHistory();
+    } else {
+      await refreshRemoteDocument();
     }
     updateControls();
   } catch (error) {
@@ -398,19 +571,7 @@ async function refreshSession() {
   }
 }
 
-async function unlockWithSecret(secret, generated = false) {
-  requireEncryptedLocalStorage();
-  await refreshRemoteDocument();
-  const existingSalt = remoteDocument.envelope?.kdfSalt
-    ? decodeBytes(remoteDocument.envelope.kdfSalt)
-    : null;
-  const salt = existingSalt || encryptionContext?.salt || randomBytes(16);
-  const keyVersion = remoteDocument.envelope?.keyVersion || 1;
-  const key = await deriveEncryptionKey(
-    secret,
-    salt,
-    `URL Editor E2EE v1:${currentAccountId()}`
-  );
+async function unlockWithDerivedContext(nextContext, generated = false) {
   const previousContext = encryptionContext;
   const previousFirstUploadRequired = firstUploadRequired;
   const previousGuestMigrationPending = guestMigrationPending;
@@ -418,7 +579,12 @@ async function unlockWithSecret(secret, generated = false) {
   const previousRecovery = pendingRecovery;
   const previousSyncedEtag = syncedEtag;
   const previousSyncedRevision = syncedRevision;
-  encryptionContext = { key, salt, keyVersion };
+  encryptionContext = {
+    ...nextContext,
+    payloadSchemaVersion:
+      nextContext.payloadSchemaVersion || (nextContext.keySlots ? 2 : 1),
+    keySlots: nextContext.keySlots || null,
+  };
   try {
     // An unreadable guest record is represented by an empty placeholder: it is
     // not the user's data, so it is neither merged, migrated nor uploaded.
@@ -433,12 +599,15 @@ async function unlockWithSecret(secret, generated = false) {
     } else {
       firstUploadRequired = generated;
     }
-    await useAccountEncryptionKey(currentAccountId(), key, {
-      salt,
-      keyVersion,
+    await useAccountEncryptionKey(currentAccountId(), encryptionContext.key, {
+      salt: encryptionContext.salt,
+      keyVersion: encryptionContext.keyVersion,
+      payloadSchemaVersion: encryptionContext.payloadSchemaVersion,
+      keySlots: encryptionContext.keySlots,
     });
     guestMigrationPending = !guestUnreadable;
     pendingRecovery = null;
+    recoveryUnlockMode = false;
     const input = document.getElementById('cloud-sync-recovery-input');
     if (input) input.value = '';
     if (restoredData) restoreData(restoredData);
@@ -460,6 +629,198 @@ async function unlockWithSecret(secret, generated = false) {
   }
 }
 
+async function unlockWithSecret(secret, generated = false) {
+  requireEncryptedLocalStorage();
+  await refreshRemoteDocument();
+  const existingSalt = remoteDocument.envelope?.kdfSalt
+    ? decodeBytes(remoteDocument.envelope.kdfSalt)
+    : null;
+  const salt = existingSalt || encryptionContext?.salt || randomBytes(16);
+  const keyVersion = remoteDocument.envelope?.keyVersion || 1;
+  const key = await deriveEncryptionKey(
+    secret,
+    salt,
+    `URL Editor E2EE v1:${currentAccountId()}`
+  );
+  await unlockWithDerivedContext(
+    { key, salt, keyVersion, payloadSchemaVersion: 1, keySlots: null },
+    generated
+  );
+}
+
+async function handleCreateVault(event) {
+  event?.preventDefault?.();
+  if (busy || !session) return;
+  setBusy(true);
+  try {
+    requireEncryptedLocalStorage();
+    const newPassword =
+      document.getElementById('cloud-sync-new-password')?.value || '';
+    const confirmPassword =
+      document.getElementById('cloud-sync-confirm-password')?.value || '';
+    if (newPassword.length < MIN_PASSWORD_LENGTH) {
+      throw new Error(
+        i18next.t('cloudSync.passwordTooShort', {
+          defaultValue: `同步密碼至少需要 ${MIN_PASSWORD_LENGTH} 個字元。`,
+          min: MIN_PASSWORD_LENGTH,
+        })
+      );
+    }
+    if (newPassword !== confirmPassword) {
+      throw new Error(
+        i18next.t('cloudSync.passwordMismatch', {
+          defaultValue: '兩次輸入的密碼不一致。',
+        })
+      );
+    }
+    const dekBytes = new Uint8Array(randomBytes(32));
+    const recovery = await createRecoveryKey();
+    const keySlots = await createKeySlots({
+      dekBytes,
+      password: newPassword,
+      recoverySecret: recovery.secret,
+      accountId: currentAccountId(),
+      keyVersion: 1,
+    });
+    const dekKey = await importDekKey(dekBytes);
+    dekBytes.fill(0);
+    pendingSetup = {
+      dekKey,
+      salt: randomBytes(16),
+      keyVersion: 1,
+      payloadSchemaVersion: 2,
+      keySlots,
+      recovery,
+    };
+    const displayEl = document.getElementById('cloud-sync-backup-display');
+    if (displayEl) displayEl.textContent = recovery.display;
+    const checkbox = document.getElementById('cloud-sync-backup-confirmed');
+    if (checkbox) checkbox.checked = false;
+    ['cloud-sync-new-password', 'cloud-sync-confirm-password'].forEach((id) => {
+      const el = document.getElementById(id);
+      if (el) el.value = '';
+    });
+    updatePasswordStrengthDisplay();
+    setStatus(
+      i18next.t('cloudSync.backupPendingStatus', {
+        defaultValue:
+          '請先複製或下載下方的備用 Recovery Key，勾選確認後點擊「啟用加密同步」。',
+      })
+    );
+  } catch (error) {
+    setStatus(error.message || '建立同步金鑰失敗。', true);
+  } finally {
+    setBusy(false);
+    updateControls();
+  }
+}
+
+async function handleActivateVault() {
+  if (busy || !session || !pendingSetup) return;
+  const confirmed = Boolean(
+    document.getElementById('cloud-sync-backup-confirmed')?.checked
+  );
+  if (!confirmed) {
+    setStatus(
+      i18next.t('cloudSync.backupConfirmRequired', {
+        defaultValue: '請先勾選確認已妥善備份備用 Recovery Key。',
+      }),
+      true
+    );
+    return;
+  }
+  setBusy(true);
+  try {
+    requireEncryptedLocalStorage();
+    await refreshRemoteDocument();
+    const setup = pendingSetup;
+    await unlockWithDerivedContext(
+      {
+        key: setup.dekKey,
+        salt: setup.salt,
+        keyVersion: setup.keyVersion,
+        payloadSchemaVersion: 2,
+        keySlots: setup.keySlots,
+      },
+      true
+    );
+    pendingSetup = null;
+    // Upload initial v2 envelope right away (when local data is real) so any
+    // second device finds keySlots immediately on sign-in.
+    if (!remoteDocument.envelope && !placeholderOnly) {
+      await uploadCurrentData({ force: true });
+    }
+    setStatus(
+      i18next.t('cloudSync.unlocked', {
+        defaultValue: '已啟用並解鎖端到端加密同步。',
+      })
+    );
+  } catch (error) {
+    console.warn('[CloudSync Activate Failed]:', error);
+    setStatus(error.message || '啟用加密同步失敗。', true);
+  } finally {
+    setBusy(false);
+    updateControls();
+  }
+}
+
+async function handlePasswordUnlock(event) {
+  event?.preventDefault?.();
+  if (busy || !session) return;
+  setBusy(true);
+  try {
+    requireEncryptedLocalStorage();
+    const passwordInput = document.getElementById('cloud-sync-unlock-password');
+    const password = passwordInput?.value || '';
+    if (!password) {
+      throw new Error(
+        i18next.t('cloudSync.passwordRequired', {
+          defaultValue: '請輸入同步密碼。',
+        })
+      );
+    }
+    await refreshRemoteDocument();
+    const envelope = remoteDocument.envelope;
+    if (!envelope?.keySlots?.password) {
+      throw new Error('此帳戶目前沒有密碼插槽，請改用 Recovery Key 解鎖。');
+    }
+    const { dekKey } = await unwrapDekFromPasswordSlot(
+      envelope.keySlots.password,
+      password,
+      currentAccountId(),
+      envelope.keyVersion || 1
+    );
+    await unlockWithDerivedContext(
+      {
+        key: dekKey,
+        salt: decodeBytes(envelope.kdfSalt),
+        keyVersion: envelope.keyVersion || 1,
+        payloadSchemaVersion: 2,
+        keySlots: envelope.keySlots,
+      },
+      false
+    );
+    if (passwordInput) passwordInput.value = '';
+    setStatus(
+      i18next.t('cloudSync.unlocked', {
+        defaultValue: '已解鎖端到端加密同步。',
+      })
+    );
+  } catch (error) {
+    console.warn('[CloudSync Password Unlock Failed]:', error);
+    setStatus(
+      i18next.t('cloudSync.wrongPasswordError', {
+        defaultValue:
+          '同步密碼錯誤或無法解密；若忘記密碼可改用備用 Recovery Key。',
+      }),
+      true
+    );
+  } finally {
+    setBusy(false);
+    updateControls();
+  }
+}
+
 async function handleGenerateRecoveryKey() {
   if (busy) return;
   try {
@@ -469,6 +830,7 @@ async function handleGenerateRecoveryKey() {
     if (display) display.textContent = generated.display;
     const input = document.getElementById('cloud-sync-recovery-input');
     if (input) input.value = '';
+    updateControls();
     setStatus(
       i18next.t('cloudSync.recoveryGenerated', {
         defaultValue: '請備份 Recovery Key，再貼上確認。',
@@ -504,12 +866,41 @@ async function handleUnlock() {
     }
     const secret =
       pendingRecovery?.secret || (await parseRecoveryKey(inputValue));
-    await unlockWithSecret(secret, Boolean(pendingRecovery));
-    setStatus(
-      i18next.t('cloudSync.unlocked', {
-        defaultValue: '已解鎖端到端加密同步。',
-      })
-    );
+    requireEncryptedLocalStorage();
+    await refreshRemoteDocument();
+    const recoverySlot = remoteDocument.envelope?.keySlots?.recovery;
+    if (recoverySlot && !pendingRecovery) {
+      const envelope = remoteDocument.envelope;
+      const { dekKey } = await unwrapDekFromRecoverySlot(
+        recoverySlot,
+        secret,
+        currentAccountId(),
+        envelope.keyVersion || 1
+      );
+      await unlockWithDerivedContext(
+        {
+          key: dekKey,
+          salt: decodeBytes(envelope.kdfSalt),
+          keyVersion: envelope.keyVersion || 1,
+          payloadSchemaVersion: 2,
+          keySlots: envelope.keySlots,
+        },
+        false
+      );
+      setStatus(
+        i18next.t('cloudSync.unlockedViaRecovery', {
+          defaultValue:
+            '已使用備用 Recovery Key 解鎖；若忘記密碼，可點「變更同步密碼」立即重設。',
+        })
+      );
+    } else {
+      await unlockWithSecret(secret, Boolean(pendingRecovery));
+      setStatus(
+        i18next.t('cloudSync.unlocked', {
+          defaultValue: '已解鎖端到端加密同步。',
+        })
+      );
+    }
   } catch (error) {
     console.warn('[CloudSync Unlock Failed]:', error);
     setStatus(error.message || 'Recovery Key 無效。', true);
@@ -522,7 +913,7 @@ async function handleUnlock() {
 async function uploadCurrentData({ force = false, retry = true } = {}) {
   requireEncryptedLocalStorage();
   if (!session || !encryptionContext)
-    throw new Error('請先登入並解鎖 Recovery Key。');
+    throw new Error('請先登入並解鎖端到端加密同步。');
   if (firstUploadRequired && !force) return;
   if (placeholderOnly) {
     if (force)
@@ -553,7 +944,7 @@ async function uploadCurrentData({ force = false, retry = true } = {}) {
     remoteDocument = {
       envelope: result.document || result.envelope || envelope,
       etag: result.etag || `"rev-${nextRevision}"`,
-      revision: result.revision || nextRevision,
+      revision: Number(result.revision || nextRevision),
     };
     markRemoteSynced();
     firstUploadRequired = false;
@@ -563,46 +954,35 @@ async function uploadCurrentData({ force = false, retry = true } = {}) {
       await clearGuestState();
       guestMigrationPending = false;
     }
-    setStatus(
-      i18next.t('cloudSync.syncSuccess', { defaultValue: '加密資料已同步。' })
-    );
+    await refreshHistory();
+    return result;
   } catch (error) {
-    if (error instanceof CloudApiError && error.status === 409 && retry) {
-      // Another device wrote first: merge its data, then retry exactly once.
-      // A second conflict throws (retry: false) instead of overwriting.
+    if (retry && error instanceof CloudApiError && error.status === 409) {
       await refreshRemoteDocument();
       await mergeRemoteIntoLocal();
-      await uploadCurrentData({ force: true, retry: false });
-      await refreshHistory();
-      return;
-    }
-    if (
-      error instanceof CloudApiError &&
-      (error.status === 401 || error.status === 403) &&
-      retry
-    ) {
-      await refreshSession();
-      if (session && csrfToken) {
-        await uploadCurrentData({ force, retry: false });
-        return;
-      }
+      return uploadCurrentData({ force: true, retry: false });
     }
     throw error;
   }
 }
 
 async function handleManualUpload() {
-  if (busy) return;
+  if (busy || !session || !encryptionContext) return;
   setBusy(true);
   try {
-    await uploadCurrentData({ force: true });
+    const result = await uploadCurrentData({ force: true });
+    if (result)
+      setStatus(
+        i18next.t('cloudSync.uploadSuccess', {
+          defaultValue: '已上傳最新加密資料。',
+        })
+      );
   } catch (error) {
     console.error('[CloudSync Manual Upload Failed]:', error);
     setStatus(error.message || '同步失敗。', true);
   } finally {
     setBusy(false);
     updateControls();
-    await refreshHistory();
   }
 }
 
@@ -632,7 +1012,177 @@ async function handleDownload() {
   }
 }
 
-async function handleRotate() {
+async function unwrapCurrentDekForManage(secretInput) {
+  const slots = encryptionContext?.keySlots;
+  if (!slots) throw new Error('此帳戶尚未使用雙軌包裝金鑰。');
+  const trimmed = String(secretInput || '').trim();
+  if (!trimmed) {
+    throw new Error(
+      i18next.t('cloudSync.currentSecretRequired', {
+        defaultValue: '請輸入目前同步密碼（或備用 Recovery Key）進行驗證。',
+      })
+    );
+  }
+  const keyVersion = currentKeyVersion();
+  if (/^URE1-/i.test(trimmed) && slots.recovery) {
+    const secret = await parseRecoveryKey(trimmed);
+    const { dekBytes } = await unwrapDekFromRecoverySlot(
+      slots.recovery,
+      secret,
+      currentAccountId(),
+      keyVersion
+    );
+    return dekBytes;
+  }
+  if (slots.password) {
+    const { dekBytes } = await unwrapDekFromPasswordSlot(
+      slots.password,
+      secretInput,
+      currentAccountId(),
+      keyVersion
+    );
+    return dekBytes;
+  }
+  throw new Error('找不到可用的驗證插槽。');
+}
+
+async function handleSavePasswordManage(event) {
+  event?.preventDefault?.();
+  if (busy || !session || !encryptionContext) return;
+  const newPwd =
+    document.getElementById('cloud-sync-change-new-password')?.value || '';
+  const confirmPwd =
+    document.getElementById('cloud-sync-change-confirm-password')?.value || '';
+  if (newPwd.length < MIN_PASSWORD_LENGTH) {
+    setStatus(
+      i18next.t('cloudSync.passwordTooShort', {
+        defaultValue: `同步密碼至少需要 ${MIN_PASSWORD_LENGTH} 個字元。`,
+        min: MIN_PASSWORD_LENGTH,
+      }),
+      true
+    );
+    return;
+  }
+  if (newPwd !== confirmPwd) {
+    setStatus(
+      i18next.t('cloudSync.passwordMismatch', {
+        defaultValue: '兩次輸入的密碼不一致。',
+      }),
+      true
+    );
+    return;
+  }
+
+  setBusy(true);
+  const previousContext = { ...encryptionContext };
+  try {
+    requireEncryptedLocalStorage();
+    await refreshRemoteDocument();
+    if (manageMode === 'upgrade') {
+      if (remoteDocument.envelope) await mergeRemoteIntoLocal();
+      const dekBytes = new Uint8Array(randomBytes(32));
+      const recovery = await createRecoveryKey();
+      const keyVersion = currentKeyVersion() + 1;
+      const salt = randomBytes(16);
+      const keySlots = await createKeySlots({
+        dekBytes,
+        password: newPwd,
+        recoverySecret: recovery.secret,
+        accountId: currentAccountId(),
+        keyVersion,
+      });
+      const dekKey = await importDekKey(dekBytes);
+      dekBytes.fill(0);
+      encryptionContext = {
+        key: dekKey,
+        salt,
+        keyVersion,
+        payloadSchemaVersion: 2,
+        keySlots,
+      };
+      await useAccountEncryptionKey(currentAccountId(), dekKey, {
+        salt,
+        keyVersion,
+        payloadSchemaVersion: 2,
+        keySlots,
+      });
+      await uploadCurrentData({ force: true });
+      restoreData(callbacks.getData());
+      rotatedRecoveryDisplay = recovery.display;
+      manageMode = null;
+      setStatus(
+        i18next.t('cloudSync.upgradeSuccess', {
+          defaultValue:
+            '已升級為「自訂密碼 + 備用 Key」模式，請妥善備份新產生的 Recovery Key。',
+        })
+      );
+    } else {
+      const currentSecret =
+        document.getElementById('cloud-sync-current-secret-input')?.value || '';
+      const dekBytes = await unwrapCurrentDekForManage(currentSecret);
+      try {
+        const keyVersion = currentKeyVersion();
+        const passwordOnly = await createKeySlots({
+          dekBytes,
+          password: newPwd,
+          accountId: currentAccountId(),
+          keyVersion,
+        });
+        const updatedSlots = {
+          ...encryptionContext.keySlots,
+          password: passwordOnly.password,
+        };
+        encryptionContext = {
+          ...encryptionContext,
+          payloadSchemaVersion: 2,
+          keySlots: updatedSlots,
+        };
+        await useAccountEncryptionKey(
+          currentAccountId(),
+          encryptionContext.key,
+          {
+            salt: encryptionContext.salt,
+            keyVersion,
+            payloadSchemaVersion: 2,
+            keySlots: updatedSlots,
+          }
+        );
+        await uploadCurrentData({ force: true });
+        manageMode = null;
+        setStatus(
+          i18next.t('cloudSync.passwordChanged', {
+            defaultValue: '同步密碼已更新；雲端歷史版本與備用 Key 皆維持可用。',
+          })
+        );
+      } finally {
+        dekBytes.fill(0);
+      }
+    }
+    [
+      'cloud-sync-current-secret-input',
+      'cloud-sync-change-new-password',
+      'cloud-sync-change-confirm-password',
+    ].forEach((id) => {
+      const el = document.getElementById(id);
+      if (el) el.value = '';
+    });
+  } catch (error) {
+    console.error('[CloudSync Password Update Failed]:', error);
+    encryptionContext = previousContext;
+    await useAccountEncryptionKey(currentAccountId(), previousContext.key, {
+      salt: previousContext.salt,
+      keyVersion: previousContext.keyVersion,
+      payloadSchemaVersion: previousContext.payloadSchemaVersion,
+      keySlots: previousContext.keySlots,
+    });
+    setStatus(error.message || '更新同步密碼失敗。', true);
+  } finally {
+    setBusy(false);
+    updateControls();
+  }
+}
+
+async function handleLegacyRotate() {
   if (busy || !session || !encryptionContext) return;
   setBusy(true);
   const previousContext = encryptionContext;
@@ -658,8 +1208,16 @@ async function handleRotate() {
     await useAccountEncryptionKey(currentAccountId(), key, {
       salt,
       keyVersion,
+      payloadSchemaVersion: 1,
+      keySlots: null,
     });
-    encryptionContext = { key, salt, keyVersion };
+    encryptionContext = {
+      key,
+      salt,
+      keyVersion,
+      payloadSchemaVersion: 1,
+      keySlots: null,
+    };
     pendingRecovery = generated;
     const display = document.getElementById('cloud-sync-recovery-display');
     if (display) display.textContent = generated.display;
@@ -685,6 +1243,91 @@ async function handleRotate() {
     const display = document.getElementById('cloud-sync-recovery-display');
     if (display) display.textContent = previousDisplay;
     setStatus(error.message || 'Recovery Key 旋轉失敗。', true);
+  } finally {
+    setBusy(false);
+    updateControls();
+  }
+}
+
+function handleRotateButtonClick() {
+  if (busy || !session || !encryptionContext) return;
+  if (!encryptionContext.keySlots) {
+    void handleLegacyRotate();
+    return;
+  }
+  manageMode = manageMode === 'rotateRecovery' ? null : 'rotateRecovery';
+  updateControls();
+}
+
+async function handleConfirmRotateRecovery(event) {
+  event?.preventDefault?.();
+  if (busy || !session || !encryptionContext?.keySlots) return;
+  setBusy(true);
+  const previousContext = { ...encryptionContext };
+  try {
+    const pwd =
+      document.getElementById('cloud-sync-rotate-password-input')?.value || '';
+    if (!pwd) {
+      throw new Error(
+        i18next.t('cloudSync.passwordRequired', {
+          defaultValue: '請輸入目前同步密碼。',
+        })
+      );
+    }
+    const keyVersion = currentKeyVersion();
+    const { dekBytes } = await unwrapDekFromPasswordSlot(
+      encryptionContext.keySlots.password,
+      pwd,
+      currentAccountId(),
+      keyVersion
+    );
+    try {
+      const recovery = await createRecoveryKey();
+      const recoveryOnly = await createKeySlots({
+        dekBytes,
+        recoverySecret: recovery.secret,
+        accountId: currentAccountId(),
+        keyVersion,
+      });
+      const updatedSlots = {
+        ...encryptionContext.keySlots,
+        recovery: recoveryOnly.recovery,
+      };
+      encryptionContext = {
+        ...encryptionContext,
+        payloadSchemaVersion: 2,
+        keySlots: updatedSlots,
+      };
+      await useAccountEncryptionKey(currentAccountId(), encryptionContext.key, {
+        salt: encryptionContext.salt,
+        keyVersion,
+        payloadSchemaVersion: 2,
+        keySlots: updatedSlots,
+      });
+      await uploadCurrentData({ force: true });
+      rotatedRecoveryDisplay = recovery.display;
+      manageMode = null;
+      const input = document.getElementById('cloud-sync-rotate-password-input');
+      if (input) input.value = '';
+      setStatus(
+        i18next.t('cloudSync.rotationSuccess', {
+          defaultValue:
+            '備用 Recovery Key 已更新，請立即複製或下載保存（同步密碼維持不變）。',
+        })
+      );
+    } finally {
+      dekBytes.fill(0);
+    }
+  } catch (error) {
+    console.error('[CloudSync Rotate Recovery Failed]:', error);
+    encryptionContext = previousContext;
+    await useAccountEncryptionKey(currentAccountId(), previousContext.key, {
+      salt: previousContext.salt,
+      keyVersion: previousContext.keyVersion,
+      payloadSchemaVersion: previousContext.payloadSchemaVersion,
+      keySlots: previousContext.keySlots,
+    });
+    setStatus(error.message || '重設備用 Recovery Key 失敗。', true);
   } finally {
     setBusy(false);
     updateControls();
@@ -828,6 +1471,65 @@ export function initCloudSyncModal(options = {}) {
     ?.addEventListener('click', () => {
       window.location.href = '/login?returnTo=/app';
     });
+
+  // Option B first-time setup
+  document
+    .getElementById('cloud-sync-new-password')
+    ?.addEventListener('input', updatePasswordStrengthDisplay);
+  document
+    .getElementById('cloud-sync-toggle-new-pwd-btn')
+    ?.addEventListener('click', () =>
+      togglePasswordInput(
+        'cloud-sync-new-password',
+        'cloud-sync-toggle-new-pwd-btn'
+      )
+    );
+  document
+    .getElementById('cloud-sync-setup-form')
+    ?.addEventListener('submit', handleCreateVault);
+  document
+    .getElementById('cloud-sync-copy-backup-btn')
+    ?.addEventListener('click', () =>
+      copyTextValue(pendingSetup?.recovery?.display)
+    );
+  document
+    .getElementById('cloud-sync-download-backup-btn')
+    ?.addEventListener('click', () =>
+      downloadKeyFile(pendingSetup?.recovery?.display)
+    );
+  document
+    .getElementById('cloud-sync-backup-confirmed')
+    ?.addEventListener('change', updateControls);
+  document
+    .getElementById('cloud-sync-activate-btn')
+    ?.addEventListener('click', handleActivateVault);
+
+  // Option B password unlock & toggle to Recovery Key
+  document
+    .getElementById('cloud-sync-toggle-unlock-pwd-btn')
+    ?.addEventListener('click', () =>
+      togglePasswordInput(
+        'cloud-sync-unlock-password',
+        'cloud-sync-toggle-unlock-pwd-btn'
+      )
+    );
+  document
+    .getElementById('cloud-sync-unlock-form')
+    ?.addEventListener('submit', handlePasswordUnlock);
+  document
+    .getElementById('cloud-sync-use-recovery-btn')
+    ?.addEventListener('click', () => {
+      recoveryUnlockMode = true;
+      updateControls();
+    });
+  document
+    .getElementById('cloud-sync-back-to-password-btn')
+    ?.addEventListener('click', () => {
+      recoveryUnlockMode = false;
+      updateControls();
+    });
+
+  // Legacy / Recovery Key unlock
   document
     .getElementById('cloud-sync-generate-btn')
     ?.addEventListener('click', handleGenerateRecoveryKey);
@@ -840,6 +1542,8 @@ export function initCloudSyncModal(options = {}) {
   document
     .getElementById('cloud-sync-unlock-btn')
     ?.addEventListener('click', handleUnlock);
+
+  // Unlocked operations & key management
   document
     .getElementById('cloud-sync-upload-btn')
     ?.addEventListener('click', handleManualUpload);
@@ -847,8 +1551,45 @@ export function initCloudSyncModal(options = {}) {
     .getElementById('cloud-sync-download-btn')
     ?.addEventListener('click', handleDownload);
   document
+    .getElementById('cloud-sync-open-password-btn')
+    ?.addEventListener('click', () => {
+      manageMode = manageMode === 'changePassword' ? null : 'changePassword';
+      updateControls();
+    });
+  document
+    .getElementById('cloud-sync-open-upgrade-btn')
+    ?.addEventListener('click', () => {
+      manageMode = manageMode === 'upgrade' ? null : 'upgrade';
+      updateControls();
+    });
+  document
+    .getElementById('cloud-sync-password-manage-panel')
+    ?.addEventListener('submit', handleSavePasswordManage);
+  document
+    .getElementById('cloud-sync-cancel-manage-btn')
+    ?.addEventListener('click', () => {
+      manageMode = null;
+      updateControls();
+    });
+  document
     .getElementById('cloud-sync-rotate-btn')
-    ?.addEventListener('click', handleRotate);
+    ?.addEventListener('click', handleRotateButtonClick);
+  document
+    .getElementById('cloud-sync-rotate-panel')
+    ?.addEventListener('submit', handleConfirmRotateRecovery);
+  document
+    .getElementById('cloud-sync-cancel-rotate-btn')
+    ?.addEventListener('click', () => {
+      manageMode = null;
+      updateControls();
+    });
+  document
+    .getElementById('cloud-sync-copy-rotated-btn')
+    ?.addEventListener('click', () => copyTextValue(rotatedRecoveryDisplay));
+  document
+    .getElementById('cloud-sync-download-rotated-btn')
+    ?.addEventListener('click', () => downloadKeyFile(rotatedRecoveryDisplay));
+
   document
     .getElementById('cloud-sync-history-refresh-btn')
     ?.addEventListener('click', refreshHistory);
