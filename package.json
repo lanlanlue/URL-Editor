@@ -16,6 +16,7 @@
     "build": "node scripts/build.mjs runtime",
     "build:cloud": "node scripts/build.mjs cloud",
     "build:gh": "node scripts/build.mjs local gh",
+    "deploy:dev": "npm run build:cloud && npx wrangler deploy --env dev",
     "deploy:cloud": "npm run build:cloud && npx wrangler deploy",
     "agent:relay": "node src/agent-relay/cli.cjs",
     "security:check": "node scripts/security-check.mjs",

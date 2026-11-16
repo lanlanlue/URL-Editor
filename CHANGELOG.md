@@ -4,6 +4,19 @@
 
 ---
 
+## [Unreleased]
+
+### 🚀 新增功能 (Features)
+
+#### 🔐 雲端同步改採「自訂密碼 + 備用 Recovery Key」雙軌 DEK 架構（Option B）
+- **雙插槽金鑰包裹（Envelope `payloadSchemaVersion: 2`）**：每組同步資料改由隨機 256-bit DEK（AES-256-GCM）加密，再分別以使用者的「自訂同步密碼（PBKDF2-SHA256 600,000 次迭代）」與系統產生的「備用 Recovery Key（HKDF-SHA256）」各自包裹 DEK 並存於雲端 `keySlots`；新裝置可直接輸入自訂密碼解鎖，忘記密碼時仍可用備用 Recovery Key 救回。
+- **即改密碼不重加密歷史版本**：變更同步密碼時僅於瀏覽器重包 `keySlots.password`，DEK 維持不變，30 天雲端歷史版本（`sync_revisions`）與既有備用 Recovery Key 全數維持可解密。
+- **密碼設定與備份保護**：首次啟用同步需設定至少 8 字元自訂密碼（附即時強度提示、明碼切換與密碼管理員 `<form>` / `autocomplete` 支援），並顯示備用 Recovery Key（複製 / `.txt` 下載）與備份確認勾選後立即上傳初始 v2 封包。
+- **重設備用 Key 與舊版 v1 一鍵升級**：登入已解鎖狀態可獨立重設備用 Recovery Key（原密碼保持不變），舊版僅使用單一 Recovery Key（`payloadSchemaVersion: 1`）的帳戶也可在 Modal 內一鍵升級為雙軌模式。
+- **Cloudflare D1 Schema 擴充**：新增 [migrations/0002_wrapped_keys.sql](migrations/0002_wrapped_keys.sql) 為 `sync_documents` 與 `sync_revisions` 加入 `key_slots` 欄位，向下相容既有 v1 密文。
+
+---
+
 ## [2.2.0] - 2026-11-16
 
 ### 🚀 新增功能 (Features)

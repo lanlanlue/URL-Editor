@@ -67,6 +67,76 @@ describe('Pages API boundary', () => {
     expect(apiInternals.parseEtag('rev-12')).toBeNull();
   });
 
+  test('validates v2 keySlots envelopes and rejects malformed slots', () => {
+    const validV2 = {
+      revision: 1,
+      payloadSchemaVersion: 2,
+      keyVersion: 1,
+      kdfSalt: base64Url(new Uint8Array(16)),
+      iv: base64Url(new Uint8Array(12)),
+      ciphertext: base64Url(new Uint8Array(32)),
+      keySlots: {
+        v: 1,
+        password: {
+          kdf: 'PBKDF2-SHA256',
+          salt: base64Url(new Uint8Array(16)),
+          iterations: 600000,
+          iv: base64Url(new Uint8Array(12)),
+          wrappedKey: base64Url(new Uint8Array(48)),
+        },
+        recovery: {
+          kdf: 'HKDF-SHA256',
+          salt: base64Url(new Uint8Array(16)),
+          iv: base64Url(new Uint8Array(12)),
+          wrappedKey: base64Url(new Uint8Array(48)),
+        },
+      },
+    };
+    expect(apiInternals.validateEnvelope(validV2)).toBe(true);
+    expect(
+      apiInternals.validateEnvelope({
+        ...validV2,
+        keySlots: { v: 1, recovery: validV2.keySlots.recovery },
+      })
+    ).toBe(true);
+    expect(
+      apiInternals.validateEnvelope({
+        ...validV2,
+        keySlots: { v: 1 },
+      })
+    ).toBe(false);
+    expect(
+      apiInternals.validateEnvelope({
+        ...validV2,
+        keySlots: {
+          ...validV2.keySlots,
+          password: { ...validV2.keySlots.password, iterations: 1000 },
+        },
+      })
+    ).toBe(false);
+    expect(
+      apiInternals.validateEnvelope({
+        ...validV2,
+        keySlots: {
+          ...validV2.keySlots,
+          password: {
+            ...validV2.keySlots.password,
+            wrappedKey: base64Url(new Uint8Array(16)),
+          },
+        },
+      })
+    ).toBe(false);
+    expect(
+      apiInternals.validateEnvelope({
+        ...validV2,
+        keySlots: { ...validV2.keySlots, extra: true },
+      })
+    ).toBe(false);
+    expect(
+      apiInternals.validateEnvelope({ ...validV2, payloadSchemaVersion: 1 })
+    ).toBe(false);
+  });
+
   test('rejects mutation requests without a same-origin Origin header', async () => {
     const response = await handleApiRequest(
       new Request('https://url-editor.ointw.com/api/auth/google', {
@@ -1829,6 +1899,123 @@ describe('Pages API boundary', () => {
             },
           });
           expect(args).toEqual([[row.account_id, 2]]);
+        });
+
+        test('v2 PUT/GET and archived revision roundtrip key_slots through D1', async () => {
+          const row = await freshRow({ account_id: 'acct-v2-roundtrip' });
+          let docRow = null;
+          const revisionRows = new Map();
+          const v2Slots = (tag) => ({
+            v: 1,
+            password: {
+              kdf: 'PBKDF2-SHA256',
+              salt: base64Url(new Uint8Array(16).fill(1)),
+              iterations: 600000,
+              iv: base64Url(new Uint8Array(12).fill(2)),
+              wrappedKey: base64Url(new Uint8Array(48).fill(tag)),
+            },
+            recovery: {
+              kdf: 'HKDF-SHA256',
+              salt: base64Url(new Uint8Array(16).fill(3)),
+              iv: base64Url(new Uint8Array(12).fill(4)),
+              wrappedKey: base64Url(new Uint8Array(48).fill(tag + 1)),
+            },
+          });
+          const v2Envelope = (rev, tag) => ({
+            ...envelope(rev),
+            payloadSchemaVersion: 2,
+            keySlots: v2Slots(tag),
+          });
+          const dbHandlers = [
+            ['SELECT s.*', () => row],
+            [
+              'SELECT * FROM sync_documents',
+              () => (docRow ? { ...docRow } : null),
+            ],
+            [
+              'INSERT INTO sync_documents',
+              (_sql, args) => {
+                docRow = {
+                  user_id: args[0],
+                  revision: args[1],
+                  payload_schema_version: args[2],
+                  key_version: args[3],
+                  kdf_salt: args[4],
+                  iv: args[5],
+                  ciphertext: args[6],
+                  key_slots: args[7],
+                  updated_at: args[8],
+                };
+                return { meta: { changes: 1 } };
+              },
+            ],
+            [
+              'INSERT INTO sync_revisions',
+              (_sql, args) => {
+                if (docRow && docRow.revision === args[1]) {
+                  revisionRows.set(docRow.revision, {
+                    ...docRow,
+                    created_at: docRow.updated_at,
+                  });
+                }
+                return { meta: { changes: 1 } };
+              },
+            ],
+            [
+              'UPDATE sync_documents',
+              (_sql, args) => {
+                docRow = {
+                  user_id: args[8],
+                  revision: args[0],
+                  payload_schema_version: args[1],
+                  key_version: args[2],
+                  kdf_salt: args[3],
+                  iv: args[4],
+                  ciphertext: args[5],
+                  key_slots: args[6],
+                  updated_at: args[7],
+                };
+                return { meta: { changes: 1 } };
+              },
+            ],
+            ['DELETE FROM sync_revisions', () => ({ meta: { changes: 0 } })],
+            [
+              'SELECT * FROM sync_revisions',
+              (_sql, args) => revisionRows.get(args[1]) || null,
+            ],
+          ];
+
+          const put1 = await call(
+            authed('/api/sync', {
+              method: 'PUT',
+              headers: { 'If-Match': '"rev-0"' },
+              body: JSON.stringify(v2Envelope(1, 10)),
+            }),
+            dbHandlers
+          );
+          expect(put1.status).toBe(200);
+          expect(typeof docRow.key_slots).toBe('string');
+
+          const put2 = await call(
+            authed('/api/sync', {
+              method: 'PUT',
+              headers: { 'If-Match': '"rev-1"' },
+              body: JSON.stringify(v2Envelope(2, 20)),
+            }),
+            dbHandlers
+          );
+          expect(put2.status).toBe(200);
+
+          const getCurrent = await call(authed('/api/sync'), dbHandlers);
+          expect(getCurrent.status).toBe(200);
+          expect((await getCurrent.json()).document).toEqual(v2Envelope(2, 20));
+
+          const getRev1 = await call(
+            authed('/api/sync/revisions/1'),
+            dbHandlers
+          );
+          expect(getRev1.status).toBe(200);
+          expect((await getRev1.json()).envelope).toEqual(v2Envelope(1, 10));
         });
       });
 

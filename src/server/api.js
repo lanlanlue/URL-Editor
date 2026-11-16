@@ -407,7 +407,58 @@ function isBase64Url(value) {
   return typeof value === 'string' && /^[A-Za-z0-9_-]+$/.test(value);
 }
 
+function isBase64UrlLength(value, minBytes, maxBytes = minBytes) {
+  if (!isBase64Url(value)) return false;
+  try {
+    const length = base64UrlToBytes(value).length;
+    return length >= minBytes && length <= maxBytes;
+  } catch {
+    return false;
+  }
+}
+
+function validateWrappedSlot(slot, expectedKdf, extraKeys = []) {
+  const allowed = new Set(['kdf', 'salt', 'iv', 'wrappedKey', ...extraKeys]);
+  if (!exactKeys(slot, allowed)) return false;
+  if (slot.kdf !== expectedKdf) return false;
+  if (!isBase64UrlLength(slot.salt, 16)) return false;
+  if (!isBase64UrlLength(slot.iv, 12)) return false;
+  return isBase64UrlLength(slot.wrappedKey, 48, 256);
+}
+
+function validateKeySlots(slots) {
+  const allowed = new Set(['v', 'password', 'recovery']);
+  if (!exactKeys(slots, allowed) || slots.v !== 1) return false;
+  if (slots.password === undefined && slots.recovery === undefined) {
+    return false;
+  }
+  if (slots.password !== undefined) {
+    if (!validateWrappedSlot(slots.password, 'PBKDF2-SHA256', ['iterations'])) {
+      return false;
+    }
+    if (
+      !Number.isInteger(slots.password.iterations) ||
+      slots.password.iterations < 100000 ||
+      slots.password.iterations > 2000000
+    ) {
+      return false;
+    }
+  }
+  if (
+    slots.recovery !== undefined &&
+    !validateWrappedSlot(slots.recovery, 'HKDF-SHA256')
+  ) {
+    return false;
+  }
+  return true;
+}
+
 function validateEnvelope(envelope) {
+  if (!envelope || typeof envelope !== 'object' || Array.isArray(envelope)) {
+    return false;
+  }
+  const version = envelope.payloadSchemaVersion;
+  if (version !== 1 && version !== 2) return false;
   const allowed = new Set([
     'revision',
     'payloadSchemaVersion',
@@ -415,38 +466,33 @@ function validateEnvelope(envelope) {
     'kdfSalt',
     'iv',
     'ciphertext',
+    ...(version === 2 ? ['keySlots'] : []),
   ]);
   if (!exactKeys(envelope, allowed)) return false;
   if (!Number.isInteger(envelope.revision) || envelope.revision < 1)
     return false;
-  if (
-    envelope.payloadSchemaVersion !== 1 ||
-    !Number.isInteger(envelope.keyVersion) ||
-    envelope.keyVersion < 1
-  )
+  if (!Number.isInteger(envelope.keyVersion) || envelope.keyVersion < 1)
     return false;
+  if (!isBase64UrlLength(envelope.kdfSalt, 16)) return false;
+  if (!isBase64UrlLength(envelope.iv, 12)) return false;
+  if (!isBase64UrlLength(envelope.ciphertext, 16, MAX_BODY_BYTES)) return false;
+  if (version === 2 && !validateKeySlots(envelope.keySlots)) return false;
+  return true;
+}
+
+function parseKeySlotsColumn(raw) {
+  if (!raw) return undefined;
+  if (typeof raw === 'object') return raw;
   try {
-    if (
-      !isBase64Url(envelope.kdfSalt) ||
-      base64UrlToBytes(envelope.kdfSalt).length !== 16
-    )
-      return false;
-    if (
-      !isBase64Url(envelope.iv) ||
-      base64UrlToBytes(envelope.iv).length !== 12
-    )
-      return false;
-    if (!isBase64Url(envelope.ciphertext)) return false;
-    const ciphertextLength = base64UrlToBytes(envelope.ciphertext).length;
-    return ciphertextLength >= 16 && ciphertextLength <= MAX_BODY_BYTES;
+    return JSON.parse(raw);
   } catch {
-    return false;
+    return undefined;
   }
 }
 
 function documentEnvelope(document) {
   if (!document) return null;
-  return {
+  const envelope = {
     revision: Number(document.revision),
     payloadSchemaVersion: Number(document.payload_schema_version),
     keyVersion: Number(document.key_version),
@@ -454,6 +500,11 @@ function documentEnvelope(document) {
     iv: document.iv,
     ciphertext: document.ciphertext,
   };
+  const keySlots = parseKeySlotsColumn(document.key_slots);
+  if (keySlots && envelope.payloadSchemaVersion === 2) {
+    envelope.keySlots = keySlots;
+  }
+  return envelope;
 }
 
 function responseHeaders(session, extra = {}) {
@@ -609,14 +660,16 @@ async function handleSyncPut(request, env) {
       'The encrypted document has changed.'
     );
   const currentTime = nowSeconds();
+  const serializedKeySlots =
+    body.payloadSchemaVersion === 2 ? JSON.stringify(body.keySlots) : null;
   try {
     if (current) {
       const results = await env.DB.batch([
         env.DB.prepare(
-          'INSERT INTO sync_revisions (user_id, revision, payload_schema_version, key_version, kdf_salt, iv, ciphertext, created_at) SELECT user_id, revision, payload_schema_version, key_version, kdf_salt, iv, ciphertext, updated_at FROM sync_documents WHERE user_id = ? AND revision = ?'
+          'INSERT INTO sync_revisions (user_id, revision, payload_schema_version, key_version, kdf_salt, iv, ciphertext, key_slots, created_at) SELECT user_id, revision, payload_schema_version, key_version, kdf_salt, iv, ciphertext, key_slots, updated_at FROM sync_documents WHERE user_id = ? AND revision = ?'
         ).bind(session.account_id, currentRevision),
         env.DB.prepare(
-          'UPDATE sync_documents SET revision = ?, payload_schema_version = ?, key_version = ?, kdf_salt = ?, iv = ?, ciphertext = ?, updated_at = ? WHERE user_id = ? AND revision = ?'
+          'UPDATE sync_documents SET revision = ?, payload_schema_version = ?, key_version = ?, kdf_salt = ?, iv = ?, ciphertext = ?, key_slots = ?, updated_at = ? WHERE user_id = ? AND revision = ?'
         ).bind(
           body.revision,
           body.payloadSchemaVersion,
@@ -624,6 +677,7 @@ async function handleSyncPut(request, env) {
           body.kdfSalt,
           body.iv,
           body.ciphertext,
+          serializedKeySlots,
           currentTime,
           session.account_id,
           currentRevision
@@ -637,7 +691,7 @@ async function handleSyncPut(request, env) {
         );
     } else {
       await env.DB.prepare(
-        'INSERT INTO sync_documents (user_id, revision, payload_schema_version, key_version, kdf_salt, iv, ciphertext, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+        'INSERT INTO sync_documents (user_id, revision, payload_schema_version, key_version, kdf_salt, iv, ciphertext, key_slots, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
       )
         .bind(
           session.account_id,
@@ -647,6 +701,7 @@ async function handleSyncPut(request, env) {
           body.kdfSalt,
           body.iv,
           body.ciphertext,
+          serializedKeySlots,
           currentTime
         )
         .run();

@@ -523,6 +523,7 @@ dialog::backdrop,
   border: 1px dashed var(--accent);
   border-radius: var(--radius-sm);
   color: var(--accent);
+  font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
   font-size: 0.78rem;
 }
 .cloud-sync-recovery-actions {
@@ -595,6 +596,98 @@ dialog::backdrop,
 .cloud-sync-history__actions .modal-select {
   flex: 1;
   min-width: 0;
+}
+
+.cloud-sync-password-row {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin-bottom: 0.65rem;
+}
+.cloud-sync-password-row .cloud-sync-recovery-input {
+  flex: 1;
+  min-width: 0;
+  margin-bottom: 0;
+}
+.cloud-sync-password-row button,
+.cloud-sync-password-row .modal-btn {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.cloud-sync-strength {
+  min-height: 1.1em;
+  margin: -0.25rem 0 0.65rem;
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+}
+.cloud-sync-strength[data-strength="tooShort"] {
+  color: #ef4444;
+}
+.cloud-sync-strength[data-strength="weak"] {
+  color: #f59e0b;
+}
+.cloud-sync-strength[data-strength="fair"] {
+  color: var(--accent);
+}
+.cloud-sync-strength[data-strength="strong"] {
+  color: #22c55e;
+}
+
+.cloud-sync-backup-panel {
+  margin-top: 0.85rem;
+  padding: 0.8rem;
+  border: 1px dashed var(--accent);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--accent) 6%, var(--surface));
+}
+
+.cloud-sync-backup-check {
+  display: flex !important;
+  align-items: flex-start;
+  gap: 0.5rem;
+  margin: 0.7rem 0;
+  font-size: 0.82rem;
+  color: var(--text-primary);
+  cursor: pointer;
+}
+.cloud-sync-backup-check input[type="checkbox"] {
+  width: auto;
+  flex-shrink: 0;
+  margin-top: 0.15rem;
+  accent-color: var(--accent);
+}
+
+.cloud-sync-upgrade-banner {
+  margin: 0.75rem 0;
+  padding: 0.75rem;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--accent) 8%, var(--surface));
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.65rem;
+}
+.cloud-sync-upgrade-banner p {
+  margin: 0;
+  flex: 1 1 16rem;
+  font-size: 0.82rem;
+  color: var(--text-primary);
+}
+
+.cloud-sync-manage-panel {
+  margin-top: 0.85rem;
+  padding: 0.85rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+}
+.cloud-sync-manage-panel h4 {
+  margin: 0 0 0.6rem;
+  font-size: 0.92rem;
+  color: var(--text-primary);
 }
 
 .setting-item {
@@ -1241,7 +1334,7 @@ dialog::backdrop,
   }
 }
 
-/* ===== AI æ„≤z§p¿∞§‚ ===== */
+/* ===== AI Êï¥ÁêÜÂ∞èÂπ´Êâã ===== */
 .ai-assistant-modal {
   width: min(680px, 92vw);
 }
