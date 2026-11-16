@@ -4,7 +4,7 @@
 
 ---
 
-## [Unreleased]
+## [2.3.0] - 2026-11-16
 
 ### 🚀 新增功能 (Features)
 
@@ -13,7 +13,10 @@
 - **即改密碼不重加密歷史版本**：變更同步密碼時僅於瀏覽器重包 `keySlots.password`，DEK 維持不變，30 天雲端歷史版本（`sync_revisions`）與既有備用 Recovery Key 全數維持可解密。
 - **密碼設定與備份保護**：首次啟用同步需設定至少 8 字元自訂密碼（附即時強度提示、明碼切換與密碼管理員 `<form>` / `autocomplete` 支援），並顯示備用 Recovery Key（複製 / `.txt` 下載）與備份確認勾選後立即上傳初始 v2 封包。
 - **重設備用 Key 與舊版 v1 一鍵升級**：登入已解鎖狀態可獨立重設備用 Recovery Key（原密碼保持不變），舊版僅使用單一 Recovery Key（`payloadSchemaVersion: 1`）的帳戶也可在 Modal 內一鍵升級為雙軌模式。
-- **Cloudflare D1 Schema 擴充**：新增 [migrations/0002_wrapped_keys.sql](migrations/0002_wrapped_keys.sql) 為 `sync_documents` 與 `sync_revisions` 加入 `key_slots` 欄位，向下相容既有 v1 密文。
+- **Cloudflare D1 Schema 擴充與 Dev 環境**：新增 [migrations/0002_wrapped_keys.sql](migrations/0002_wrapped_keys.sql) 為 `sync_documents` 與 `sync_revisions` 加入 `key_slots` 欄位（向下相容既有 v1 密文），並於 [wrangler.toml](wrangler.toml) 建立獨立隔離的 `[env.dev]` 與 `deploy:dev` 工作流程。
+
+### 🐛 修正 (Fixes)
+- **Recovery Key Base64URL 解析修正**：修正 `parseRecoveryKey` 在 32-byte 隨機金鑰編碼或 checksum 內含 `-` 字元時被誤拆分的問題，改為固定尾端切分 4 字元 checksum 並僅剝除 8 字元分組分隔線。
 
 ---
 
