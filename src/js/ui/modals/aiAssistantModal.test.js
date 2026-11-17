@@ -29,6 +29,7 @@ import {
   initAiAssistantModal,
   openAiAssistantModal,
   closeAiAssistantModal,
+  resetAiAssistantScope,
 } from './aiAssistantModal';
 
 const html = fs.readFileSync(
@@ -44,6 +45,7 @@ const flush = () => new Promise((r) => setTimeout(r, 0));
 
 describe('aiAssistantModal', () => {
   let bridge;
+  let currentBridge;
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -57,7 +59,8 @@ describe('aiAssistantModal', () => {
       undo: jest.fn(() => ({ ok: true })),
     };
     checkLocalAiAvailability.mockResolvedValue('available');
-    initAiAssistantModal({ bridge });
+    currentBridge = bridge;
+    initAiAssistantModal({ bridge, getBridge: () => currentBridge });
   });
 
   test('opens and shows ready state when model is available', async () => {
@@ -146,6 +149,55 @@ describe('aiAssistantModal', () => {
     expect(bridge.addMany).toHaveBeenCalledTimes(2);
     showToast.mock.calls[0][1].onAction();
     expect(bridge.undo).toHaveBeenCalledTimes(2);
+  });
+
+  test('scope reset discards pending extraction and old-account preview text', async () => {
+    let finish;
+    extractUrlsWithGeminiNano.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        })
+    );
+    $('ai-input-text').value = 'account A private notes';
+    $('ai-extract-btn').click();
+    await flush();
+    resetAiAssistantScope();
+    finish([{ url: 'https://a-private.test/', label: 'A', tags: [] }]);
+    await flush();
+    expect($('ai-input-text').value).toBe('');
+    expect($('ai-preview-container').textContent).toBe('');
+    expect($('ai-confirm-import-btn').disabled).toBe(true);
+    $('ai-confirm-import-btn').click();
+    expect(bridge.addMany).not.toHaveBeenCalled();
+  });
+
+  test('old toast undo stays bound to its original bridge after the new account imports', async () => {
+    extractUrlsWithGeminiNano.mockResolvedValue([
+      { url: 'https://a.test/', label: 'A', tags: [] },
+    ]);
+    $('ai-input-text').value = 'A notes';
+    $('ai-extract-btn').click();
+    await flush();
+    $('ai-confirm-import-btn').click();
+    const oldUndo = showToast.mock.calls[0][1].onAction;
+    resetAiAssistantScope();
+    const next = {
+      addMany: jest.fn((items) => ({ ok: true, added: items, skipped: [] })),
+      undo: jest.fn(() => ({ ok: true })),
+    };
+    currentBridge = next;
+    extractUrlsWithGeminiNano.mockResolvedValue([
+      { url: 'https://b.test/', label: 'B', tags: [] },
+    ]);
+    $('ai-input-text').value = 'B notes';
+    $('ai-extract-btn').click();
+    await flush();
+    $('ai-confirm-import-btn').click();
+    expect(next.addMany).toHaveBeenCalledTimes(1);
+    oldUndo();
+    expect(next.undo).not.toHaveBeenCalled();
+    expect(bridge.undo).toHaveBeenCalledTimes(1);
   });
 
   test('unavailable error during extraction reveals fallback', async () => {

@@ -127,29 +127,65 @@ function isOAuthOriginAllowed(request, env) {
 }
 
 function clientAddress(request) {
-  return (
-    request.headers.get('CF-Connecting-IP') ||
-    request.headers.get('X-Forwarded-For') ||
-    'unknown'
-  );
+  return request.headers.get('CF-Connecting-IP') || 'unknown';
 }
 
-function rateLimit(key, max, windowMs) {
+// Isolate-local abuse backstop only; never a global quota guarantee.
+function rateLimit(key, max, windowMs, buckets = rateBuckets) {
   const currentTime = Date.now();
-  const bucket = rateBuckets.get(key) || { startedAt: currentTime, count: 0 };
-  if (currentTime - bucket.startedAt >= windowMs) {
-    bucket.startedAt = currentTime;
-    bucket.count = 0;
-  }
-  bucket.count += 1;
-  rateBuckets.set(key, bucket);
-  if (rateBuckets.size > 5000) {
-    for (const [bucketKey, value] of rateBuckets) {
-      if (currentTime - value.startedAt >= windowMs)
-        rateBuckets.delete(bucketKey);
+  let bucket = buckets.get(key);
+  if (!bucket || currentTime >= bucket.expiresAt) {
+    if (buckets.size >= 5000) {
+      for (const [bucketKey, value] of buckets) {
+        if (currentTime >= value.expiresAt) buckets.delete(bucketKey);
+      }
+      // Fail closed at capacity, rather than evicting live limits.
+      if (!buckets.has(key) && buckets.size >= 5000) return false;
     }
+    bucket = { expiresAt: currentTime + windowMs, count: 0 };
   }
+  bucket.count = Math.min(bucket.count + 1, max + 1);
+  buckets.set(key, bucket);
   return bucket.count <= max;
+}
+
+async function enforceRateLimit(env, bindingName, key, max, windowMs) {
+  const binding = env[bindingName];
+  if (binding !== undefined) {
+    let result;
+    try {
+      result = await binding.limit({ key });
+      if (typeof result?.success !== 'boolean')
+        throw new Error('Invalid limiter');
+    } catch {
+      throw errorResponse(
+        503,
+        'RATE_LIMIT_UNAVAILABLE',
+        'Rate limiter unavailable.'
+      );
+    }
+    if (!result.success) return false;
+  }
+  return rateLimit(key, max, windowMs);
+}
+
+const sessionCleanupTimes = new WeakMap();
+async function cleanupExpiredSessions(env) {
+  if (!env.DB) return;
+  const now = Date.now();
+  const previous = sessionCleanupTimes.get(env.DB);
+  if (previous !== undefined && now - previous < 60000) return;
+  // Set before awaiting to bound concurrent requests and failure retries.
+  sessionCleanupTimes.set(env.DB, now);
+  try {
+    await env.DB.prepare(
+      'DELETE FROM sessions WHERE token_hash IN (SELECT token_hash FROM sessions WHERE expires_at <= ? ORDER BY expires_at LIMIT 100)'
+    )
+      .bind(nowSeconds())
+      .run();
+  } catch {
+    // Opportunistic housekeeping must not prevent authentication/sync.
+  }
 }
 
 async function readJson(request) {
@@ -468,7 +504,15 @@ async function authenticateGoogle(request, env) {
   if (!isOAuthOriginAllowed(request, env))
     return errorResponse(403, 'OAUTH_DISABLED', 'OAuth is disabled here.');
   const address = clientAddress(request);
-  if (!rateLimit(`auth:${address}`, 10, 15 * 60 * 1000))
+  if (
+    !(await enforceRateLimit(
+      env,
+      'AUTH_RATE_LIMITER',
+      `auth:${address}`,
+      10,
+      15 * 60 * 1000
+    ))
+  )
     return errorResponse(429, 'RATE_LIMITED', 'Too many login attempts.');
   let body;
   try {
@@ -572,7 +616,15 @@ async function handleSyncPut(request, env) {
     return errorResponse(403, 'ORIGIN_INVALID', 'Origin is not allowed.');
   const session = await requireSession(request, env);
   await requireCsrf(request, session);
-  if (!rateLimit(`sync:${session.account_id}`, 120, 60 * 60 * 1000))
+  if (
+    !(await enforceRateLimit(
+      env,
+      'SYNC_RATE_LIMITER',
+      `sync:${session.account_id}`,
+      120,
+      60 * 60 * 1000
+    ))
+  )
     return errorResponse(429, 'RATE_LIMITED', 'Too many sync requests.');
   let body;
   try {
@@ -780,7 +832,15 @@ async function handleProbe(request, env) {
   if (!assertMutationOrigin(request))
     return errorResponse(403, 'ORIGIN_INVALID', 'Origin is not allowed.');
   const session = await requireSession(request, env, { rotate: false });
-  if (!rateLimit(`probe:${session.account_id}`, 120, 60 * 1000))
+  if (
+    !(await enforceRateLimit(
+      env,
+      'PROBE_RATE_LIMITER',
+      `probe:${session.account_id}`,
+      120,
+      60 * 1000
+    ))
+  )
     return errorResponse(429, 'RATE_LIMITED', 'Too many probe requests.');
   let body;
   try {
@@ -815,6 +875,7 @@ export async function handleApiRequest(request, env) {
     }
     if (request.method === 'OPTIONS')
       return new Response(null, { status: 204 });
+    await cleanupExpiredSessions(env);
     if (request.method === 'GET' && path === 'auth/csrf') {
       const token = randomToken(32);
       return json({ csrfToken: token }, 200, {
@@ -882,4 +943,4 @@ export async function handleApiRequest(request, env) {
 
 export default { handleApiRequest };
 
-export const apiInternals = { validateEnvelope, parseEtag };
+export const apiInternals = { validateEnvelope, parseEtag, rateLimit };

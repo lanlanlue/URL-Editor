@@ -58,6 +58,32 @@ const seed = () => [
 ];
 
 describe('agentBridge', () => {
+  test('invalidation permanently revokes retained methods and discards undo data', () => {
+    const { bridge, state, commit } = setup(seed());
+    bridge.add({ url: 'https://before.example/' });
+    const retainedUndo = bridge.undo;
+    const retainedAdd = bridge.add;
+    bridge.invalidate();
+    commit.mockClear();
+    state.urls = [{ ...seed()[1], id: 'account-B-only' }];
+    const results = [
+      retainedUndo(),
+      retainedAdd({ url: 'https://stale.example/' }),
+      bridge.list(),
+      bridge.get('account-B-only'),
+      bridge.describe(),
+      bridge.update('account-B-only', { label: 'stale' }),
+      bridge.remove('account-B-only'),
+      bridge.addMany([{ url: 'https://stale.example/' }]),
+    ];
+    expect(
+      results.every(
+        (result) => !result.ok && result.error.code === 'scope_changed'
+      )
+    ).toBe(true);
+    expect(commit).not.toHaveBeenCalled();
+    expect(state.urls.map((item) => item.id)).toEqual(['account-B-only']);
+  });
   test('list filters by query and tag and never mutates', () => {
     const { bridge, commit } = setup(seed());
     expect(bridge.list().total).toBe(2);

@@ -1,3 +1,8 @@
+# Local agent notes and one-off verification logs (not release docs)
+/AGENTS.md
+/NOW.md
+/docs/security-remediation-verification.md
+
 # Dependencies
 /node_modules
 

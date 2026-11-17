@@ -471,3 +471,41 @@ describe('liveTestModal rework (G2)', () => {
     expect(badge.className).not.toContain('checking');
   });
 });
+
+describe('live preview URL boundaries', () => {
+  beforeEach(() => {
+    document.body.innerHTML = MODAL_HTML;
+    initLiveTestModal();
+  });
+  afterEach(() => jest.restoreAllMocks());
+  test('sandbox never combines scripts and same-origin (including redirects)', () => {
+    jest.spyOn(healthCheckModule, 'checkManyUrls').mockResolvedValue();
+    openLiveTestModal({ urls: [{ id: 'safe', url: 'https://example.test' }] });
+    const frame = document.querySelector('iframe');
+    expect(frame.getAttribute('sandbox')).toContain('allow-scripts');
+    expect(frame.getAttribute('sandbox')).not.toContain('allow-same-origin');
+    expect(frame.src).toBe('https://example.test/');
+  });
+  test.each(['javascript:alert(1)', 'data:text/html,test', 'not a url'])(
+    'unsafe URL cannot be framed or opened from either button: %s',
+    async (url) => {
+      const open = jest.spyOn(window, 'open').mockImplementation(() => {});
+      jest
+        .spyOn(healthCheckModule, 'checkManyUrls')
+        .mockImplementation(async (entries, opts) => {
+          await Promise.resolve();
+          entries.forEach((entry) =>
+            opts.onResult(entry, { status: 'online', embeddable: false })
+          );
+        });
+      openLiveTestModal({ urls: [{ id: 'unsafe', url }] });
+      const frame = document.querySelector('iframe');
+      expect(frame.src).toBe('about:blank');
+      await Promise.resolve();
+      document.querySelectorAll('.live-card-btn').forEach((button) => {
+        if (button.textContent === '↗') button.click();
+      });
+      expect(open).not.toHaveBeenCalled();
+    }
+  );
+});

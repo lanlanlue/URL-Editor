@@ -820,3 +820,17 @@ describe('localAiAssistant - Core Test Suite', () => {
     });
   });
 });
+
+test('ingestion accepts an internal bridge without a public global', async () => {
+  delete window.urlEditorAgent;
+  const bridge = {
+    addMany: jest.fn().mockReturnValue({ ok: true, added: [], skipped: [] }),
+  };
+  const result = await ingestExtractedUrls(
+    [{ url: 'https://internal.test' }],
+    bridge
+  );
+  expect(result.ok).toBe(true);
+  expect(bridge.addMany).toHaveBeenCalledTimes(1);
+  expect(window.urlEditorAgent).toBeUndefined();
+});

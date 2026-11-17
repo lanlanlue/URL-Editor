@@ -23,6 +23,8 @@ module.exports = {
   collectCoverageFrom: [
     'src/js/**/*.js',
     'src/server/**/*.js',
+    'src/worker.js',
+    'src/agent-relay/*.cjs',
     // 排除不需計算覆蓋率的檔案
     '!src/js/**/*.test.js',
     '!src/server/**/*.test.js',

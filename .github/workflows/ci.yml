@@ -1,12 +1,13 @@
-# GitHub Action: CI (Continuous Integration)
-# This workflow runs on every push and pull request to the main branch.
+# Reusable checks for deployment, also run directly for pull requests.
 name: CI
 
 on:
-  push:
-    branches: ['main']
+  workflow_call:
   pull_request:
     branches: ['main']
+
+permissions:
+  contents: read
 
 jobs:
   build-and-test:

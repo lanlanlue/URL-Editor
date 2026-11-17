@@ -342,7 +342,7 @@ function _createLiveTestCard(entry) {
     defaultValue: '在新分頁開啟',
   });
   openBtn.addEventListener('click', () => {
-    if (!isSafeUrl(url)) {
+    if (!isSafeUrl(url, ['http:', 'https:'])) {
       console.warn('[Security] Refused to open unsafe URL:', url);
       return;
     }
@@ -403,14 +403,14 @@ function _createLiveTestCard(entry) {
   iframe.title = label || url;
   iframe.setAttribute(
     'sandbox',
-    'allow-scripts allow-same-origin allow-forms allow-popups allow-downloads'
+    'allow-scripts allow-forms allow-popups allow-downloads'
   );
   iframe.loading = 'lazy';
 
-  let formattedUrl = url.trim();
-  if (!/^https?:\/\//i.test(formattedUrl)) {
-    formattedUrl = 'https://' + formattedUrl;
-  }
+  // Opaque-origin sandbox also protects against redirects to this app.
+  const formattedUrl = isSafeUrl(url, ['http:', 'https:'])
+    ? url.trim()
+    : 'about:blank';
   iframe.dataset.liveSrc = formattedUrl;
   iframe.src = formattedUrl;
 
@@ -590,9 +590,10 @@ function _showEmbedBlocked(card, url) {
   const openBtn = document.createElement('button');
   openBtn.className = 'live-card-btn';
   openBtn.textContent = '↗';
-  openBtn.addEventListener('click', () =>
-    window.open(url, '_blank', 'noopener,noreferrer')
-  );
+  openBtn.addEventListener('click', () => {
+    if (!isSafeUrl(url, ['http:', 'https:'])) return;
+    window.open(url, '_blank', 'noopener,noreferrer');
+  });
   notice.appendChild(msg);
   notice.appendChild(openBtn);
   wrapper.appendChild(notice);

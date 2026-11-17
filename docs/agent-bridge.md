@@ -17,7 +17,7 @@
 
 ## 啟用（A）
 
-預設**不啟用**，`window.urlEditorAgent` 不存在。符合任一條件才會安裝：
+預設**不公開外部 API 或啟用 relay**，`window.urlEditorAgent` 不存在。內建 AI 仍使用 main.js 私有 bridge 實例（依賴注入），匯入／undo 不依賴全域。`ingestExtractedUrls(items, bridge)` 亦可明確傳入內部實例；省略時只支援已 opt-in 的公開 API。符合任一條件才會公開並啟用 relay：
 
 - 網址帶 `?agent=1`
 - `localStorage.urlEditorAgent === '1'`（使用者自行設定）
@@ -42,7 +42,12 @@
 可編輯欄位僅 `url`、`label`、`tags`、`isPinned`。`id`、`usageCount`、時間戳等一律忽略，
 新增時的 `id` 由系統產生，不接受呼叫端指定。單次批次上限 200 筆。
 
-錯誤碼：`invalid_input`、`invalid_url`、`not_found`、`too_many`、`nothing_to_undo`。
+錯誤碼：`invalid_input`、`invalid_url`、`not_found`、`too_many`、`nothing_to_undo`、`scope_changed`。
+
+帳戶切換或 session 失效時，舊 bridge 與所有已取得的方法引用永久失效，並清除 undo 快照。
+轉換完成後，已 opt-in 的公開 API 可重新從 `window.urlEditorAgent` 取得；不要快取舊引用。
+內建 AI 會清除舊輸入／預覽、取消待完成的抽取，新的抽取使用新 bridge；舊 toast 的 Undo 不操作新帳戶。
+外部 relay 連線會停止，不在同頁自動接管新帳戶；確認目前帳戶後重新載入並配對。
 
 ## 同步行為
 

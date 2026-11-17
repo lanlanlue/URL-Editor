@@ -118,13 +118,30 @@ export async function createRecoveryKey() {
 export async function parseRecoveryKey(value) {
   if (typeof value !== 'string') throw new Error('Recovery Key is required.');
   const normalized = value.trim().replace(/\s+/g, '');
-  const parts = normalized.split('-');
-  if (parts.length < 3 || parts.shift().toUpperCase() !== RECOVERY_PREFIX) {
+  const prefix = `${RECOVERY_PREFIX}-`;
+  if (
+    !normalized.toUpperCase().startsWith(prefix) ||
+    normalized.length < prefix.length + 6 ||
+    normalized.slice(-5, -4) !== '-'
+  ) {
     throw new Error('Recovery Key format is invalid.');
   }
-  const checksum = parts.pop().toUpperCase();
-  const encoded = parts.join('');
+  // The checksum is exactly four base64url characters and may itself contain
+  // '-'. Read it by width rather than splitting on that character.
+  const checksum = normalized.slice(-4).toUpperCase();
+  const payload = normalized.slice(prefix.length, -5);
+  // Only two layouts are supported: exactly 43 base64url characters, or
+  // canonical 8/8/8/8/8/3 groups. Never strip payload hyphens: they are data.
+  if (!/^[A-Za-z0-9_-]+$/.test(payload) || !/^[A-Z0-9_-]{4}$/.test(checksum))
+    throw new Error('Invalid base64url value.');
+  const groups = payload.match(
+    /^([A-Za-z0-9_-]{8})-([A-Za-z0-9_-]{8})-([A-Za-z0-9_-]{8})-([A-Za-z0-9_-]{8})-([A-Za-z0-9_-]{8})-([A-Za-z0-9_-]{3})$/
+  );
+  const encoded = payload.length === 43 ? payload : groups?.slice(1).join('');
+  if (!encoded) throw new Error('Recovery Key format or checksum is invalid.');
   const secret = base64UrlToBytes(encoded);
+  if (bytesToBase64Url(secret) !== encoded)
+    throw new Error('Recovery Key encoding is invalid.');
   const expectedChecksum = await recoveryChecksum(secret);
   if (
     secret.length !== 32 ||

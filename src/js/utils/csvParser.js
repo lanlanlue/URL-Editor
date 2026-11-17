@@ -9,7 +9,10 @@
  */
 export function escapeCsvField(value) {
   if (value === null || value === undefined) return '""';
-  const str = String(value);
+  const text = String(value);
+  // Spreadsheet-safe export, not a lossless backup format. Do not strip the
+  // prefix on import: it cannot be distinguished from a user's apostrophe.
+  const str = /^\s*[=+\-@\t\r\n]/.test(text) ? `'${text}` : text;
   if (/[",\n\r]/.test(str)) {
     return `"${str.replace(/"/g, '""')}"`;
   }

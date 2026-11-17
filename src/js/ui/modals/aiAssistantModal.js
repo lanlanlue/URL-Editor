@@ -8,6 +8,9 @@ import { copyUniversalAiPrompt } from '../components/aiPromptHelper';
 import { showToast } from '../components/toast';
 
 let bridge = null;
+let getBridge = null;
+let candidateBridge = null;
+let scopeGeneration = 0;
 let candidates = [];
 let abortController = null;
 let busy = false;
@@ -150,7 +153,23 @@ function showFallback(show) {
   $('ai-fallback-section')?.classList.toggle('hidden', !show);
 }
 
+export function resetAiAssistantScope() {
+  scopeGeneration += 1;
+  closeAiAssistantModal();
+  abortController = null;
+  bridge = null;
+  candidateBridge = null;
+  candidates = [];
+  const textarea = $('ai-input-text');
+  if (textarea) textarea.value = '';
+  renderPreview();
+  setBusy(false);
+  setStatus('unavailable', '');
+}
+
 async function handleExtract() {
+  const generation = scopeGeneration;
+  const extractionBridge = getBridge ? getBridge() : bridge;
   const textarea = $('ai-input-text');
   const rawText = textarea ? textarea.value.trim() : '';
   if (!rawText) {
@@ -171,6 +190,7 @@ async function handleExtract() {
     const items = await extractUrlsWithGeminiNano(
       rawText,
       ({ percent }) => {
+        if (generation !== scopeGeneration) return;
         wrapper?.classList.remove('hidden');
         if (bar) bar.value = percent;
         if (percentEl) percentEl.textContent = `${percent}%`;
@@ -178,6 +198,8 @@ async function handleExtract() {
       },
       { signal: abortController.signal }
     );
+    if (generation !== scopeGeneration) return;
+    candidateBridge = extractionBridge;
 
     wrapper?.classList.add('hidden');
     candidates = (items || []).map((item) => ({
@@ -194,6 +216,7 @@ async function handleExtract() {
         : t('noItemsFound')
     );
   } catch (error) {
+    if (generation !== scopeGeneration) return;
     wrapper?.classList.add('hidden');
     if (error?.name === 'AbortError') return;
     if (
@@ -207,19 +230,24 @@ async function handleExtract() {
       setStatus('error', t('errorGeneric'));
     }
   } finally {
-    abortController = null;
-    setBusy(false);
+    if (generation === scopeGeneration) {
+      abortController = null;
+      setBusy(false);
+    }
   }
 }
 
 // Writes through the bridge handed in by main.js, in chunks the bridge accepts.
-function ingest(items) {
+function ingest(items, targetBridge) {
   const added = [];
   let steps = 0;
   for (let i = 0; i < items.length; i += MAX_INGESTION_BATCH) {
-    const result = bridge.addMany(items.slice(i, i + MAX_INGESTION_BATCH), {
-      skipDuplicates: true,
-    });
+    const result = targetBridge.addMany(
+      items.slice(i, i + MAX_INGESTION_BATCH),
+      {
+        skipDuplicates: true,
+      }
+    );
     if (!result || !result.ok) {
       return { ok: false, error: result?.error, added, steps };
     }
@@ -233,9 +261,10 @@ function handleConfirmImport() {
   const selected = candidates
     .filter((item) => item.selected)
     .map(({ url, label, tags }) => ({ url, label, tags }));
-  if (selected.length === 0 || !bridge) return;
+  const importBridge = candidateBridge;
+  if (selected.length === 0 || !importBridge) return;
 
-  const result = ingest(selected);
+  const result = ingest(selected, importBridge);
   if (!result.ok) {
     console.warn('[AI Assistant] import failed:', result.error);
     setStatus('error', t('errorGeneric'));
@@ -246,7 +275,9 @@ function handleConfirmImport() {
   showToast(t('toastSuccess', { count: result.added.length }), {
     actionLabel: t('toastUndoAction'),
     onAction: () => {
-      for (let i = 0; i < result.steps; i += 1) bridge.undo();
+      for (let i = 0; i < result.steps; i += 1) {
+        if (!importBridge.undo()?.ok) return;
+      }
       showToast(t('toastUndoSuccess'));
     },
   });
@@ -286,7 +317,9 @@ export async function openAiAssistantModal() {
 }
 
 export function initAiAssistantModal(options = {}) {
+  resetAiAssistantScope();
   bridge = options.bridge || null;
+  getBridge = options.getBridge || null;
   const dialog = $('ai-assistant-modal');
   if (!dialog) return;
 

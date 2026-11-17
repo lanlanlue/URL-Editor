@@ -310,7 +310,7 @@ describe('B12 stale device must merge instead of overwrite', () => {
 });
 
 describe('B12 never-synced fallback', () => {
-  test('(7) an auto-upload that fires before the session refresh finished merges the remote first', async () => {
+  test('(7) an auto-upload waits for the session refresh then uploads merged remote data', async () => {
     const server = makeServer();
     server.write(data([url('r1', 5)]));
     let release;
@@ -329,6 +329,10 @@ describe('B12 never-synced fallback', () => {
         new CustomEvent('url-editor-data-change', { detail: a.state })
       );
       await jest.advanceTimersByTimeAsync(2000);
+      expect(server.puts).toEqual([]); // Session refresh owns the operation lock.
+      release();
+      await jest.advanceTimersByTimeAsync(0);
+      await jest.advanceTimersByTimeAsync(5000);
       expect(server.puts).toEqual([
         { ifMatch: '"rev-1"', revision: 2, accepted: true },
       ]);

@@ -11,6 +11,46 @@ import {
 } from './cryptoVault.js';
 
 describe('cryptoVault Recovery Key format', () => {
+  test('round trips a hyphen within the fixed-width checksum', async () => {
+    const secret = new Uint8Array(32).fill(4);
+    const display = await formatRecoveryKey(secret);
+    expect(display.slice(-4)).toContain('-');
+    expect([...(await parseRecoveryKey(display))]).toEqual([...secret]);
+  });
+  test('round trips exact compact base64url payload without deleting legal hyphens', async () => {
+    const secret = new Uint8Array(32).fill(251);
+    const canonical = await formatRecoveryKey(secret);
+    const encoded = encodeBytes(secret);
+    expect(encoded).toHaveLength(43);
+    expect(encoded).toContain('-');
+    const compact = `URE1-${encoded}-${canonical.slice(-4)}`;
+    expect([...(await parseRecoveryKey(compact))]).toEqual([...secret]);
+  });
+  test('rejects noncanonical grouping, invalid lengths, characters and padding bits', async () => {
+    const secret = new Uint8Array(32);
+    const canonical = await formatRecoveryKey(secret);
+    const encoded = encodeBytes(secret);
+    const checksum = canonical.slice(-4);
+    for (const payload of [
+      encoded.slice(0, 42),
+      encoded + 'A',
+      encoded + '-',
+      encoded.slice(0, 4) + '-' + encoded.slice(4),
+      encoded.slice(0, -1) + '=',
+      encoded.slice(0, -1) + 'B',
+    ]) {
+      await expect(
+        parseRecoveryKey(`URE1-${payload}-${checksum}`)
+      ).rejects.toThrow();
+    }
+    await expect(parseRecoveryKey(`URE1-${encoded}-AB$D`)).rejects.toThrow();
+  });
+  test('round trips base64url hyphens inside fixed-width display groups', async () => {
+    const secret = new Uint8Array(32).fill(251);
+    expect(encodeBytes(secret)).toContain('-');
+    const parsed = await parseRecoveryKey(await formatRecoveryKey(secret));
+    expect([...parsed]).toEqual([...secret]);
+  });
   test('round trips a 32-byte secret and rejects tampering', async () => {
     const secret = Uint8Array.from({ length: 32 }, (_, index) => index);
     const formatted = await formatRecoveryKey(secret);

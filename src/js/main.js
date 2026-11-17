@@ -18,6 +18,7 @@ import { initQrCodeModal, openQrCodeModal } from './ui/modals/qrCodeModal.js';
 import {
   initAiAssistantModal,
   openAiAssistantModal,
+  resetAiAssistantScope,
 } from './ui/modals/aiAssistantModal.js';
 import {
   configurePresetStorage,
@@ -143,6 +144,9 @@ let lastPersistedPresetSnapshots = new Map();
 const syncDeviceId = getDeviceId();
 let initCloudSyncModal = null;
 let openCloudSyncModal = null;
+// An account transition clears memory before secureStorage switches scope.
+// Do not persist the empty placeholder (or edits to it) under the old key.
+let accountTransitionPending = false;
 
 function createEntryId(candidate = '') {
   if (
@@ -397,6 +401,7 @@ function syncUnreadableNotice() {
 
 function saveState() {
   syncUnreadableNotice();
+  if (accountTransitionPending) return;
   if (isStorageUnreadable()) {
     // Persisting now would overwrite the unreadable record with placeholder
     // data (and broadcast it to sync listeners). Skip, but tell the user.
@@ -1119,6 +1124,17 @@ function initPanelResizer() {
 
 function restoreCloudData(data, options = {}) {
   if (!data || !Array.isArray(data.urls)) return;
+  accountTransitionPending = options.accountTransition === true;
+  if (accountTransitionPending) {
+    invalidateAgentScope();
+    appState.rebuildHistory = [];
+    appState.presets = [];
+    appState.tombstones = [];
+    appState.activeTagFilter = null;
+    appState.searchTerm = '';
+    runtimeHealthStatus.clear();
+  }
+  appState.syncMetadata = data.syncMetadata || {};
   appState.urls = normalizeUrlEntries(data.urls);
   if (Array.isArray(data.presets)) appState.presets = data.presets;
   if (Array.isArray(data.rebuildHistory)) {
@@ -1144,6 +1160,9 @@ function restoreCloudData(data, options = {}) {
   saveState(); // also re-evaluates the notice
   syncUnreadableNotice();
   renderUrlList();
+  if (!accountTransitionPending && isAgentBridgeEnabled()) {
+    window.urlEditorAgent = getOrCreateAgentBridge();
+  }
 }
 
 function getCurrentState() {
@@ -1159,14 +1178,28 @@ function getCurrentState() {
   };
 }
 
-// Machine interface (window.urlEditorAgent). The bridge itself is always
-// created because the in-app AI assistant ingests and undoes through it; only
-// the external relay stays opt-in (?agent=1).
+// The internal bridge serves in-app AI ingestion/undo. Public global exposure
+// and the external relay are both opt-in (?agent=1 / localStorage flag).
 // Writes go through saveState(), so encryption and cloud sync are unchanged.
 let agentBridge = null;
+let agentScope = 0;
+let agentRelayClient = null;
+
+function invalidateAgentScope() {
+  agentScope += 1;
+  agentBridge?.invalidate();
+  agentBridge = null;
+  agentRelayClient?.stop();
+  agentRelayClient = null;
+  delete window.urlEditorAgent;
+  resetAiAssistantScope?.();
+}
+
 function getOrCreateAgentBridge() {
   if (agentBridge) return agentBridge;
+  const scope = agentScope;
   agentBridge = createAgentBridge({
+    isActive: () => scope === agentScope && !accountTransitionPending,
     getUrls: () => appState.urls,
     normalize: normalizeUrlEntries,
     commit: (next, deletedIds) => {
@@ -1184,22 +1217,25 @@ function getOrCreateAgentBridge() {
       renderUrlList();
     },
   });
-  if (typeof window !== 'undefined') window.urlEditorAgent = agentBridge;
   return agentBridge;
 }
 
 function installAgentBridge() {
   if (typeof window === 'undefined') return;
-  const bridge = getOrCreateAgentBridge();
   if (!isAgentBridgeEnabled()) return;
-  initAgentRelay({
+  const bridge = getOrCreateAgentBridge();
+  window.urlEditorAgent = bridge;
+  agentRelayClient = initAgentRelay({
     bridge,
     onStatus: (status) => console.info(`[agent-relay] ${status}`),
   });
 }
 
 function installAiAssistant() {
-  initAiAssistantModal({ bridge: getOrCreateAgentBridge() });
+  initAiAssistantModal({
+    bridge: getOrCreateAgentBridge(),
+    getBridge: getOrCreateAgentBridge,
+  });
   document
     .getElementById('open-ai-assistant-btn')
     ?.addEventListener('click', () => void openAiAssistantModal());
@@ -1528,6 +1564,14 @@ async function bootstrap() {
         initialTab: 'domain',
         callbacks: {
           onBatchUpdate: (updatedUrls) => {
+            if (
+              !updatedUrls.every((entry) =>
+                isSafeUrl(entry.url, ['http:', 'https:'])
+              )
+            ) {
+              alert('批次修改已取消：只允許有效 HTTP(S) 網址；原資料未更動。');
+              return;
+            }
             markDeletedEntries(
               appState.urls
                 .map((entry) => entry.id)
@@ -1616,6 +1660,14 @@ async function bootstrap() {
         initialTab: 'domain',
         callbacks: {
           onBatchUpdate: (updatedUrls) => {
+            if (
+              !updatedUrls.every((entry) =>
+                isSafeUrl(entry.url, ['http:', 'https:'])
+              )
+            ) {
+              alert('批次修改已取消：只允許有效 HTTP(S) 網址；原資料未更動。');
+              return;
+            }
             markDeletedEntries(
               appState.urls
                 .map((entry) => entry.id)

@@ -289,10 +289,15 @@ export function batchProcessUrls(urls = [], options = {}) {
     };
   });
 
+  // Reject the whole transaction, never drop or partially apply entries.
+  const errors = updatedUrls
+    .filter((entry) => !isSafeUrl(entry.url, ['http:', 'https:']))
+    .map((entry) => ({ id: entry.id, reason: 'invalid-url' }));
   return {
-    updatedUrls,
-    affectedCount,
+    updatedUrls: errors.length ? urls : updatedUrls,
+    affectedCount: errors.length ? 0 : affectedCount,
     previewList,
+    errors,
   };
 }
 

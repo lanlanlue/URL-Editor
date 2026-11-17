@@ -158,6 +158,10 @@ export function initMaintenanceModal() {
       const processOptions = getProcessOptions();
       const result = batchProcessUrls(modalUrls, processOptions);
 
+      if (result.errors.length) {
+        alert('批次修改已取消：結果包含無效或非 HTTP(S) 網址；原資料未更動。');
+        return;
+      }
       if (result.affectedCount === 0) {
         alert(i18next.t('maintenance.noTargetAlert'));
         return;
@@ -274,12 +278,15 @@ function updatePreview() {
   if (previewSection) previewSection.classList.remove('hidden');
 
   const options = getProcessOptions();
-  const { affectedCount, previewList } = batchProcessUrls(modalUrls, options);
+  const { affectedCount, previewList, errors } = batchProcessUrls(
+    modalUrls,
+    options
+  );
 
   if (previewCountEl) {
-    previewCountEl.textContent = i18next.t('maintenance.preview.title', {
-      count: affectedCount,
-    });
+    previewCountEl.textContent = errors.length
+      ? '批次修改將被拒絕：含無效或非 HTTP(S) 網址；原資料將保留。'
+      : i18next.t('maintenance.preview.title', { count: affectedCount });
   }
 
   if (previewListEl) {

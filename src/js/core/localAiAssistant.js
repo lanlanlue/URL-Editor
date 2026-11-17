@@ -672,9 +672,10 @@ export async function extractUrlsWithGeminiNano(
  * @param {Array<{ url: string, label?: string, tags?: string[] }>} items
  * @returns {Promise<{ ok: boolean, added?: any[], skipped?: any[], error?: any }>}
  */
-export async function ingestExtractedUrls(items) {
+export async function ingestExtractedUrls(items, bridge) {
   const agent =
-    typeof window !== 'undefined' ? window.urlEditorAgent : undefined;
+    bridge ??
+    (typeof window !== 'undefined' ? window.urlEditorAgent : undefined);
   if (!agent || typeof agent.addMany !== 'function') {
     throw new Error('AGENT_BRIDGE_NOT_AVAILABLE: Agent bridge unavailable.');
   }

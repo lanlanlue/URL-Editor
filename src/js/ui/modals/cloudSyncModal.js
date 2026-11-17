@@ -34,6 +34,9 @@ import CLOUD_SYNC_MARKUP from './cloudSyncMarkup.js';
 
 let initialized = false;
 let busy = false;
+let sessionRefreshPending = false;
+let accountEpoch = 0;
+let sessionRefreshGeneration = 0;
 let syncTimer = null;
 let syncRetryAttempt = 0;
 // Consecutive automatic syncs that ended in a 409 conflict. Each one costs two
@@ -41,6 +44,9 @@ let syncRetryAttempt = 0;
 const MAX_CONFLICT_RETRIES = 5;
 let conflictFailures = 0;
 let session = null;
+// Plaintext ownership survives transient session lookup failures. A null
+// session must never make previous-account data look like anonymous guest data.
+let memoryAccountId = '';
 let csrfToken = '';
 let remoteDocument = { envelope: null, etag: '"rev-0"', revision: 0 };
 // The remote state this device last merged or uploaded (B12). Uploads send
@@ -50,6 +56,8 @@ let syncedEtag = null;
 let syncedRevision = 0;
 let encryptionContext = null;
 let pendingRecovery = null;
+// Keep the committed rotation key copyable even while unlocked or signed out.
+let rotationBackupRequired = false;
 let firstUploadRequired = false;
 let guestMigrationPending = false;
 // True while the in-memory data is only the empty placeholder shown for an
@@ -123,11 +131,13 @@ function handleNetworkChange() {
   }
 }
 
-function restoreData(data) {
+function restoreData(data, options) {
   suppressAutomaticSync = true;
   placeholderOnly = false;
   try {
-    return callbacks.onRestore(data);
+    return options
+      ? callbacks.onRestore(data, options)
+      : callbacks.onRestore(data);
   } finally {
     suppressAutomaticSync = false;
   }
@@ -156,6 +166,7 @@ function setBusy(value) {
     const button = document.getElementById(id);
     if (button) button.disabled = value;
   });
+  if (!value && sessionRefreshPending) void requestSessionRefresh();
 }
 
 function currentRecoveryDisplay() {
@@ -205,6 +216,25 @@ function currentAccountId() {
   return session?.user?.id || session?.accountId || '';
 }
 
+function accountSnapshot() {
+  return Object.freeze({ accountId: currentAccountId(), epoch: accountEpoch });
+}
+
+function isCurrentAccount(snapshot) {
+  return (
+    snapshot.accountId === currentAccountId() && snapshot.epoch === accountEpoch
+  );
+}
+
+function assertCurrentAccount(snapshot, context) {
+  if (
+    !isCurrentAccount(snapshot) ||
+    (snapshot.accountId && memoryAccountId !== snapshot.accountId) ||
+    (context && context.key !== encryptionContext?.key)
+  )
+    throw new Error('帳戶或加密金鑰已變更；已停止舊操作。');
+}
+
 function currentKeyVersion() {
   return encryptionContext?.keyVersion || 1;
 }
@@ -239,14 +269,22 @@ function aadFor(accountId, keyVersion, revision) {
 }
 
 async function encryptCloudPayload(payload, revision) {
-  const keyVersion = currentKeyVersion();
-  const aad = aadFor(currentAccountId(), keyVersion, revision);
-  const encrypted = await encryptJson(payload, encryptionContext.key, aad);
+  // Capture all AAD/envelope inputs before yielding, including salt bytes.
+  const snapshot = Object.freeze({
+    accountId: currentAccountId(),
+    key: encryptionContext.key,
+    keyVersion: currentKeyVersion(),
+    kdfSalt: encodeBytes(encryptionContext.salt),
+    revision,
+  });
+  const { accountId, key, keyVersion, kdfSalt } = snapshot;
+  const aad = aadFor(accountId, keyVersion, snapshot.revision);
+  const encrypted = await encryptJson(payload, key, aad);
   return {
     revision,
     payloadSchemaVersion: 1,
     keyVersion,
-    kdfSalt: encodeBytes(encryptionContext.salt),
+    kdfSalt,
     iv: encrypted.iv,
     ciphertext: encrypted.ciphertext,
   };
@@ -270,7 +308,7 @@ function updateControls() {
   setVisible('cloud-sync-account-section', CLOUD_ENABLED && loggedIn);
   setVisible(
     'cloud-sync-recovery-section',
-    CLOUD_ENABLED && loggedIn && !unlocked
+    CLOUD_ENABLED && ((loggedIn && !unlocked) || rotationBackupRequired)
   );
   setVisible(
     'cloud-sync-unlocked-section',
@@ -286,7 +324,9 @@ function updateControls() {
 
 async function refreshRemoteDocument() {
   if (!session) return;
+  const identity = accountSnapshot();
   const result = await getSyncDocument(csrfToken);
+  assertCurrentAccount(identity);
   remoteDocument = {
     envelope: result.document || result.envelope || null,
     etag: result.etag || '"rev-0"',
@@ -311,19 +351,27 @@ function clearSyncedRemote() {
 }
 
 async function mergeRemoteIntoLocal() {
-  if (remoteDocument.envelope) {
-    const remoteData = await decryptCloudEnvelope(remoteDocument.envelope);
+  const identity = accountSnapshot();
+  const context = encryptionContext;
+  const remote = remoteDocument;
+  if (remote.envelope) {
+    const remoteData = await decryptCloudEnvelope(remote.envelope);
+    assertCurrentAccount(identity, context);
+    if (remote !== remoteDocument) throw new Error('雲端版本已變更；請重試。');
     restoreData(mergeSyncData(callbacks.getData(), remoteData));
   }
+  assertCurrentAccount(identity, context);
   markRemoteSynced();
 }
 
 async function refreshHistory() {
   if (!session) return;
+  const identity = accountSnapshot();
   const select = document.getElementById('cloud-sync-history-select');
   if (!select) return;
   try {
     const revisions = await listSyncRevisions(csrfToken);
+    assertCurrentAccount(identity);
     select.innerHTML = '';
     if (!revisions.length) {
       const option = document.createElement('option');
@@ -344,8 +392,45 @@ async function refreshHistory() {
       select.appendChild(option);
     });
   } catch (error) {
-    setStatus(error.message || '無法讀取歷史版本。', true);
+    if (isCurrentAccount(identity))
+      setStatus(error.message || '無法讀取歷史版本。', true);
   }
+}
+
+// Reopen refreshes share the operation lock and coalesce without being lost.
+async function requestSessionRefresh() {
+  if (busy) {
+    sessionRefreshPending = true;
+    return;
+  }
+  sessionRefreshPending = false;
+  setBusy(true);
+  try {
+    await refreshSession();
+  } finally {
+    setBusy(false);
+    updateControls();
+  }
+}
+
+function clearAccountContext() {
+  clearTimeout(syncTimer);
+  syncTimer = null;
+  encryptionContext = null;
+  pendingRecovery = null;
+  remoteDocument = { envelope: null, etag: '"rev-0"', revision: 0 };
+  clearSyncedRemote();
+  firstUploadRequired = false;
+  guestMigrationPending = false;
+  placeholderOnly = false;
+}
+
+function clearAccountPlaintext() {
+  if (!memoryAccountId) return;
+  // Clear ownership only after the application confirms the memory reset.
+  // If rendering fails, the next refresh must retry before loading a new key.
+  restoreData(buildCloudPayload(null), { accountTransition: true });
+  memoryAccountId = '';
 }
 
 async function refreshSession() {
@@ -353,34 +438,56 @@ async function refreshSession() {
     updateControls();
     return;
   }
+  const generation = ++sessionRefreshGeneration;
+  let identity = accountSnapshot();
+  let sessionLoaded = false;
   try {
-    session = await getSession();
+    const previousAccountId = currentAccountId();
+    const nextSession = await getSession();
+    if (generation !== sessionRefreshGeneration || !isCurrentAccount(identity))
+      return;
+    session = nextSession;
+    sessionLoaded = true;
     csrfToken = session?.csrfToken || '';
+    if (
+      currentAccountId() !== previousAccountId ||
+      (memoryAccountId && memoryAccountId !== currentAccountId())
+    ) {
+      accountEpoch += 1;
+      identity = accountSnapshot();
+      clearAccountContext();
+      if (memoryAccountId !== currentAccountId()) clearAccountPlaintext();
+    }
+    memoryAccountId = currentAccountId();
     if (!session) {
-      encryptionContext = null;
-      remoteDocument = { envelope: null, etag: '"rev-0"', revision: 0 };
-      clearSyncedRemote();
-      firstUploadRequired = false;
-      guestMigrationPending = false;
-      placeholderOnly = false;
+      clearAccountContext();
       updateControls();
       return;
     }
-    const stored = await getAccountEncryptionKey(currentAccountId());
+    // Confirmed rotation may be newer than persistence after local failure.
+    // Never downgrade an active same-account memory context on reopen.
+    const stored =
+      encryptionContext || (await getAccountEncryptionKey(currentAccountId()));
+    if (generation !== sessionRefreshGeneration) return;
+    assertCurrentAccount(identity);
     if (stored?.key && stored.salt) {
-      await useAccountEncryptionKey(currentAccountId(), stored.key, {
+      await useAccountEncryptionKey(identity.accountId, stored.key, {
         salt: stored.salt,
         keyVersion: stored.keyVersion || 1,
       });
+      if (generation !== sessionRefreshGeneration) return;
+      assertCurrentAccount(identity);
       encryptionContext = {
         key: stored.key,
         salt: stored.salt,
         keyVersion: stored.keyVersion || 1,
       };
       const localAccountState = await loadAccountState(
-        currentAccountId(),
+        identity.accountId,
         stored.key
       );
+      if (generation !== sessionRefreshGeneration) return;
+      assertCurrentAccount(identity);
       if (localAccountState) {
         restoreData(mergeSyncData(callbacks.getData(), localAccountState));
       }
@@ -390,7 +497,22 @@ async function refreshSession() {
     }
     updateControls();
   } catch (error) {
-    session = null;
+    if (generation !== sessionRefreshGeneration || !isCurrentAccount(identity))
+      return;
+    // A valid authenticated session with an unreadable persisted key must
+    // remain usable for manual Recovery Key unlock, not become a login loop.
+    if (!sessionLoaded) {
+      accountEpoch += 1;
+      session = null;
+      csrfToken = '';
+      clearAccountContext();
+      try {
+        clearAccountPlaintext();
+      } catch {
+        // Keep memoryAccountId until clearing succeeds. A future account
+        // cannot load its key or upload this plaintext before that retry.
+      }
+    }
     encryptionContext = null;
     clearSyncedRemote();
     updateControls();
@@ -400,7 +522,10 @@ async function refreshSession() {
 
 async function unlockWithSecret(secret, generated = false) {
   requireEncryptedLocalStorage();
+  const identity = accountSnapshot();
+  assertCurrentAccount(identity);
   await refreshRemoteDocument();
+  assertCurrentAccount(identity);
   const existingSalt = remoteDocument.envelope?.kdfSalt
     ? decodeBytes(remoteDocument.envelope.kdfSalt)
     : null;
@@ -409,8 +534,9 @@ async function unlockWithSecret(secret, generated = false) {
   const key = await deriveEncryptionKey(
     secret,
     salt,
-    `URL Editor E2EE v1:${currentAccountId()}`
+    `URL Editor E2EE v1:${identity.accountId}`
   );
+  assertCurrentAccount(identity);
   const previousContext = encryptionContext;
   const previousFirstUploadRequired = firstUploadRequired;
   const previousGuestMigrationPending = guestMigrationPending;
@@ -426,6 +552,7 @@ async function unlockWithSecret(secret, generated = false) {
     let restoredData = guestUnreadable ? null : callbacks.getData();
     if (remoteDocument.envelope) {
       const remoteData = await decryptCloudEnvelope(remoteDocument.envelope);
+      assertCurrentAccount(identity, { key });
       restoredData = restoredData
         ? mergeSyncData(restoredData, remoteData)
         : remoteData;
@@ -433,10 +560,12 @@ async function unlockWithSecret(secret, generated = false) {
     } else {
       firstUploadRequired = generated;
     }
-    await useAccountEncryptionKey(currentAccountId(), key, {
+    assertCurrentAccount(identity, { key });
+    await useAccountEncryptionKey(identity.accountId, key, {
       salt,
       keyVersion,
     });
+    assertCurrentAccount(identity, { key });
     guestMigrationPending = !guestUnreadable;
     pendingRecovery = null;
     const input = document.getElementById('cloud-sync-recovery-input');
@@ -449,6 +578,7 @@ async function unlockWithSecret(secret, generated = false) {
     updateControls();
   } catch (error) {
     console.error('[CloudSync Unlock Secret Failed]:', error);
+    if (!isCurrentAccount(identity)) throw error;
     encryptionContext = previousContext;
     firstUploadRequired = previousFirstUploadRequired;
     guestMigrationPending = previousGuestMigrationPending;
@@ -462,8 +592,11 @@ async function unlockWithSecret(secret, generated = false) {
 
 async function handleGenerateRecoveryKey() {
   if (busy) return;
+  setBusy(true);
+  const identity = accountSnapshot();
   try {
     const generated = await createRecoveryKey();
+    assertCurrentAccount(identity);
     pendingRecovery = generated;
     const display = document.getElementById('cloud-sync-recovery-display');
     if (display) display.textContent = generated.display;
@@ -476,12 +609,16 @@ async function handleGenerateRecoveryKey() {
     );
   } catch (error) {
     setStatus(error.message, true);
+  } finally {
+    setBusy(false);
+    updateControls();
   }
 }
 
 async function handleUnlock() {
   if (busy || !session) return;
   setBusy(true);
+  const identity = accountSnapshot();
   try {
     const inputValue =
       document.getElementById('cloud-sync-recovery-input')?.value || '';
@@ -504,7 +641,9 @@ async function handleUnlock() {
     }
     const secret =
       pendingRecovery?.secret || (await parseRecoveryKey(inputValue));
+    assertCurrentAccount(identity);
     await unlockWithSecret(secret, Boolean(pendingRecovery));
+    assertCurrentAccount(identity);
     setStatus(
       i18next.t('cloudSync.unlocked', {
         defaultValue: '已解鎖端到端加密同步。',
@@ -519,11 +658,22 @@ async function handleUnlock() {
   }
 }
 
-async function uploadCurrentData({ force = false, retry = true } = {}) {
+async function uploadCurrentData({
+  force = false,
+  retry = true,
+  expectedAccountId,
+  onUploadStarted,
+  onCommitted,
+} = {}) {
   requireEncryptedLocalStorage();
   if (!session || !encryptionContext)
     throw new Error('請先登入並解鎖 Recovery Key。');
-  if (firstUploadRequired && !force) return;
+  const identity = accountSnapshot();
+  const context = encryptionContext;
+  assertCurrentAccount(identity, context);
+  if (expectedAccountId && identity.accountId !== expectedAccountId)
+    throw new Error('帳戶已變更；未上傳資料。');
+  if (firstUploadRequired && !force) return false;
   if (placeholderOnly) {
     if (force)
       setStatus(
@@ -533,23 +683,35 @@ async function uploadCurrentData({ force = false, retry = true } = {}) {
         }),
         true
       );
-    return;
+    return false;
   }
   if (syncedEtag === null) {
     // Never synced in this page session: merge the remote first, never
     // overwrite it with local-only data.
     await refreshRemoteDocument();
+    assertCurrentAccount(identity, context);
     await mergeRemoteIntoLocal();
+    assertCurrentAccount(identity, context);
   }
   // No fresh etag here: the server compares If-Match with its current
   // revision and answers 409 when another device has written since.
   const nextRevision = syncedRevision + 1;
+  const requestCsrf = csrfToken;
+  const requestEtag = syncedEtag;
   const envelope = await encryptCloudPayload(
     buildCloudPayload(callbacks.getData()),
     nextRevision
   );
+  assertCurrentAccount(identity, context);
+  let committed = false;
   try {
-    const result = await putSyncDocument(envelope, csrfToken, syncedEtag);
+    if (onUploadStarted) onUploadStarted();
+    const result = await putSyncDocument(envelope, requestCsrf, requestEtag);
+    // A confirmed PUT is irreversible here. Never retry it because local
+    // persistence, guest cleanup or UI rendering subsequently fails.
+    committed = true;
+    if (onCommitted) await onCommitted();
+    assertCurrentAccount(identity, context);
     remoteDocument = {
       envelope: result.document || result.envelope || envelope,
       etag: result.etag || `"rev-${nextRevision}"`,
@@ -561,20 +723,34 @@ async function uploadCurrentData({ force = false, retry = true } = {}) {
     conflictFailures = 0;
     if (guestMigrationPending) {
       await clearGuestState();
+      assertCurrentAccount(identity, context);
       guestMigrationPending = false;
     }
     setStatus(
       i18next.t('cloudSync.syncSuccess', { defaultValue: '加密資料已同步。' })
     );
+    return true;
   } catch (error) {
+    if (committed) throw error;
+    // Preserve a definitive HTTP rejection for the rotation rollback policy.
+    // A stale operation must not retry, but must not turn a 4xx into an
+    // apparently ambiguous transport failure either.
+    if (!isCurrentAccount(identity) || context.key !== encryptionContext?.key)
+      throw error;
     if (error instanceof CloudApiError && error.status === 409 && retry) {
       // Another device wrote first: merge its data, then retry exactly once.
       // A second conflict throws (retry: false) instead of overwriting.
       await refreshRemoteDocument();
+      assertCurrentAccount(identity, context);
       await mergeRemoteIntoLocal();
-      await uploadCurrentData({ force: true, retry: false });
+      assertCurrentAccount(identity, context);
+      const uploaded = await uploadCurrentData({
+        force: true,
+        retry: false,
+        expectedAccountId: identity.accountId,
+      });
       await refreshHistory();
-      return;
+      return uploaded;
     }
     if (
       error instanceof CloudApiError &&
@@ -582,9 +758,13 @@ async function uploadCurrentData({ force = false, retry = true } = {}) {
       retry
     ) {
       await refreshSession();
+      assertCurrentAccount(identity);
       if (session && csrfToken) {
-        await uploadCurrentData({ force, retry: false });
-        return;
+        return uploadCurrentData({
+          force,
+          retry: false,
+          expectedAccountId: identity.accountId,
+        });
       }
     }
     throw error;
@@ -635,11 +815,16 @@ async function handleDownload() {
 async function handleRotate() {
   if (busy || !session || !encryptionContext) return;
   setBusy(true);
+  const identity = accountSnapshot();
+  const accountId = identity.accountId;
   const previousContext = encryptionContext;
   const previousRecovery = pendingRecovery;
   const previousDisplay = currentRecoveryDisplay();
+  let committed = false;
+  let uploadStarted = false;
   try {
     await refreshRemoteDocument();
+    assertCurrentAccount(identity, previousContext);
     if (!remoteDocument.envelope)
       throw new Error(
         i18next.t('cloudSync.noRemoteData', {
@@ -647,44 +832,99 @@ async function handleRotate() {
         })
       );
     await mergeRemoteIntoLocal();
+    assertCurrentAccount(identity, previousContext);
     const generated = await createRecoveryKey();
+    assertCurrentAccount(identity, previousContext);
     const salt = randomBytes(16);
     const keyVersion = currentKeyVersion() + 1;
     const key = await deriveEncryptionKey(
       generated.secret,
       salt,
-      `URL Editor E2EE v1:${currentAccountId()}`
+      `URL Editor E2EE v1:${accountId}`
     );
-    await useAccountEncryptionKey(currentAccountId(), key, {
-      salt,
-      keyVersion,
-    });
+    assertCurrentAccount(identity, previousContext);
+    // Stage only in memory. A rejected PUT must not replace the stored key.
     encryptionContext = { key, salt, keyVersion };
     pendingRecovery = generated;
     const display = document.getElementById('cloud-sync-recovery-display');
     if (display) display.textContent = generated.display;
-    await uploadCurrentData({ force: true });
+    const uploaded = await uploadCurrentData({
+      force: true,
+      // Rotation cannot merge a competing old-key document using the staged
+      // new key, nor refresh/retry with a different account or stored context.
+      retry: false,
+      expectedAccountId: accountId,
+      onUploadStarted: () => {
+        uploadStarted = true;
+      },
+      onCommitted: async () => {
+        committed = true;
+        rotationBackupRequired = true;
+        pendingRecovery = null;
+        if (!isCurrentAccount(identity))
+          throw new Error(
+            '帳戶已變更；請重新登入原帳戶並使用新 Recovery Key 解鎖。'
+          );
+        await useAccountEncryptionKey(accountId, key, { salt, keyVersion });
+        assertCurrentAccount(identity, { key });
+      },
+    });
+    if (!uploaded) throw new Error('未上傳資料；Recovery Key 未旋轉。');
+    assertCurrentAccount(identity, { key });
     // Re-encrypt the same-device IndexedDB record with the new key as well.
     restoreData(callbacks.getData());
     await refreshHistory();
+    assertCurrentAccount(identity, { key });
     setStatus(
       i18next.t('cloudSync.rotationSuccess', {
-        defaultValue: 'Recovery Key 已旋轉，請重新備份新 Key。',
+        defaultValue:
+          'Recovery Key 已旋轉，請備份新 Key；輪替前的歷史版本仍須保留對應的舊 Key 才能還原。',
       })
     );
   } catch (error) {
     console.error('[CloudSync Recovery Key Rotate Failed]:', error);
-    encryptionContext = previousContext;
-    pendingRecovery = previousRecovery;
-    if (previousContext) {
-      await useAccountEncryptionKey(currentAccountId(), previousContext.key, {
-        salt: previousContext.salt,
-        keyVersion: previousContext.keyVersion,
-      });
+    if (committed) {
+      // Keep the new display even if local finalization failed. There is no
+      // server rollback API: this key is now the recovery path for ciphertext.
+      setStatus(
+        `雲端 Recovery Key 已旋轉，但本機收尾失敗：${error.message || '未知錯誤'}。請立即複製或下載上方新 Key，重新登入原帳戶後以新 Key 解鎖；請勿使用舊 Key 覆蓋雲端。`,
+        true
+      );
+    } else if (
+      uploadStarted &&
+      !(
+        error instanceof CloudApiError &&
+        error.status >= 400 &&
+        error.status < 500 &&
+        error.status !== 408
+      )
+    ) {
+      // A transport/5xx error is not evidence that the server rejected the PUT.
+      // Preserve both recovery paths and stop old-key writes until re-unlocked.
+      if (currentAccountId() === accountId) encryptionContext = null;
+      pendingRecovery = null;
+      rotationBackupRequired = true;
+      setStatus(
+        `無法確認雲端是否已旋轉 Recovery Key：${error.message || '未知錯誤'}。請備份上方新 Key 並保留舊 Key，重新登入原帳戶並讀取雲端確認後再解鎖；已暫停本帳戶上傳。`,
+        true
+      );
+    } else {
+      if (currentAccountId() === accountId) {
+        encryptionContext = previousContext;
+        pendingRecovery = previousRecovery;
+      }
+      const display = document.getElementById('cloud-sync-recovery-display');
+      if (display) display.textContent = previousDisplay;
+      // Refresh only after undoing the staged memory context. Stored context
+      // was never changed, so expiration requires no fallible rollback write.
+      if (
+        currentAccountId() === accountId &&
+        error instanceof CloudApiError &&
+        (error.status === 401 || error.status === 403)
+      )
+        await refreshSession();
+      setStatus(error.message || 'Recovery Key 旋轉失敗。', true);
     }
-    const display = document.getElementById('cloud-sync-recovery-display');
-    if (display) display.textContent = previousDisplay;
-    setStatus(error.message || 'Recovery Key 旋轉失敗。', true);
   } finally {
     setBusy(false);
     updateControls();
@@ -698,9 +938,46 @@ async function handleHistoryRestore() {
   );
   if (!Number.isInteger(revision) || revision < 1) return;
   setBusy(true);
+  const identity = accountSnapshot();
+  const context = encryptionContext;
   try {
     const envelope = await getSyncRevision(revision, csrfToken);
-    const historicalData = await decryptCloudEnvelope(envelope);
+    assertCurrentAccount(identity, context);
+    let historicalData;
+    if (envelope.keyVersion === currentKeyVersion()) {
+      historicalData = await decryptCloudEnvelope(envelope);
+    } else {
+      // Historical secrets are transient: never replace the active sync/storage
+      // key or persist the supplied Recovery Key.
+      let recoveryInput = window.prompt(
+        `此版本使用輪替前的 Recovery Key（版本 ${envelope.keyVersion}）。請輸入當時備份的舊 Key；取消不會更動資料。`
+      );
+      if (recoveryInput === null) return;
+      try {
+        const secret = await parseRecoveryKey(recoveryInput);
+        const historicalKey = await deriveEncryptionKey(
+          secret,
+          decodeBytes(envelope.kdfSalt),
+          `URL Editor E2EE v1:${identity.accountId}`
+        );
+        assertCurrentAccount(identity, context);
+        const aad = aadFor(
+          identity.accountId,
+          envelope.keyVersion,
+          envelope.revision
+        );
+        historicalData = await decryptJson(
+          { ...envelope, aad },
+          historicalKey,
+          aad
+        );
+      } catch {
+        throw new Error('舊 Recovery Key 無效或歷史版本已損壞；未更動資料。');
+      } finally {
+        recoveryInput = '';
+      }
+    }
+    assertCurrentAccount(identity, context);
     restoreData(mergeSyncData(callbacks.getData(), historicalData));
     scheduleAutomaticSync();
     setStatus(
@@ -747,6 +1024,7 @@ function scheduleAutomaticSync({ retry = false } = {}) {
       scheduleAutomaticSync({ retry: true });
       return;
     }
+    setBusy(true);
     try {
       await uploadCurrentData({ force: false });
     } catch (error) {
@@ -770,6 +1048,9 @@ function scheduleAutomaticSync({ retry = false } = {}) {
       }
       setStatus(error.message || '自動同步失敗，稍後會重試。', true);
       scheduleAutomaticSync({ retry: true });
+    } finally {
+      setBusy(false);
+      updateControls();
     }
   }, delay);
 }
@@ -875,7 +1156,7 @@ export function initCloudSyncModal(options = {}) {
   window.addEventListener('offline', handleNetworkChange);
   window.addEventListener('online', handleNetworkChange);
   initialized = true;
-  void refreshSession();
+  void requestSessionRefresh();
 }
 
 export function openCloudSyncModal(options = {}) {
@@ -885,7 +1166,13 @@ export function openCloudSyncModal(options = {}) {
   if (!dialog) return;
   openDialog(dialog);
   updateControls();
-  void refreshSession();
+  void requestSessionRefresh();
 }
 
-export const cloudSyncInternals = { buildCloudPayload, aadFor, mergeSyncData };
+export const cloudSyncInternals = {
+  buildCloudPayload,
+  aadFor,
+  mergeSyncData,
+  encryptCloudPayload,
+  refreshSession,
+};

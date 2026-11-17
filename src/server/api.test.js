@@ -157,6 +157,10 @@ describe('Pages API boundary', () => {
     const makeDb = (handlers) => {
       const find = (sql) => handlers.find(([needle]) => sql.includes(needle));
       const exec = (sql, args) => {
+        // Housekeeping is tested independently; do not dispatch its subquery
+        // to broad logout/account SQL matchers for live-session fixtures.
+        if (sql.startsWith('DELETE FROM sessions WHERE token_hash IN (SELECT'))
+          return { meta: { changes: 0 } };
         const h = find(sql);
         if (!h) throw new Error(`unexpected SQL: ${sql}`);
         return h[1](sql, args);
@@ -1113,7 +1117,7 @@ describe('Pages API boundary', () => {
           expect((await attempt()).status).toBe(422);
         });
 
-        test('buckets are per address, falling back to X-Forwarded-For then "unknown"', async () => {
+        test('buckets are per CF address; missing CF address shares the unknown bucket', async () => {
           const exhaust = async (headers) => {
             for (let i = 0; i < 10; i += 1) {
               await login({ headers, bodyObject: {} });
@@ -1282,6 +1286,30 @@ describe('Pages API boundary', () => {
         sessionRow('tok', { last_rotated_at: nowS(), ...extra });
       const call = (request, handlers) =>
         handleApiRequest(request, { DB: makeDb(handlers) });
+
+      test.each([
+        ['PUT', '/api/sync', 'SYNC_RATE_LIMITER', 'sync'],
+        ['POST', '/api/probe', 'PROBE_RATE_LIMITER', 'probe'],
+      ])(
+        '%s %s consults its own platform binding before any body/network work',
+        async (method, path, bindingName, prefix) => {
+          const row = await freshRow();
+          const binding = {
+            limit: jest.fn().mockResolvedValue({ success: false }),
+          };
+          const response = await handleApiRequest(
+            authed(path, { method, body: '{}' }),
+            {
+              DB: makeDb([['SELECT s.*', () => row]]),
+              [bindingName]: binding,
+            }
+          );
+          expect(response.status).toBe(429);
+          expect(binding.limit).toHaveBeenCalledWith({
+            key: `${prefix}:${row.account_id}`,
+          });
+        }
+      );
 
       describe('every protected route requires a session', () => {
         const noCookie = [

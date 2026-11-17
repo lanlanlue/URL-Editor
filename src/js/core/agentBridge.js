@@ -70,6 +70,24 @@ export function isAgentBridgeEnabled(env = {}) {
  */
 export function createAgentBridge(host) {
   const undoStack = [];
+  let invalidated = false;
+
+  function invalidate() {
+    invalidated = true;
+    undoStack.length = 0;
+  }
+
+  function scoped(method) {
+    return (...args) => {
+      if (invalidated || host.isActive?.() === false) {
+        return fail(
+          'scope_changed',
+          'Account scope changed; acquire a new bridge.'
+        );
+      }
+      return method(...args);
+    };
+  }
 
   function snapshot() {
     undoStack.push(host.getUrls().map((entry) => ({ ...entry })));
@@ -210,14 +228,15 @@ export function createAgentBridge(host) {
   }
 
   return Object.freeze({
-    describe,
-    list,
-    get,
-    add,
-    addMany,
-    update,
-    remove,
-    undo,
+    describe: scoped(describe),
+    list: scoped(list),
+    get: scoped(get),
+    add: scoped(add),
+    addMany: scoped(addMany),
+    update: scoped(update),
+    remove: scoped(remove),
+    undo: scoped(undo),
+    invalidate,
   });
 }
 

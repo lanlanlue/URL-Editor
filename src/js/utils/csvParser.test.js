@@ -57,3 +57,36 @@ https://site2.com,Site 2,dev,0,false`;
     expect(parsed[1].isPinned).toBe(false);
   });
 });
+
+test.each([
+  '=1+1',
+  '+CMD',
+  '-1',
+  '@SUM(A1)',
+  '\tformula',
+  '\rformula',
+  '  =1',
+  ' \ttext',
+  '\n@SUM(A1)',
+])('neutralizes spreadsheet field %j', (value) => {
+  expect(parseCsvLine(escapeCsvField(value))).toEqual(["'" + value]);
+});
+test.each([
+  "'original",
+  "'=1",
+  ' ordinary',
+  'https://site.test/?x=1+2',
+  'name-with-hyphen',
+  0,
+  true,
+])('preserves ordinary data and existing apostrophes: %j', (value) => {
+  expect(parseCsvLine(escapeCsvField(value))).toEqual([String(value)]);
+});
+test('export protects labels and tags without stripping apostrophes during import', () => {
+  const csv = exportToCsvString([
+    { url: 'https://site.test', label: ' =1', tags: ['@x'] },
+  ]);
+  const [entry] = parseCsvString(csv);
+  expect(entry.label).toBe("' =1");
+  expect(entry.tags).toEqual(["'@x"]);
+});

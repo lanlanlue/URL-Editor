@@ -162,10 +162,20 @@ Key 不會送到伺服器；遺失 Recovery Key 且沒有已解鎖裝置時，�
 URL 仍可能含有使用者自行輸入的敏感 Query，這些內容在使用者開啟或測試目標網站
 時也可能被該目標網站取得。
 
+### 安全與隱私邊界
+
+- GitHub Pages 部署在同一 workflow 內等待完整 CI checks 成功；main push 與手動觸發才可部署，PR 僅執行檢查。CI／部署對齊現有 Node 20、`npm ci`，未另行升級 runtime。
+- Recovery Key 輪替不會重加密舊歷史版本。還原舊 keyVersion 時，瀏覽器會要求該版本的舊 Recovery Key，以 envelope 的 base64url `kdfSalt` 衍生暫時解密 key；取消或錯 Key 不更動資料。目前同步／本機加密 context 不會被替換。請同時保留新舊 Key。輸入使用瀏覽器原生提示框（可能顯示明文，請注意旁觀者），不會儲存或上傳舊 Key；無法保證 JavaScript 記憶體立即清零。
+- 本機模式與雲端應用頁（含匿名使用者）均停用第三方廣告載入，也不為廣告查詢 session；不擴大 Worker 應用頁 CSP。未來若恢復廣告須另外決定明確 opt-in 與隱私政策。
+- 批次文字／網域取代僅接受有效 HTTP(S) 結果；有無效結果會拒絕整批並提示，不會刪除或部分套用項目。即時預覽的 iframe 不再允許 `allow-same-origin`；依賴 cookies/storage／同源 API 的網頁可能無法完整預覽，請用安全的新分頁按鈕查看。
+- CSV 匯出以試算表安全為優先：`= + - @`（含前置空白）、開頭 tab／CR／LF 會加上單引號後再 RFC 引號跳脫。匯入不會猜測並移除單引號，因此 CSV 並非逐字還原格式；需要無損備份時請使用 JSON 匯出。
+- API 的 Map 限流只在單一 Worker isolate 內生效，不是跨 isolate／區域的全域配額。可選平台 binding、失效關閉行為與正式環境驗證清單見 [docs/security-boundaries.md](docs/security-boundaries.md)。
+
 ### 🤖 LLM 代理維護 (Agent Bridge)
 
 網址加上 `?agent=1`（預設關閉）後，頁面提供 `window.urlEditorAgent`，讓 LLM 以函式呼叫新增、
 查詢、修改、刪除 URL，並可 `undo()`。寫入沿用既有加密儲存與雲端同步，Recovery Key 不會離開瀏覽器。
+內建 AI 始終透過依賴注入取得內部 bridge，無須公開全域即可匯入及 undo；只有 opt-in 才同時公開全域與啟用 relay。
 若要讓 LLM 以 MCP 工具操作（不需瀏覽器自動化），可啟動本機中繼：`npm run agent:relay`。
 API、配對步驟與安全模型見 [docs/agent-bridge.md](docs/agent-bridge.md)。
 

@@ -196,6 +196,51 @@ describe('B1: unreadable encrypted record', () => {
 });
 
 describe('B2: restoreCloudData keeps remote sync stamps', () => {
+  test('account transition clears memory without overwriting the previous storage scope and resumes only after restore', async () => {
+    const { saveSecureState, cloudOptions } = await loadMain({
+      initialState: {
+        schemaVersion: 1,
+        urls: [{ id: 'old', url: 'https://old.example/' }],
+        presets: [{ id: 'old-preset' }],
+        rebuildHistory: [{ id: 'old-history' }],
+        tombstones: [{ id: 'url:old', deletedAt: 10 }],
+        syncMetadata: { oldAccount: true },
+      },
+    });
+    saveSecureState.mockClear();
+    cloudOptions.onRestore(
+      {
+        urls: [],
+        presets: [],
+        rebuildHistory: [],
+        tombstones: [],
+        syncMetadata: {},
+      },
+      { accountTransition: true }
+    );
+    expect(saveSecureState).not.toHaveBeenCalled();
+    expect(cloudOptions.getData()).toMatchObject({
+      urls: [],
+      presets: [],
+      rebuildHistory: [],
+      tombstones: [],
+      syncMetadata: {},
+    });
+    fireEvent.change(document.getElementById('url-main-input'), {
+      target: { value: 'https://pending.example/' },
+    });
+    fireEvent.click(document.getElementById('parse-btn'));
+    fireEvent.click(document.getElementById('save-url-btn'));
+    expect(saveSecureState).not.toHaveBeenCalled();
+    cloudOptions.onRestore({
+      urls: [{ id: 'new', url: 'https://new.example/' }],
+      presets: [],
+      syncMetadata: {},
+    });
+    expect(lastSavedState(saveSecureState).urls.map((url) => url.id)).toEqual([
+      'new',
+    ]);
+  });
   test('remote entries are not re-stamped as local edits', async () => {
     const { saveSecureState, cloudOptions } = await loadMain({
       initialState: {
@@ -424,4 +469,140 @@ describe('B5: health status is runtime-only', () => {
     errorSpy.mockRestore();
     expect(document.querySelector('.health--checking')).toBeNull();
   });
+});
+
+describe('internal AI bridge versus opt-in public API', () => {
+  test('account transitions revoke retained AI/public/relay bridges and their undo snapshots', async () => {
+    window.history.replaceState({}, '', '/?agent=1');
+    let aiOptions;
+    const stopRelay = jest.fn();
+    const relay = jest.fn(() => ({ stop: stopRelay }));
+    jest.doMock('./ui/modals/aiAssistantModal.js', () => ({
+      initAiAssistantModal: (options) => {
+        aiOptions = options;
+      },
+      openAiAssistantModal: jest.fn(),
+      resetAiAssistantScope: jest.fn(),
+    }));
+    jest.doMock('./core/agentRelayClient.js', () => ({
+      initAgentRelay: relay,
+    }));
+    const { cloudOptions, saveSecureState } = await loadMain({
+      initialState: {
+        urls: [{ id: 'account-A-private', url: 'https://a-private.test/' }],
+        presets: [],
+        tombstones: [],
+      },
+    });
+    const retained = aiOptions.bridge;
+    const staleUndo = retained.undo;
+    expect(retained.add({ url: 'https://ai-a.test/' }).ok).toBe(true);
+    cloudOptions.onRestore(
+      { urls: [], presets: [], tombstones: [] },
+      { accountTransition: true }
+    );
+    expect(retained.add({ url: 'https://pending.test/' }).ok).toBe(false);
+    cloudOptions.onRestore({
+      urls: [{ id: 'account-B-only', url: 'https://b.test/' }],
+      presets: [],
+      tombstones: [],
+    });
+    saveSecureState.mockClear();
+    expect(staleUndo().ok).toBe(false);
+    expect(retained.list().ok).toBe(false);
+    expect(retained.add({ url: 'https://stale-a.test/' }).ok).toBe(false);
+    expect(saveSecureState).not.toHaveBeenCalled();
+    expect(cloudOptions.getData().urls.map((item) => item.id)).toEqual([
+      'account-B-only',
+    ]);
+    expect(stopRelay).toHaveBeenCalledTimes(1);
+    expect(relay).toHaveBeenCalledTimes(1);
+    const fresh = aiOptions.getBridge();
+    expect(fresh).not.toBe(retained);
+    expect(window.urlEditorAgent).toBe(fresh);
+    expect(fresh.add({ url: 'https://ai-b.test/' }).ok).toBe(true);
+    expect(fresh.undo().ok).toBe(true);
+    expect(fresh.list().items.map((item) => item.id)).toEqual([
+      'account-B-only',
+    ]);
+    expect(
+      cloudOptions.getData().tombstones.map((item) => item.id)
+    ).not.toContain('account-B-only');
+  });
+  test('real maintenance UI rejects an unsafe replacement without saving or dropping entries', async () => {
+    const original = {
+      id: 'batch-safe',
+      url: 'https://batch.test/path',
+      label: 'Batch',
+      tags: [],
+    };
+    const { saveSecureState, alertSpy } = await loadMain({
+      initialState: { urls: [original], presets: [], tombstones: [] },
+    });
+    saveSecureState.mockClear();
+    document.getElementById('open-maintenance-btn').click();
+    document.getElementById('tab-btn-find').click();
+    fireEvent.input(document.getElementById('modal-find-text'), {
+      target: { value: 'https://batch.test/path' },
+    });
+    fireEvent.input(document.getElementById('modal-replace-text'), {
+      target: { value: 'javascript:alert(1)' },
+    });
+    document.getElementById('modal-target-field-select').value = 'url';
+    fireEvent.change(document.getElementById('modal-target-field-select'));
+    document.getElementById('modal-apply-btn').click();
+    expect(alertSpy).toHaveBeenLastCalledWith(
+      expect.stringContaining('原資料未更動')
+    );
+    expect(saveSecureState).not.toHaveBeenCalled();
+    expect(
+      document.querySelector('.url-list-item')?.textContent ||
+        document.body.textContent
+    ).toContain('batch.test');
+  });
+  afterEach(() => {
+    window.history.replaceState({}, '', '/');
+    delete window.urlEditorAgent;
+    jest.dontMock('./ui/modals/aiAssistantModal.js');
+    jest.dontMock('./core/agentRelayClient.js');
+  });
+  test.each([false, true])(
+    'public bridge enabled=%s while AI receives internal instance',
+    async (enabled) => {
+      window.history.replaceState({}, '', enabled ? '/?agent=1' : '/');
+      delete window.urlEditorAgent;
+      let aiBridge;
+      const relay = jest.fn();
+      jest.doMock('./ui/modals/aiAssistantModal.js', () => ({
+        initAiAssistantModal: ({ bridge }) => {
+          aiBridge = bridge;
+        },
+        openAiAssistantModal: jest.fn(),
+      }));
+      jest.doMock('./core/agentRelayClient.js', () => ({
+        initAgentRelay: relay,
+      }));
+      await loadMain({
+        initialState: { urls: [], presets: [], tombstones: [] },
+      });
+      expect(Boolean(window.urlEditorAgent)).toBe(enabled);
+      expect(relay).toHaveBeenCalledTimes(enabled ? 1 : 0);
+      expect(
+        aiBridge.addMany([{ url: 'https://ai.test', label: 'AI' }], {
+          skipDuplicates: true,
+        }).ok
+      ).toBe(true);
+      expect(
+        aiBridge
+          .list()
+          .items.some((item) => item.url.startsWith('https://ai.test'))
+      ).toBe(true);
+      expect(aiBridge.undo().ok).toBe(true);
+      expect(
+        aiBridge
+          .list()
+          .items.some((item) => item.url.startsWith('https://ai.test'))
+      ).toBe(false);
+    }
+  );
 });
